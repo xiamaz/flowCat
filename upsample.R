@@ -37,7 +37,7 @@ upsample_all <- function(merged, ref_som) {
   
   # fsoms <- parLapply(cl, merged$FilePaths, function(x) { transform_csv(x, ref_som) })
   # fsoms <- lapply(merged$FilePaths, function(x) { transform_csv(x, ref_som) })
-  fsoms <- mcmapply(transform_csv, merged$FilePaths, ref_soms, mc.cores=4, SIMPLIFY = FALSE)
+  fsoms <- mcmapply(transform_csv, merged$FilePaths, ref_soms, mc.cores=detectCores(), SIMPLIFY = FALSE)
   return(fsoms)
 }
 
@@ -67,16 +67,18 @@ setwd("~/DREAM")
 ref_som <- readRDS('fsom_mst_tube1.rds')
 
 infofile = 'AMLTraining.csv'
-infos <- read.csv(infofile)
+infos <- read.csv(infofile, stringsAsFactors=FALSE)
 infos$FilePaths = lapply(infos$FCSFileName, function(x) { sprintf("CSV/%04d.CSV", x)})
 
 # select a specific number of patients
 normal_selection <- infos[((((infos$TubeNumber == 1) & (infos$Label == 'normal'))) & !is.na(infos$Label)),][(1:10),]
 aml_selection <- infos[((((infos$TubeNumber == 1) & (infos$Label == 'aml'))) & !is.na(infos$Label)),][(1:10),]
 
-all_tube1 <- infos[infos$TubeNumber == 1,]
 
-chosen_selection <- normal_selection
+all_tube1 <- infos[infos$TubeNumber == 1,]
+first_20 <- all_tube1[1:20,]
+
+chosen_selection <- first_20
 ref_soms <- rep(list(ref_som), times=nrow(chosen_selection))
 
 fsoms <- upsample_all(chosen_selection, ref_soms)
@@ -84,6 +86,30 @@ fsoms <- upsample_all(chosen_selection, ref_soms)
 emd_matrix <- matrix( nrow=length(fsoms), ncol=length(fsoms))
 for (i in 1:length(fsoms)) {
   for (j in 1:length(fsoms)) {
-    emd_matrix[i,j] = calc_emd(fsoms[i], fsoms[j])
+    emd_matrix[i,j] = calc_emd(fsoms[[i]], fsoms[[j]])
   }
 }
+
+# calculate relief scores for every element in chosen based on nearest
+# hit and nearest miss
+relief_score  <- function(emd_matrix, labels) {
+  rscore  <- function(entry, labels) {
+  	  sorted = cbind(entry, labels)
+  	  # exclude the first identity entry
+  	  sorted = sorted[order(sorted[,1]),][-1,]
+  	  # sort by score
+  	  # take first normal
+  	  dist_normal = sorted[sorted[,2] == 'normal',][1,1]
+  	  if (is.na(dist_normal)) dist_normal = 0
+  	  # take first aml
+  	  dist_other = sorted[sorted[,2] == 'aml',][1,1]
+  	  if (is.na(dist_other)) dist_other = 0
+  	  result_dist = as.numeric(dist_normal) - as.numeric(dist_other)
+  	  return (result_dist)
+  }
+  result = apply(emd_matrix, 1, rscore, labels=labels)
+  return(result)
+}
+# labels <- matrix(chosen_selection$Label, nrow=length(chosen_selection$Label), ncol=length(chosen_selection$Label), byrow=TRUE)
+scores <- relief_score(emd_matrix, chosen_selection$Label)
+cbind(scores, chosen_selection$Label)
