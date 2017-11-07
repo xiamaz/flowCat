@@ -40,7 +40,7 @@ process_csv <- function(infos) {
   return(flows)
 }
 
-upsample_all <- function(merged, ref_som) {
+upsample_all <- function(merged, ref_soms) {
   upsample <- function(mst, pat){
     # use newData(fsom, ff) to get a new node distribution
     return(NewData(mst, pat))
@@ -134,11 +134,12 @@ predict_emd <- function(infos) {
   
   emd_matrix <- matrix( nrow=length(fsoms), ncol=length(fsoms))
   mapply(emd2d, mhists, mhists)
-  foreach(i = 1:length(mhists), j = 1:length(mhists)) %dopar% 
-    emd_matrix[i,j] = emd2d(mhists[[i]], mhists[[j]])
+  foreach(i = 1:length(mhists), j = 1:length(mhists)) %do% {
+  	  emd_matrix[i,j] = emd2d(mhists[[i]], mhists[[j]])
+  }
   # labels <- matrix(chosen_selection$Label, nrow=length(chosen_selection$Label), ncol=length(chosen_selection$Label), byrow=TRUE)
-  scores <- relief_score(emd_matrix, chosen_selection$Label)
-  results <- cbind(scores, chosen_selection$Label)
+  scores <- relief_score(emd_matrix, infos$Label)
+  results <- cbind(scores, infos$Label)
 }
 
 parse_info <- function(infopath) {
