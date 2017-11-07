@@ -93,7 +93,7 @@ create_histogram <- function(fsom) {
   aggr = aggregate(map, by=list(map[,1]), function(x) { length(x) })
   hist = merge(data.frame(Group.1=1:nrow(fsom$map$codes)), aggr[,c('Group.1', 'V1')], by='Group.1', all.x=TRUE, all.y=TRUE)
   hist[is.na(hist)] <- 0
-  mhist <- matrix(unlist(hist[,'V1']), ncol=fsom$map$xdim, byrow = FALSE, nrow=fsom$map$ydim)
+  mhist <- matrix(unlist(hist[,'V1']), ncol=fsom$map$xdim, byrow = TRUE, nrow=fsom$map$ydim)
   return(mhist)
 }
 
@@ -124,6 +124,8 @@ predict_emd <- function(infos) {
   # we need to specify which columns to use, here we use all of them
   fSOM <- BuildSOM(fSOM,colsToUse = c(1:7))
   fSOM <- BuildMST(fSOM,tSNE=TRUE)
+  # saveRDS(fSOM, 'fsom_tube2.rds')
+  # fSOM <- readRDS('fsom_tube2.rds')
   
   ref_soms <- rep(list(fSOM), times=nrow(infos))
   
@@ -134,16 +136,21 @@ predict_emd <- function(infos) {
   
   emd_matrix <- matrix( nrow=length(fsoms), ncol=length(fsoms))
   mapply(emd2d, mhists, mhists)
-  foreach(i = 1:length(mhists), j = 1:length(mhists)) %do% {
-  	  emd_matrix[i,j] = emd2d(mhists[[i]], mhists[[j]])
+  for (i in 1:length(mhists)) {
+  	  for (j in 1:length(mhists)) {
+  	  	  emd_matrix[i,j] = emd2d(mhists[[i]], mhists[[j]])
+  	  }
   }
+  # foreach(i = 1:length(mhists), j = 1:length(mhists)) %do% {
+  # 	  emd_matrix[i,j] = emd2d(mhists[[i]], mhists[[j]])
+  # }
   # labels <- matrix(chosen_selection$Label, nrow=length(chosen_selection$Label), ncol=length(chosen_selection$Label), byrow=TRUE)
   scores <- relief_score(emd_matrix, infos$Label)
   results <- cbind(scores, infos$Label)
 }
 
 parse_info <- function(infopath) {
-  infos <- read.csv(infopath)
+  infos <- read.csv(infopath, stringsAsFactors=FALSE)
   # add fixed filepaths to the csv files with a known regular format
   infos$FilePaths = lapply(infos$FCSFileName, function(x) { sprintf("CSV/%04d.CSV", x)})
   return(infos)
@@ -153,7 +160,7 @@ setwd("~/DREAM")
 registerDoMC(cores=detectCores())
 
 infopath = 'AMLTraining.csv'
-tubeNum = 2
+tubeNum = 3
 infos <- parse_info(infopath)
 # use the selection to create the fsom cohort and also use these for the prediction
 info_selection <- infos[(infos$TubeNumber == tubeNum) & !is.na(infos$Label),]
