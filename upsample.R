@@ -54,7 +54,7 @@ save_plot <- function(ff, info) {
 calc_emd <- function(ffa, ffb) {
   ma <- cbind(ffa$MST$size, ffa$MST$l)
   mb <- cbind(ffb$MST$size, ffa$MST$l)
-  return (emd(ma, mb, dist='manhattan'))
+  return (emd(ma, mb, dist='euclidean'))
 }
 
 # cl <- makeCluster(detectCores())
@@ -77,18 +77,38 @@ aml_selection <- infos[((((infos$TubeNumber == 1) & (infos$Label == 'aml'))) & !
 
 all_tube1 <- infos[infos$TubeNumber == 1,]
 first_20 <- all_tube1[1:20,]
+labeled_tube1 <- all_tube1[!is.na(all_tube1$Label), ]
 
-chosen_selection <- first_20
+chosen_selection <- labeled_tube1
 ref_soms <- rep(list(ref_som), times=nrow(chosen_selection))
 
 fsoms <- upsample_all(chosen_selection, ref_soms)
+# saveRDS(fsoms, 'fsoms.rds')
+
+# get histrogram distribution from fsom data
+create_histogram <- function(fsom) {
+  map = fsom$map$mapping
+  aggr = aggregate(map, by=list(map[,1]), function(x) { length(x) })
+  hist = merge(data.frame(Group.1=1:nrow(fsom$map$codes)), aggr[,c('Group.1', 'V1')], by='Group.1', all.x=TRUE, all.y=TRUE)
+  hist[is.na(hist)] <- 0
+  mhist <- matrix(unlist(hist[,'V1']), ncol=fsom$map$xdim, byrow = FALSE, nrow=fsom$map$ydim)
+  return(mhist)
+}
+mhists = lapply(fsoms, create_histogram)
 
 emd_matrix <- matrix( nrow=length(fsoms), ncol=length(fsoms))
-for (i in 1:length(fsoms)) {
-  for (j in 1:length(fsoms)) {
-    emd_matrix[i,j] = calc_emd(fsoms[[i]], fsoms[[j]])
+for (i in 1:length(mhists)) {
+  for (j in 1:length(mhists)) {
+    emd_matrix[i,j] = emd2d(mhists[[i]], mhists[[j]])
   }
 }
+
+# for (i in 1:length(fsoms)) {
+#   for (j in 1:length(fsoms)) {
+#     emd_matrix[i,j] = calc_emd(fsoms[[i]], fsoms[[j]])
+#   }
+# }
+# 
 
 # calculate relief scores for every element in chosen based on nearest
 # hit and nearest miss
@@ -112,4 +132,4 @@ relief_score  <- function(emd_matrix, labels) {
 }
 # labels <- matrix(chosen_selection$Label, nrow=length(chosen_selection$Label), ncol=length(chosen_selection$Label), byrow=TRUE)
 scores <- relief_score(emd_matrix, chosen_selection$Label)
-cbind(scores, chosen_selection$Label)
+results <- cbind(scores, chosen_selection$Label)
