@@ -88,13 +88,21 @@ calc_emd <- function(ffa, ffb) {
   return (emd(ma, mb, dist='euclidean'))
 }
 
-create_histogram <- function(fsom) {
-  map = fsom$map$mapping
-  aggr = aggregate(map, by=list(map[,1]), function(x) { length(x) })
-  hist = merge(data.frame(Group.1=1:nrow(fsom$map$codes)), aggr[,c('Group.1', 'V1')], by='Group.1', all.x=TRUE, all.y=TRUE)
-  hist[is.na(hist)] <- 0
-  mhist <- matrix(unlist(hist[,'V1']), ncol=fsom$map$xdim, byrow = TRUE, nrow=fsom$map$ydim)
-  return(mhist)
+create_histogram <- function(fsom, matrix=TRUE) {
+  # map = fsom$map$mapping
+  # aggr = aggregate(map, by=list(map[,1]), function(x) { length(x) })
+  # hist = merge(data.frame(Group.1=1:nrow(fsom$map$codes)), aggr[,c('Group.1', 'V1')], by='Group.1', all.x=TRUE, all.y=TRUE)
+  # hist[is.na(hist)] <- 0
+  hist = table(fsom$map$mapping[,1])
+  if (matrix) {
+    # mhist <- matrix(unlist(hist[,'V1']), ncol=fsom$map$xdim, byrow = TRUE, nrow=fsom$map$ydim)
+    mhist <- matrix(hist, ncol=fsom$map$xdim, nrow=fsom$map$ydim, byrow=TRUE)
+    return(mhist)
+  } else {
+    # lhist = hist[,c('V1', 'Group.1')]
+    lhist = cbind(freq=hist, pos=1:length(hist))
+    return(lhist)
+  }
 }
 
 # calculate relief scores for every element in chosen based on nearest
@@ -118,27 +126,34 @@ relief_score  <- function(emd_matrix, labels) {
   return(result)
 }
 
+get_from_distance_matrix <- function(va, vb, dist_matrix) {
+  d = dist_matrix[va[1], vb[1]]
+  return(d)
+}
+
 predict_emd <- function(infos) {
-  fSet <- flowSet(process_csv(infos))
-  fSOM <- ReadInput(fSet,compensate = FALSE,transform = FALSE, scale = TRUE)
-  # we need to specify which columns to use, here we use all of them
-  fSOM <- BuildSOM(fSOM,colsToUse = c(1:7))
-  fSOM <- BuildMST(fSOM,tSNE=TRUE)
-  # saveRDS(fSOM, 'fsom_tube2.rds')
-  # fSOM <- readRDS('fsom_tube2.rds')
+  # fSet <- flowSet(process_csv(infos))
+  # fSOM <- ReadInput(fSet,compensate = FALSE,transform = FALSE, scale = TRUE)
+  # # we need to specify which columns to use, here we use all of them
+  # fSOM <- BuildSOM(fSOM,colsToUse = c(1:7))
+  # fSOM <- BuildMST(fSOM,tSNE=TRUE)
+  # # saveRDS(fSOM, 'fsom_tube2.rds')
+  fSOM <- readRDS('fsom_tube2.rds')
   
   ref_soms <- rep(list(fSOM), times=nrow(infos))
   
   fsoms <- upsample_all(infos, ref_soms)
   
   # get histrogram distribution from fsom data
-  mhists = mclapply(fsoms, create_histogram)
+  # mhists = mclapply(fsoms, create_histogram)
+  hists = mclapply(fsoms, function(x) { create_histogram(x, MATRIX=FALSE) })
   
+  distance_matrix = distances(fsom$MST$graph, weights=NA)
   emd_matrix <- matrix( nrow=length(fsoms), ncol=length(fsoms))
-  mapply(emd2d, mhists, mhists)
   for (i in 1:length(mhists)) {
   	  for (j in 1:length(mhists)) {
-  	  	  emd_matrix[i,j] = emd2d(mhists[[i]], mhists[[j]])
+  	  	  # emd_matrix[i,j] = emd2d(mhists[[i]], mhists[[j]])
+  	    emd_matrix[i,j] = emd(hists[[i]], hists[[j]], dist=function(a, b) {get_from_distance_matrix(a,b,distance_matrix) } )
   	  }
   }
   # foreach(i = 1:length(mhists), j = 1:length(mhists)) %do% {
@@ -165,5 +180,3 @@ infos <- parse_info(infopath)
 # use the selection to create the fsom cohort and also use these for the prediction
 info_selection <- infos[(infos$TubeNumber == tubeNum) & !is.na(infos$Label),]
 result <- predict_emd(info_selection)
-
-
