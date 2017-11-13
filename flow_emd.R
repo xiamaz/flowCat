@@ -9,66 +9,57 @@ library(doMC)
 
 # encapsulate the result calculation for every tube
 
+trans_ffs <- function(csvdf, col) {
+  old = csvdf[,col]
+  m = sqrt(0.1/var(old))
+  b = -(mean(old) * m)
+  new = old * m + b
+  csvdf[,col] = new
+  return(csvdf)
+}
+
+csv_to_flowframe <- function(df) {
+  # transform csv into a flowframe
+  # source: https://gist.github.com/yannabraham/c1f9de9b23fb94105ca5
+  df = trans_ffs(df, 'FS.Lin')
+  meta <- data.frame(name=dimnames(df)[[2]],
+                     desc=paste('this is column',dimnames(df)[[2]],'from your CSV')
+  )
+  meta$range <- apply(apply(df,2,range),2,diff)
+  meta$minRange <- apply(df,2,min)
+  meta$maxRange <- apply(df,2,max)
+  
+  ff <- new("flowFrame",
+            exprs=data.matrix(df),
+            parameters=AnnotatedDataFrame(meta)
+  )
+  return(ff)
+}
+
+transform_csv <- function(path) {
+  c = read.csv(path)
+  return(csv_to_flowframe(c))
+}
+
 process_csv <- function(infos) {
   # cl - cluster for parallel computing
   # info - file containing metainformation for training
-  
-  csv_to_flowframe <- function(df) {
-    # transform csv into a flowframe
-    # source: https://gist.github.com/yannabraham/c1f9de9b23fb94105ca5
-    meta <- data.frame(name=dimnames(df)[[2]],
-                       desc=paste('this is column',dimnames(df)[[2]],'from your CSV')
-    )
-    meta$range <- apply(apply(df,2,range),2,diff)
-    meta$minRange <- apply(df,2,min)
-    meta$maxRange <- apply(df,2,max)
-    
-    ff <- new("flowFrame",
-              exprs=data.matrix(df),
-              parameters=AnnotatedDataFrame(meta)
-    )
-    return(ff)
-  }
-  
-  transform_csv <- function(path) {
-    c = read.csv(path)
-    return(csv_to_flowframe(c))
-  }
-  
   flows <- mclapply(infos$FilePaths, transform_csv, mc.cores=detectCores())
-  
   return(flows)
 }
 
+upsample <- function(mst, pat){
+  # use newData(fsom, ff) to get a new node distribution
+  ## only adjust the data from ffs
+
+  return(NewData(mst, pat))
+}
+
 upsample_all <- function(merged, ref_soms) {
-  upsample <- function(mst, pat){
-    # use newData(fsom, ff) to get a new node distribution
-    return(NewData(mst, pat))
-  }
-  csv_to_flowframe <- function(df, ref_som) {
-    # transform csv into a flowframe
-    # source: https://gist.github.com/yannabraham/c1f9de9b23fb94105ca5
-    meta <- data.frame(name=dimnames(df)[[2]],
-                       desc=paste('this is column',dimnames(df)[[2]],'from your CSV')
-    )
-    meta$range <- apply(apply(df,2,range),2,diff)
-    meta$minRange <- apply(df,2,min)
-    meta$maxRange <- apply(df,2,max)
-    
-    ff <- new("flowFrame",
-              exprs=data.matrix(df),
-              parameters=AnnotatedDataFrame(meta)
-    )
-    return(upsample(ref_som, ff))
-  }
-  transform_csv <- function(path, ref_som) {
-    c = read.csv(path)
-    return(csv_to_flowframe(c, ref_som))
-  }
-  
   # fsoms <- parLapply(cl, merged$FilePaths, function(x) { transform_csv(x, ref_som) })
   # fsoms <- lapply(merged$FilePaths, function(x) { transform_csv(x, ref_som) })
-  fsoms <- mcmapply(transform_csv, merged$FilePaths, ref_soms, mc.cores=detectCores(), SIMPLIFY = FALSE)
+  ffs = process_csv(merged)
+  fsoms = mcmapply(upsample, ref_soms, ffs, mc.cores=detectCores(), SIMPLIFY = FALSE)
   return(fsoms)
 }
 
@@ -94,6 +85,7 @@ create_histogram <- function(fsom, matrix=TRUE) {
   # hist = merge(data.frame(Group.1=1:nrow(fsom$map$codes)), aggr[,c('Group.1', 'V1')], by='Group.1', all.x=TRUE, all.y=TRUE)
   # hist[is.na(hist)] <- 0
   hist = table(fsom$map$mapping[,1])
+  hist = hist / sum(hist)
   if (matrix) {
     # mhist <- matrix(unlist(hist[,'V1']), ncol=fsom$map$xdim, byrow = TRUE, nrow=fsom$map$ydim)
     mhist <- matrix(hist, ncol=fsom$map$xdim, nrow=fsom$map$ydim, byrow=TRUE)
@@ -132,13 +124,21 @@ get_from_distance_matrix <- function(va, vb, dist_matrix) {
 }
 
 predict_emd <- function(infos) {
-  # fSet <- flowSet(process_csv(infos))
-  # fSOM <- ReadInput(fSet,compensate = FALSE,transform = FALSE, scale = TRUE)
-  # # we need to specify which columns to use, here we use all of them
-  # fSOM <- BuildSOM(fSOM,colsToUse = c(1:7))
-  # fSOM <- BuildMST(fSOM,tSNE=TRUE)
-  # # saveRDS(fSOM, 'fsom_tube2.rds')
-  fSOM <- readRDS('fsom_tube2.rds')
+  # ## split info in training and test
+  test_set <- infos[is.na(infos$Label),]
+  infos <-  infos[!is.na(infos$Label),]
+  
+  fSet <- flowSet(process_csv(infos))
+  fSOM <- ReadInput(fSet,compensate = FALSE,transform = FALSE, toTransform=c(1:7), scale = TRUE)
+  # we need to specify which columns to use, here we use all of them
+  fSOM <- BuildSOM(fSOM,colsToUse = c(1:7))
+  fSOM <- BuildMST(fSOM,tSNE=FALSE)
+  # saveRDS(fSOM, 'fsom_tube2.rds')
+  # fSOM <- readRDS('fsom_tube2.rds')
+  # let weights count as one
+  distance_matrix = distances(fSOM$MST$graph, weights=NA)
+  # use weights defined on the edges
+  ## distance_matrix = distances(fSOM$MST$graph)
   
   ref_soms <- rep(list(fSOM), times=nrow(infos))
   
@@ -146,22 +146,23 @@ predict_emd <- function(infos) {
   
   # get histrogram distribution from fsom data
   # mhists = mclapply(fsoms, create_histogram)
-  hists = mclapply(fsoms, function(x) { create_histogram(x, MATRIX=FALSE) })
+  hists = mclapply(fsoms, function(x) { create_histogram(x, matrix=FALSE) })
   
-  distance_matrix = distances(fsom$MST$graph, weights=NA)
   emd_matrix <- matrix( nrow=length(fsoms), ncol=length(fsoms))
-  for (i in 1:length(mhists)) {
-  	  for (j in 1:length(mhists)) {
-  	  	  # emd_matrix[i,j] = emd2d(mhists[[i]], mhists[[j]])
+  # for (i in 1:length(hists)) {
+  #   foreach (j = 1:length(hists)) %dopar% {
+  #  	  emd_matrix[i,j] = emd(hists[[i]], hists[[j]], dist=function(a, b) {get_from_distance_matrix(a,b,distance_matrix) } )
+  #   }
+  # }
+  for (i in 1:length(hists)) {
+  	  for (j in 1:length(hists)) {
   	    emd_matrix[i,j] = emd(hists[[i]], hists[[j]], dist=function(a, b) {get_from_distance_matrix(a,b,distance_matrix) } )
   	  }
   }
-  # foreach(i = 1:length(mhists), j = 1:length(mhists)) %do% {
-  # 	  emd_matrix[i,j] = emd2d(mhists[[i]], mhists[[j]])
-  # }
   # labels <- matrix(chosen_selection$Label, nrow=length(chosen_selection$Label), ncol=length(chosen_selection$Label), byrow=TRUE)
   scores <- relief_score(emd_matrix, infos$Label)
   results <- cbind(scores, infos$Label)
+  return(results)
 }
 
 parse_info <- function(infopath) {
@@ -171,12 +172,30 @@ parse_info <- function(infopath) {
   return(infos)
 }
 
+interpret_result <- function(results, info) {
+  positive = results[results[,1] > 0,]
+  cat("Positive results: \n")
+  print(positive)
+  tp = positive[positive[,2] == 'aml',]
+  fp = positive[positive[,2] == 'normal',]
+  cat(paste("These contain ", nrow(tp), " with aml and ", nrow(fp), " without aml."))
+  cat("--------\n")
+  negative = results[results[,1] <= 0,]
+  tn = negative[negative[,2] == 'normal',]
+  fn = negative[negative[,2] == 'aml',]
+  cat("negative results: \n")
+  print(negative)
+  cat(paste("These contain ", nrow(fn), " with aml and ", nrow(tn), " without aml."))
+  cat("--------\n")
+}
+
 setwd("~/DREAM")
 registerDoMC(cores=detectCores())
 
 infopath = 'AMLTraining.csv'
-tubeNum = 3
+tubeNum = 2
 infos <- parse_info(infopath)
 # use the selection to create the fsom cohort and also use these for the prediction
-info_selection <- infos[(infos$TubeNumber == tubeNum) & !is.na(infos$Label),]
+info_selection <- infos[infos$TubeNumber == tubeNum,]
 result <- predict_emd(info_selection)
+interpret_result(result, info_selection)
