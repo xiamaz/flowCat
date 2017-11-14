@@ -1,0 +1,118 @@
+library(methods)
+library(Biobase)
+library(parallel)
+library(flowCore)
+library(FlowSOM)
+library(data.table)
+
+# encapsulate the result calculation for every tube
+
+linear_transform <- function(df, col, avg, sd) {
+  m = sqrt(0.3/sd)
+  b = -(avg * m)
+  df[,col] = df[,col] * m + b
+  return(df)
+}
+
+determine_ranges <- function(csvs) {
+	bound = rbindlist(csvs)
+	m = apply(bound, 2, function(col) {
+		c(mean(col), var(col), max(col), min(col))
+	});
+	rownames(m) = c('mean', 'var', 'max', 'min')
+	print(m)
+	return(m)
+}
+
+csv_to_flowframe <- function(df) {
+  # transform csv into a flowframe
+  # source: https://gist.github.com/yannabraham/c1f9de9b23fb94105ca5
+  meta <- data.frame(name=dimnames(df)[[2]],
+                     desc=paste('this is column',dimnames(df)[[2]],'from your CSV')
+  )
+  meta$range <- apply(apply(df,2,range),2,diff)
+  meta$minRange <- apply(df,2,min)
+  meta$maxRange <- apply(df,2,max)
+
+  ff <- new("flowFrame",
+            exprs=data.matrix(df),
+            parameters=AnnotatedDataFrame(meta)
+  )
+  return(ff)
+}
+
+process_csv <- function(infos) {
+  # cl - cluster for parallel computing
+  # info - file containing metainformation for training
+  csvs = mclapply(infos$FilePaths, read.csv, mc.cores=detectCores())
+  ranges = determine_ranges(csvs)
+  # linear transform of forward scatter
+  csvs = lapply(csvs, function(x) {
+  			   linear_transform(x, 'FS.Lin', ranges['mean', 'FS.Lin'], ranges['var', 'FS.Lin'])
+  })
+  	  # ranges = determine_ranges(csvs)
+  # mc.cores = detectCores()
+  flows = lapply(csvs, csv_to_flowframe)
+  return(flows)
+}
+
+upsample <- function(mst, pat){
+  # use newData(fsom, ff) to get a new node distribution
+  ## only adjust the data from ffs
+
+  return(NewData(mst, pat))
+}
+
+upsample_all <- function(merged, ref_soms) {
+  # fsoms <- parLapply(cl, merged$FilePaths, function(x) { transform_csv(x, ref_som) })
+  # fsoms <- lapply(merged$FilePaths, function(x) { transform_csv(x, ref_som) })
+  ffs = process_csv(merged)
+  fsoms = mcmapply(upsample, ref_soms, ffs, mc.cores=detectCores(), SIMPLIFY = FALSE)
+  return(fsoms)
+}
+
+create_histogram <- function(fsom, matrix=TRUE) {
+  hist = table(fsom$map$mapping[,1])
+  hist = hist / sum(hist)
+  if (matrix) {
+    mhist <- matrix(hist, ncol=fsom$map$xdim, nrow=fsom$map$ydim, byrow=TRUE)
+    return(mhist)
+  } else {
+    lhist = cbind(freq=hist, pos=1:length(hist))
+    return(lhist)
+  }
+}
+
+create_fsom <- function(infos) {
+  # ## split info in training and test
+  fSet <- flowSet(process_csv(infos))
+  fSOM <- ReadInput(fSet,compensate = FALSE, transform = FALSE, scale = TRUE)
+  # we need to specify which columns to use, here we use all of them
+  fSOM <- BuildSOM(fSOM,colsToUse = c(1:7))
+  fSOM <- BuildMST(fSOM,tSNE=FALSE)
+  # saveRDS(fSOM, 'fsom_tube2.rds')
+  # fSOM <- readRDS('fsom_tube2.rds')
+  # let weights count as one
+
+  # ref_soms <- rep(list(fSOM), times=nrow(infos))
+  # fsoms <- upsample_all(infos, ref_soms)
+}
+
+parse_info <- function(infopath) {
+  infos <- read.csv(infopath, stringsAsFactors=FALSE)
+  # add fixed filepaths to the csv files with a known regular format
+  infos$FilePaths = lapply(infos$FCSFileName, function(x) { sprintf("CSV/%04d.CSV", x)})
+  return(infos)
+}
+
+setwd("~/DREAM")
+
+infopath = 'AMLTraining.csv'
+tubeNum = 2
+infos <- parse_info(infopath)
+info_selection <- infos[infos$TubeNumber == tubeNum & !is.na(infos$Label),]
+
+res <- create_fsom(info_selection)
+saveRDS('fsom_tube2.rds')
+# k sets the number of clusters
+metaClustering <- metaClustering_consensus(res$map$codes)
