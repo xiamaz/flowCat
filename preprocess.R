@@ -4,6 +4,7 @@ library(parallel)
 library(flowCore)
 library(FlowSOM)
 library(data.table)
+library(flowViz)
 
 # encapsulate the result calculation for every tube
 
@@ -71,15 +72,15 @@ upsample_all <- function(merged, ref_soms) {
   return(fsoms)
 }
 
-create_histogram <- function(fsom, matrix=TRUE) {
+create_histogram <- function(fsom, size, matrix=TRUE) {
   hist = table(fsom$map$mapping[,1])
   hist = hist / sum(hist)
   if (matrix) {
     mhist <- matrix(hist, ncol=fsom$map$xdim, nrow=fsom$map$ydim, byrow=TRUE)
     return(mhist)
   } else {
-    lhist = cbind(freq=hist, pos=1:length(hist))
-    return(lhist)
+    lhist = cbind(freq=hist, pos=1:size)
+    return(hist)
   }
 }
 
@@ -105,14 +106,66 @@ parse_info <- function(infopath) {
   return(infos)
 }
 
+# get folders in named list, returns a matrix with filenames with associated
+# labels
+get_info <- function(folders, ext) {
+	files = matrix(ncol=2, nrow=0)
+	for (i in names(folders)) {
+		f = list.files(folders[i], pattern=ext, full.names=TRUE)
+		files = rbind(files, cbind(filename=f, label=i))
+	}
+	return(files)
+}
+
+read_files <- function(file_matrix) {
+	fcs = cbind(file_matrix
+				, fcs=mclapply(file_matrix[,'filename'], function(x) {
+		read.FCS(x, dataset=1)
+		}, mc.cores=12))
+	return(fcs)
+}
+
 setwd("~/DREAM")
 
-infopath = 'AMLTraining.csv'
-tubeNum = 2
-infos <- parse_info(infopath)
-info_selection <- infos[infos$TubeNumber == tubeNum & !is.na(infos$Label),]
+f = c(positive='Krawitz/CLL', negative='Krawitz/normal control')
 
-res <- create_fsom(info_selection)
-saveRDS('fsom_tube2.rds')
-# k sets the number of clusters
-metaClustering <- metaClustering_consensus(res$map$codes)
+file_matrix = get_info(f, 'CLL 9F 01.*.LMD')
+file_matrix <- read_files(file_matrix)
+
+fSOM <- ReadInput(
+	# flowSet(file_matrix[file_matrix[,'label'] == 'negative','fcs'])
+	flowSet(file_matrix[,'fcs'])
+	#flowSet(file_matrix[1:10,'fcs'])
+	#file_matrix[[183,3]]
+	,compensate = FALSE
+	,transform = FALSE
+	,scale = TRUE
+	)
+
+fSOM <- BuildSOM(fSOM)
+fSOM <- BuildMST(fSOM, tSNE=TRUE)
+
+meta <- metaClustering_consensus(fSOM$map$codes, k=5)
+positives = file_matrix[file_matrix[,'label'] == 'positive','fcs']
+
+selection <- file_matrix[,]
+
+fsoms <- mclapply(selection[,'fcs'], function(x) { NewData(fSOM, x)}
+				  ,mc.cores=12)
+histos <- lapply(fsoms, function(x) {
+	t = tabulate(x$map$mapping, nrow(x$map$codes))
+	t / sum(t)
+	})
+result_data <- do.call(rbind, histos)
+# cheap labeling
+colnames(result_data) <- c(1:ncol(result_data))
+result_data <- cbind(result_data, label=selection[,'label'])
+#do.call(function(x){ rbind(x[,'freq'])}, histos)
+
+write.table(result_data, file="matrix_output.csv", sep=";")
+
+PlotStars(fSOM)
+PlotStars(fSOM, view="tSNE")
+
+PlotStars(fSOM, backgroundValues = as.factor(meta))
+PlotStars(fSOM, backgroundValues = as.factor(meta), view="tSNE")
