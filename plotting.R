@@ -7,7 +7,7 @@ setwd("~/FLOW")
 files <- list.files(path="./Krawitz/CLL", pattern=".LMD", full.names=T, recursive=FALSE) #vector of LMD files
 path="./Krawitz/CLL"
 
-createplots<-function (files){#Creates plots for the parameters in all input files
+createplots<-function (files){#Creates plots for the parameters (FS,SS,...,FL10) based on all input files
   flowframe<-read.FCS(files[1],transformation = FALSE,alter.names=TRUE,dataset = 1)
   dataframe<-data.frame(flowframe@exprs)
   pdf("Plots.pdf")
