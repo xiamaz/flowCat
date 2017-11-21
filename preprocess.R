@@ -48,9 +48,9 @@ process_csv <- function(infos) {
   csvs = mclapply(infos$FilePaths, read.csv, mc.cores=detectCores())
   ranges = determine_ranges(csvs)
   # linear transform of forward scatter
-  csvs = lapply(csvs, function(x) {
-  			   linear_transform(x, 'FS.Lin', ranges['mean', 'FS.Lin'], ranges['var', 'FS.Lin'])
-  })
+  # csvs = lapply(csvs, function(x) {
+  # 			   linear_transform(x, 'FS.Lin', ranges['mean', 'FS.Lin'], ranges['var', 'FS.Lin'])
+  # })
   	  # ranges = determine_ranges(csvs)
   # mc.cores = detectCores()
   flows = lapply(csvs, csv_to_flowframe)
@@ -120,8 +120,12 @@ get_info <- function(folders, ext) {
 read_files <- function(file_matrix) {
 	fcs = cbind(file_matrix
 				, fcs=mclapply(file_matrix[,'filename'], function(x) {
-		read.FCS(x, dataset=1)
-		}, mc.cores=12))
+		f = read.FCS(x, dataset=1)
+		log_names = sapply(featureNames(f), function(y) { if (grepl('LOG', y)) { return(y) }})
+		log_names = log_names[!sapply(log_names, is.null)]
+		lgcl = estimateLogicle(f, channels=unname(log_names))
+		transform(f, lgcl)
+		}, mc.cores=detectCores(logical=FALSE)))
 	return(fcs)
 }
 
@@ -151,7 +155,7 @@ positives = file_matrix[file_matrix[,'label'] == 'positive','fcs']
 selection <- file_matrix[,]
 
 fsoms <- mclapply(selection[,'fcs'], function(x) { NewData(fSOM, x)}
-				  ,mc.cores=12)
+				  ,mc.cores=detectCores(logical=FALSE))
 histos <- lapply(fsoms, function(x) {
 	t = tabulate(x$map$mapping, nrow(x$map$codes))
 	t / sum(t)
@@ -162,10 +166,4 @@ colnames(result_data) <- c(1:ncol(result_data))
 result_data <- cbind(result_data, label=selection[,'label'])
 #do.call(function(x){ rbind(x[,'freq'])}, histos)
 
-write.table(result_data, file="matrix_output.csv", sep=";")
-
-PlotStars(fSOM)
-PlotStars(fSOM, view="tSNE")
-
-PlotStars(fSOM, backgroundValues = as.factor(meta))
-PlotStars(fSOM, backgroundValues = as.factor(meta), view="tSNE")
+write.table(result_data, file="matrix_output_logic_trans_no_lin.csv", sep=";")
