@@ -29,7 +29,7 @@ def scale_datas(data):
     return data
 
 def main():
-    data_csv = '/home/max/DREAM/matrix_output_logic_trans_no_lin.csv'
+    data_csv = '/home/max/DREAM/matrix_meta_output_new3.csv'
     splits = 10
 
     dataframe = pandas.read_csv(data_csv, delimiter=';')
