@@ -91,17 +91,21 @@ def stats(scaled):
     stat_df = stat_df.assign(id=stats_dict['id'])
     return stat_df
 
+def load(path, setnum=1):
+    files = file_structure(path)
+    set_all = read_fcs(files[files['set'] == setnum])
+    set_labeled = set_all[(set_all['group'] == 'normal_control') | (set_all['group'] == 'CLL')]
+    set_other = set_all[~set_all.index.isin(set_labeled.index)]
+    stat_dfs = {
+        'labeled' : stats(scale_flowframes(set_labeled))
+        ,'unlabeled' : stats(scale_flowframes(set_other))
+        }
+    return stat_dfs
+
+
 ## using principal component analysis for dimensionality reduction
 def main():
-    path = '/home/max/DREAM/Krawitz'
-    files = file_structure(path)
-    set1 = read_fcs(files[files['set'] == 1])
-    set1_normal = set1[set1['group'] == 'normal control']
-    set1_cll = set1[set1['group'] == 'CLL']
-    chosen_set = set1_normal
-    scaled = scale_flowframes(chosen_set)
-    stat_df = stats(scale_flowframes(chosen_set))
-
+    load('/home/max/DREAM/Krawitz')
 
 if __name__ == '__main__':
     main()
