@@ -117,53 +117,78 @@ get_info <- function(folders, ext) {
 	return(files)
 }
 
-read_files <- function(file_matrix) {
+read_files <- function(file_matrix, transform) {
 	fcs = cbind(file_matrix
 				, fcs=mclapply(file_matrix[,'filename'], function(x) {
 		f = read.FCS(x, dataset=1)
 		log_names = sapply(featureNames(f), function(y) { if (grepl('LOG', y)) { return(y) }})
 		log_names = log_names[!sapply(log_names, is.null)]
-		lgcl = estimateLogicle(f, channels=unname(log_names))
-		transform(f, lgcl)
+		if (transform == 'logicle') {
+			lgcl = estimateLogicle(f, channels=unname(log_names))
+			transform(f, lgcl)
+		} else if (transform == 'log') {
+			lg = logTransform(transformationId="defaultLogTransform", logbase=10, r=1, d=1)
+			tl = transformList(unlist(log_names), lg)
+			transform(f, tl)
+		} else {
+			f
+		}
 		}, mc.cores=detectCores(logical=FALSE)))
 	return(fcs)
 }
 
-setwd("~/DREAM")
+create_output_matrix <- function(path, tubenum, metanum){
+	setwd(path)
+	f = c(positive='CLL', negative='normal control')
+	file_matrix = get_info(f, sprintf('CLL 9F %02d.*.LMD', tubenum))
+	file_matrix <- read_files(file_matrix, 'log')
 
-f = c(positive='Krawitz/CLL', negative='Krawitz/normal control')
+	fSOM <- ReadInput(
+		# flowSet(file_matrix[file_matrix[,'label'] == 'negative','fcs'])
+		flowSet(file_matrix[,'fcs'])
+		#flowSet(file_matrix[1:10,'fcs'])
+		#file_matrix[[183,3]]
+		,compensate = FALSE
+		,transform = FALSE
+		,scale = TRUE
+		)
 
-file_matrix = get_info(f, 'CLL 9F 01.*.LMD')
-file_matrix <- read_files(file_matrix)
+	fSOM <- BuildSOM(fSOM)
+	fSOM <- BuildMST(fSOM, tSNE=FALSE)
 
-fSOM <- ReadInput(
-	# flowSet(file_matrix[file_matrix[,'label'] == 'negative','fcs'])
-	flowSet(file_matrix[,'fcs'])
-	#flowSet(file_matrix[1:10,'fcs'])
-	#file_matrix[[183,3]]
-	,compensate = FALSE
-	,transform = FALSE
-	,scale = TRUE
-	)
+	META_NUM = metanum
+	meta <- metaClustering_consensus(fSOM$map$codes, k=META_NUM)
 
-fSOM <- BuildSOM(fSOM)
-fSOM <- BuildMST(fSOM, tSNE=TRUE)
+	selection <- file_matrix[,]
 
-meta <- metaClustering_consensus(fSOM$map$codes, k=5)
-positives = file_matrix[file_matrix[,'label'] == 'positive','fcs']
+	fsoms <- mclapply(selection[,'fcs'], function(x) { NewData(fSOM, x)}
+					  ,mc.cores=detectCores(logical=FALSE))
+	# fsoms <- lapply(selection[,'fcs'], function(x) { NewData(fSOM, x)})
 
-selection <- file_matrix[,]
+	histos <- lapply(fsoms, function(x) {
+		t = tabulate(x$map$mapping, nrow(x$map$codes))
+		t / sum(t)
+		})
 
-fsoms <- mclapply(selection[,'fcs'], function(x) { NewData(fSOM, x)}
-				  ,mc.cores=detectCores(logical=FALSE))
-histos <- lapply(fsoms, function(x) {
-	t = tabulate(x$map$mapping, nrow(x$map$codes))
-	t / sum(t)
-	})
-result_data <- do.call(rbind, histos)
-# cheap labeling
-colnames(result_data) <- c(1:ncol(result_data))
-result_data <- cbind(result_data, label=selection[,'label'])
-#do.call(function(x){ rbind(x[,'freq'])}, histos)
+	result_data <- do.call(rbind, histos)
+	meta_result <- matrix(0, ncol=META_NUM, nrow=nrow(result_data))
+	for (i in 1:ncol(result_data)) {
+		meta_result[,meta[i]] = meta_result[,meta[i]] + result_data[,i]
+	}
 
-write.table(result_data, file="matrix_output_logic_trans_no_lin.csv", sep=";")
+
+	# cheap labeling
+	colnames(result_data) <- c(1:ncol(result_data))
+	colnames(meta_result) <- c(1:META_NUM)
+	result_data <- cbind(result_data, label=selection[,'label'])
+	meta_result <- cbind(meta_result, label=selection[,'label'])
+	#do.call(function(x){ rbind(x[,'freq'])}, histos)
+
+	write.table(result_data, file=sprintf("matrix_output_tube%d.csv",tubenum), sep=";")
+	write.table(meta_result, file=sprintf("matrix_meta_output_tube%d.csv",tubenum), sep=";")
+}
+
+path = "~/DREAM/Krawitz/"
+for (tub in 1:3) {
+	create_output_matrix(path, tub, 7)
+}
