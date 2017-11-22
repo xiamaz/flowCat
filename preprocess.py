@@ -91,10 +91,10 @@ def stats(scaled):
     stat_df = stat_df.assign(id=stats_dict['id'])
     return stat_df
 
-def load(path, setnum=1):
+def load(path, setnum=1, negative='normal control', positive='CLL'):
     files = file_structure(path)
     set_all = read_fcs(files[files['set'] == setnum])
-    set_labeled = set_all[(set_all['group'] == 'normal control') | (set_all['group'] == 'CLL')]
+    set_labeled = set_all[(set_all['group'] == negative) | (set_all['group'] == positive)]
     set_other = set_all[~set_all.index.isin(set_labeled.index)]
 
     if set_labeled.empty:
