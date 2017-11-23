@@ -28,11 +28,10 @@ def scale_datas(data):
     data /= data.max()
     return data
 
-def main():
-    data_csv = '/home/max/DREAM/matrix_meta_output_new3.csv'
+def run_optimization(path):
     splits = 10
 
-    dataframe = pandas.read_csv(data_csv, delimiter=';')
+    dataframe = pandas.read_csv(path, delimiter=';')
     # datas, labels = split_frame_cross(dataframe, splits=splits)
     datas, labels = split_frame(dataframe)
     datas = scale_datas(datas)
@@ -40,9 +39,9 @@ def main():
             datas, labels, test_size=0.5, random_state=0)
 
     params = {
-            'C' : list(range(1,1000, 1))
+            'C' : list(range(1,500, 1))
             ,"gamma" : [0.1, 0.01, 0.001]
-            ,'kernel' : ['linear', 'rbf', 'poly']
+            ,'kernel' : ['linear', 'rbf']
             }
     grid_search = GridSearchCV(svm.SVC(), params, n_jobs=8)
     grid_search.fit(X_train, y_train)
@@ -55,9 +54,25 @@ def main():
     #           % (mean, std * 2, params))
     y_pred = grid_search.predict(X_test)
     print(classification_report(y_test, y_pred))
-
     # scores = svm_predict(clf, datas, labels, splits=splits)
     # print(scores)
+
+def main():
+    csvs = [
+            '/home/max/DREAM/Krawitz/matrix_output_tube1.csv'
+            ,'/home/max/DREAM/Krawitz/matrix_output_tube2.csv'
+            ,'/home/max/DREAM/Krawitz/matrix_output_tube3.csv'
+            ]
+    csvs_meta = [
+            '/home/max/DREAM/Krawitz/matrix_meta_output_tube1.csv'
+            ,'/home/max/DREAM/Krawitz/matrix_meta_output_tube2.csv'
+            ,'/home/max/DREAM/Krawitz/matrix_meta_output_tube3.csv'
+            ]
+
+    for csv in csvs_meta:
+        print(csv)
+        run_optimization(csv)
+
 
 if __name__ == '__main__':
     main()
