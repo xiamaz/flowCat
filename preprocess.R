@@ -141,7 +141,7 @@ create_output_matrix <- function(path, tubenum, metanum){
 	setwd(path)
 	f = c(positive='CLL', negative='normal control')
 	file_matrix = get_info(f, sprintf('CLL 9F %02d.*.LMD', tubenum))
-	file_matrix <- read_files(file_matrix, 'log')
+	file_matrix <- read_files(file_matrix, 'logicle')
 
 	fSOM <- ReadInput(
 		# flowSet(file_matrix[file_matrix[,'label'] == 'negative','fcs'])
@@ -184,8 +184,8 @@ create_output_matrix <- function(path, tubenum, metanum){
 	meta_result <- cbind(meta_result, label=selection[,'label'])
 	#do.call(function(x){ rbind(x[,'freq'])}, histos)
 
-	write.table(result_data, file=sprintf("matrix_output_tube%d.csv",tubenum), sep=";")
-	write.table(meta_result, file=sprintf("matrix_meta_output_tube%d.csv",tubenum), sep=";")
+	write.table(result_data, file=sprintf("logic_matrix_output_tube%d.csv",tubenum), sep=";")
+	write.table(meta_result, file=sprintf("logic_matrix_meta_output_tube%d.csv",tubenum), sep=";")
 }
 
 path = "~/DREAM/Krawitz/"
