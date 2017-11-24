@@ -57,48 +57,6 @@ process_csv <- function(infos) {
   return(flows)
 }
 
-upsample <- function(mst, pat){
-  # use newData(fsom, ff) to get a new node distribution
-  ## only adjust the data from ffs
-
-  return(NewData(mst, pat))
-}
-
-upsample_all <- function(merged, ref_soms) {
-  # fsoms <- parLapply(cl, merged$FilePaths, function(x) { transform_csv(x, ref_som) })
-  # fsoms <- lapply(merged$FilePaths, function(x) { transform_csv(x, ref_som) })
-  ffs = process_csv(merged)
-  fsoms = mcmapply(upsample, ref_soms, ffs, mc.cores=detectCores(), SIMPLIFY = FALSE)
-  return(fsoms)
-}
-
-create_histogram <- function(fsom, size, matrix=TRUE) {
-  hist = table(fsom$map$mapping[,1])
-  hist = hist / sum(hist)
-  if (matrix) {
-    mhist <- matrix(hist, ncol=fsom$map$xdim, nrow=fsom$map$ydim, byrow=TRUE)
-    return(mhist)
-  } else {
-    lhist = cbind(freq=hist, pos=1:size)
-    return(hist)
-  }
-}
-
-create_fsom <- function(infos) {
-  # ## split info in training and test
-  fSet <- flowSet(process_csv(infos))
-  fSOM <- ReadInput(fSet,compensate = FALSE, transform = FALSE, scale = TRUE)
-  # we need to specify which columns to use, here we use all of them
-  fSOM <- BuildSOM(fSOM,colsToUse = c(1:7))
-  fSOM <- BuildMST(fSOM,tSNE=FALSE)
-  # saveRDS(fSOM, 'fsom_tube2.rds')
-  # fSOM <- readRDS('fsom_tube2.rds')
-  # let weights count as one
-
-  # ref_soms <- rep(list(fSOM), times=nrow(infos))
-  # fsoms <- upsample_all(infos, ref_soms)
-}
-
 parse_info <- function(infopath) {
   infos <- read.csv(infopath, stringsAsFactors=FALSE)
   # add fixed filepaths to the csv files with a known regular format
@@ -109,10 +67,14 @@ parse_info <- function(infopath) {
 # get folders in named list, returns a matrix with filenames with associated
 # labels
 get_info <- function(folders, ext) {
-	files = matrix(ncol=2, nrow=0)
+	files = matrix(ncol=3, nrow=0)
 	for (i in names(folders)) {
 		f = list.files(folders[i], pattern=ext, full.names=TRUE)
-		files = rbind(files, cbind(filename=f, label=i))
+		ids = lapply(f, function(x) {
+				   r = regmatches(x, regexec('/([-\\dPBKM]+) CLL', x, perl=TRUE))
+				   r[[1]][[2]]
+  		})
+		files = rbind(files,cbind(filename=f, label=i, ident=ids))
 	}
 	return(files)
 }
@@ -140,7 +102,7 @@ read_files <- function(file_matrix, transform) {
 create_output_matrix <- function(path, tubenum, metanum){
 	setwd(path)
 	f = c(positive='CLL', negative='normal control')
-	file_matrix = get_info(f, sprintf('CLL 9F %02d.*.LMD', tubenum))
+	file_matrix = get_info(f, paste(sprintf('CLL 9F %02d ', tubenum), 'N\\d{2} \\d{3}.LMD',sep=''))
 	file_matrix <- read_files(file_matrix, 'logicle')
 
 	fSOM <- ReadInput(
@@ -180,8 +142,8 @@ create_output_matrix <- function(path, tubenum, metanum){
 	# cheap labeling
 	colnames(result_data) <- c(1:ncol(result_data))
 	colnames(meta_result) <- c(1:META_NUM)
-	result_data <- cbind(result_data, label=selection[,'label'])
-	meta_result <- cbind(meta_result, label=selection[,'label'])
+	result_data <- cbind(result_data, label=selection[,'label'], ident=selection[,'ident'])
+	meta_result <- cbind(meta_result, label=selection[,'label'], ident=selection[,'ident'])
 	#do.call(function(x){ rbind(x[,'freq'])}, histos)
 
 	write.table(result_data, file=sprintf("logic_matrix_output_tube%d.csv",tubenum), sep=";")

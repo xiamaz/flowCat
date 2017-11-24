@@ -28,12 +28,10 @@ def scale_datas(data):
     data /= data.max()
     return data
 
-def run_optimization(path):
+def run_optimization(datas, labels):
     splits = 10
 
-    dataframe = pandas.read_csv(path, delimiter=';')
     # datas, labels = split_frame_cross(dataframe, splits=splits)
-    datas, labels = split_frame(dataframe)
     datas = scale_datas(datas)
     X_train, X_test, y_train, y_test = train_test_split(
             datas, labels, test_size=0.5, random_state=0)
@@ -41,7 +39,7 @@ def run_optimization(path):
     params = {
             'C' : list(range(1,500, 1))
             ,"gamma" : [0.1, 0.01, 0.001]
-            ,'kernel' : ['linear', 'rbf']
+            ,'kernel' : ['rbf', 'linear']
             }
     grid_search = GridSearchCV(svm.SVC(), params, n_jobs=8)
     grid_search.fit(X_train, y_train)
@@ -59,19 +57,33 @@ def run_optimization(path):
 
 def main():
     csvs = [
-            '/home/max/DREAM/Krawitz/matrix_output_tube1.csv'
-            ,'/home/max/DREAM/Krawitz/matrix_output_tube2.csv'
-            ,'/home/max/DREAM/Krawitz/matrix_output_tube3.csv'
+            '/home/max/DREAM/Krawitz/{}matrix_output_tube1.csv'
+            ,'/home/max/DREAM/Krawitz/{}matrix_output_tube2.csv'
+            ,'/home/max/DREAM/Krawitz/{}matrix_output_tube3.csv'
             ]
     csvs_meta = [
-            '/home/max/DREAM/Krawitz/matrix_meta_output_tube1.csv'
-            ,'/home/max/DREAM/Krawitz/matrix_meta_output_tube2.csv'
-            ,'/home/max/DREAM/Krawitz/matrix_meta_output_tube3.csv'
+            '/home/max/DREAM/Krawitz/{}matrix_meta_output_tube1.csv'
+            ,'/home/max/DREAM/Krawitz/{}matrix_meta_output_tube2.csv'
+            ,'/home/max/DREAM/Krawitz/{}matrix_meta_output_tube3.csv'
             ]
 
-    for csv in csvs_meta:
-        print(csv)
-        run_optimization(csv)
+    dfs = []
+    labels = []
+    for p in csvs_meta:
+        dataframe = pandas.read_csv(p.format('logic_'), delimiter=';')
+        data, label = split_frame(dataframe)
+        dfs.append(data)
+        labels.append(label)
+    for l in labels:
+        print(l)
+        if not l.equals(labels[0]):
+            raise ValueError('Truth labels are not equal, probably rows got jumbled somewhere')
+    big_df = pandas.concat(dfs,axis=1, keys=['tube1','tube2','tube3'])
+    print(big_df,labels[0])
+
+    run_optimization(big_df)
+    # for csv in csvs_meta:
+    #     run_optimization(csv.format('logic_'))
 
 
 if __name__ == '__main__':
