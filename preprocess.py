@@ -7,6 +7,7 @@ import re
 from pprint import pprint
 import collections
 import itertools
+from argparse import ArgumentParser
 
 from sklearn.decomposition import PCA
 
@@ -16,6 +17,15 @@ ID_RE = re.compile('^([KMPB\d-]+)(.*)LMD$')
 ID_CELL = re.compile('^([KMPB\d-]+) CLL 9F (\d+).*.LMD$')
 
 def file_structure(path):
+    '''
+    Acquire dataframe with fcs files. Use directory structure as ordering.
+
+    Args:
+        path: Path of top directory. Child directories will be interpreted as classes.
+
+    Returns:
+        Dataframe of filenames with additional information.
+    '''
     dict_array = {
             'group' : []
             ,'id' : []
@@ -24,6 +34,9 @@ def file_structure(path):
             }
     for f in os.listdir(path):
         for i in os.listdir(os.path.join(path, f)):
+            if os.path.getsize(os.path.join(path, f, i)) == 0:
+                open('error_files.txt', 'a').write('Size 0 file {}\n'.format(i))
+                continue
             m = ID_CELL.match(i)
             if m is None:
                 continue
@@ -39,7 +52,11 @@ def file_structure(path):
 def read_fcs(file_frame):
     flow_frames = []
     for f in file_frame['filename']:
-        flow_frames.append(fcsparser.parse(f, data_set=0))
+        try:
+            flow_frames.append(fcsparser.parse(f, data_set=0))
+        except ValueError:
+            print("Corrupted file: {}".format(f))
+            continue
     flow_frames = pandas.Series(flow_frames)
     file_frame = file_frame.assign(flowframe=flow_frames.values)
     return file_frame
@@ -93,30 +110,56 @@ def stats(scaled):
 
 def load(path, setnum=1, negative='normal control', positive='CLL'):
     files = file_structure(path)
-    set_all = read_fcs(files[files['set'] == setnum])
-    set_labeled = set_all[(set_all['group'] == negative) | (set_all['group'] == positive)]
-    set_other = set_all[~set_all.index.isin(set_labeled.index)]
+    print(files)
+    # set_all = read_fcs(files[files['set'] == setnum])
+    # set_labeled = set_all[(set_all['group'] == negative) | (set_all['group'] == positive)]
+    # set_other = set_all[~set_all.index.isin(set_labeled.index)]
 
-    if set_labeled.empty:
-        stat_labeled = None
-    else:
-        stat_labeled = stats(scale_flowframes(set_labeled))
+    # if set_labeled.empty:
+    #     stat_labeled = None
+    # else:
+    #     stat_labeled = stats(scale_flowframes(set_labeled))
 
-    if set_other.empty:
-        stat_other = None
-    else:
-        stat_other = stats(scale_flowframes(set_other))
+    # if set_other.empty:
+    #     stat_other = None
+    # else:
+    #     stat_other = stats(scale_flowframes(set_other))
 
-    stat_dfs = {
-        'labeled' : stat_labeled
-        ,'unlabeled' : stat_other
-        }
-    return stat_dfs
+    # stat_dfs = {
+    #     'labeled' : stat_labeled
+    #     ,'unlabeled' : stat_other
+    #     }
+    # return stat_dfs
 
+
+def count_id(id_col):
+    uniq = id_col.unique()
+    return len(uniq)
+
+def data_statistics(file_structure):
+    '''
+    Returns information about number of files per group, number of unique ids, files per id.
+
+    Args:
+        file_structure: Dataframe structure with at least filename, group and id
+
+    Returns:
+        Dataframe with statistic information per group
+    '''
+    groups = file_structure.groupby('group')
+    num = groups['id'].apply(count_id)
+    print("Number of unique ids per group")
+    print(num)
+    # fcs_groups = groups.apply(read_fcs)
+    read_fcs(file_structure)
 
 ## using principal component analysis for dimensionality reduction
 def main():
-    print(load('/home/max/DREAM/Krawitz'))
+    parser = ArgumentParser()
+    parser.add_argument('directory')
+    args = parser.parse_args()
+    files = file_structure(args.directory)
+    data_statistics(files)
 
 if __name__ == '__main__':
     main()

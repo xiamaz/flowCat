@@ -2,4 +2,4 @@ scikit-learn
 numpy
 scipy
 pandas
-git+https://github.com/eyurtsev/fcsparser.git@master
+git+https://github.com/xiamaz/fcsparser.git@latin1
