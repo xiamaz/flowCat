@@ -140,7 +140,7 @@ def confirm_experiment_set(fileset):
         if col_sig not in sigs:
             sigs.append(col_sig)
         col_str = "|".join(col_sig)
-        sample_bins[col_str].append(f['set'])
+        sample_bins[col_str].append(f['id'])
     consensus_labels = None
     matches = True
 
@@ -159,20 +159,20 @@ def confirm_experiment_set(fileset):
                 sample_bins["|".join(s)] += sample_bins.pop("|".join(l))
 
     # we can merge bins by removing the additional columns in the larger one later
-    ids = None
     print("\n".join(sample_bins.keys()))
-    for s,v in sample_bins.items():
-        print(v)
-        # if ids is None:
-        #     ids = v
-        # else:
-        #     for i in v:
-        #         if i not in ids:
-        #             print("{} does not have\n{}".format(i,s))
-        #             matches = False
+    for i in fileset['id']:
+        for s,v in sample_bins.items():
+            if i not in v:
+                print("{} does not have\n{}".format(i,s))
+                matches = False
     if matches:
         print("All samples contain the same set of experiments.")
     return matches
+
+def special_stats(file_structure):
+    subset = file_structure[file_structure['group'] != BLACKLIST[0]]
+    subset_fl = read_fcs(subset)
+    confirm_experiment_set(subset_fl)
 
 def data_statistics(file_structure):
     '''
@@ -189,8 +189,10 @@ def data_statistics(file_structure):
     print("Number of unique ids per group")
     print(num)
     ## work on a smaller subset first for speed reasons
-    groups = file_structure['group'].unique()
-    groups = ['DLBCL']
+    tube12 = file_structure.loc[file_structure['set'].isin([1,2])]
+    groups = tube12['group'].unique()
+    groups = [ g for g in groups if g not in BLACKLIST ]
+
     for group in groups:
         print("{} -----------------------".format(group))
         subset = file_structure[file_structure['group'] == group]
