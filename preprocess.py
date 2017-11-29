@@ -16,6 +16,10 @@ from sklearn.decomposition import PCA
 ID_RE = re.compile('^([KMPB\d-]+)(.*)LMD$')
 ID_CELL = re.compile('^([KMPB\d-]+) CLL 9F (\d+).*.LMD$')
 
+BLACKLIST = [
+        'DLBCL'
+        ]
+
 def file_structure(path):
     '''
     Acquire dataframe with fcs files. Use directory structure as ordering.
@@ -111,30 +115,64 @@ def stats(scaled):
 def load(path, setnum=1, negative='normal control', positive='CLL'):
     files = file_structure(path)
     print(files)
-    # set_all = read_fcs(files[files['set'] == setnum])
-    # set_labeled = set_all[(set_all['group'] == negative) | (set_all['group'] == positive)]
-    # set_other = set_all[~set_all.index.isin(set_labeled.index)]
-
-    # if set_labeled.empty:
-    #     stat_labeled = None
-    # else:
-    #     stat_labeled = stats(scale_flowframes(set_labeled))
-
-    # if set_other.empty:
-    #     stat_other = None
-    # else:
-    #     stat_other = stats(scale_flowframes(set_other))
-
-    # stat_dfs = {
-    #     'labeled' : stat_labeled
-    #     ,'unlabeled' : stat_other
-    #     }
-    # return stat_dfs
 
 
 def count_id(id_col):
     uniq = id_col.unique()
     return len(uniq)
+
+def confirm_experiment_set(fileset):
+    '''
+    Tests for the given fileset, whether they contain the same set of fcs experiments.
+    Different ids should have an identical set of measuring samples.
+
+    Args:
+        fileset: dataframe containing at least group, id and flowframe
+
+    Returns:
+        Boolean, whether set is same or not
+    '''
+    print("Tube headers for every sample")
+    sample_bins = collections.defaultdict(list)
+    sigs = []
+    for i, f in fileset.iterrows():
+        col_sig = f['flowframe'][1].columns.values.tolist()
+        if col_sig not in sigs:
+            sigs.append(col_sig)
+        col_str = "|".join(col_sig)
+        sample_bins[col_str].append(f['set'])
+    consensus_labels = None
+    matches = True
+
+    # check for interchangeable
+    for s in sigs:
+        for l in sigs:
+            # skip if superficially similar
+            if "".join(s) == "".join(l):
+                continue
+            misses = 0
+            for w in s:
+                if w not in l:
+                    misses += 1
+            if misses == 0:
+                print('{}\nis contained in\n{}'.format(s, l))
+                sample_bins["|".join(s)] += sample_bins.pop("|".join(l))
+
+    # we can merge bins by removing the additional columns in the larger one later
+    ids = None
+    print("\n".join(sample_bins.keys()))
+    for s,v in sample_bins.items():
+        print(v)
+        # if ids is None:
+        #     ids = v
+        # else:
+        #     for i in v:
+        #         if i not in ids:
+        #             print("{} does not have\n{}".format(i,s))
+        #             matches = False
+    if matches:
+        print("All samples contain the same set of experiments.")
+    return matches
 
 def data_statistics(file_structure):
     '''
@@ -150,8 +188,14 @@ def data_statistics(file_structure):
     num = groups['id'].apply(count_id)
     print("Number of unique ids per group")
     print(num)
-    # fcs_groups = groups.apply(read_fcs)
-    read_fcs(file_structure)
+    ## work on a smaller subset first for speed reasons
+    groups = file_structure['group'].unique()
+    groups = ['DLBCL']
+    for group in groups:
+        print("{} -----------------------".format(group))
+        subset = file_structure[file_structure['group'] == group]
+        subset_fl = read_fcs(subset)
+        confirm_experiment_set(subset_fl)
 
 ## using principal component analysis for dimensionality reduction
 def main():
