@@ -13,7 +13,6 @@ from sklearn.decomposition import PCA
 
 # preprocessing in python by simply generating some distribution identifiers
 
-ID_RE = re.compile('^([KMPB\d-]+)(.*)LMD$')
 ID_CELL = re.compile('^([KMPB\d-]+) CLL 9F (\d+).*.LMD$')
 
 BLACKLIST = [
@@ -57,7 +56,8 @@ def read_fcs(file_frame):
     flow_frames = []
     for f in file_frame['filename']:
         try:
-            flow_frames.append(fcsparser.parse(f, data_set=0))
+            meta, data = fcsparser.parse(f, data_set=0)
+            flow_frames.append(data)
         except ValueError:
             print("Corrupted file: {}".format(f))
             continue
@@ -174,6 +174,21 @@ def special_stats(file_structure):
     subset_fl = read_fcs(subset)
     confirm_experiment_set(subset_fl)
 
+def shared_tubes(flows):
+    '''
+    Returns markers which are shared in this dataset
+    '''
+    cols = {}
+    for f in flows['flowframe']:
+        fcols = f.columns.values.tolist()
+        for c in fcols:
+            c = c.split('-')[0]
+            if c not in cols:
+                cols[c] = 1
+            else:
+                cols[c] += 1
+    return cols
+
 def data_statistics(file_structure):
     '''
     Returns information about number of files per group, number of unique ids, files per id.
@@ -189,15 +204,20 @@ def data_statistics(file_structure):
     print("Number of unique ids per group")
     print(num)
     ## work on a smaller subset first for speed reasons
-    tube12 = file_structure.loc[file_structure['set'].isin([1,2])]
-    groups = tube12['group'].unique()
-    groups = [ g for g in groups if g not in BLACKLIST ]
-
-    for group in groups:
-        print("{} -----------------------".format(group))
-        subset = file_structure[file_structure['group'] == group]
-        subset_fl = read_fcs(subset)
-        confirm_experiment_set(subset_fl)
+    tube1 = file_structure.loc[file_structure['set'].isin([1])]
+    tube2 = file_structure.loc[file_structure['set'].isin([2])]
+    tubes = [tube1, tube2]
+    groups = tube2['group'].unique()
+    # groups = [ g for g in groups if g not in BLACKLIST ]
+    for i, tube in enumerate(tubes):
+        print("----------TUBE {}----------".format(i))
+        for g in groups:
+            print("----Group {}----".format(g))
+            fls = read_fcs(tube[tube['group'] == g])
+            shared = shared_tubes(fls)
+            size = fls.shape[0]
+            shared_out = [ "{} : {:.3}".format(k, v / size * 100) for k, v in shared.items() ]
+            print("Shared columns: \n", "\n".join(shared_out))
 
 ## using principal component analysis for dimensionality reduction
 def main():
