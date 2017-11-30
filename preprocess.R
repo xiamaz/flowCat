@@ -5,105 +5,64 @@ library(flowCore)
 library(FlowSOM)
 library(data.table)
 library(flowViz)
+library(dplyr)
 
-# encapsulate the result calculation for every tube
-
-linear_transform <- function(df, col, avg, sd) {
-  m = sqrt(0.3/sd)
-  b = -(avg * m)
-  df[,col] = df[,col] * m + b
-  return(df)
-}
-
-determine_ranges <- function(csvs) {
-	bound = rbindlist(csvs)
-	m = apply(bound, 2, function(col) {
-		c(mean(col), var(col), max(col), min(col))
-	});
-	rownames(m) = c('mean', 'var', 'max', 'min')
-	print(m)
-	return(m)
-}
-
-csv_to_flowframe <- function(df) {
-  # transform csv into a flowframe
-  # source: https://gist.github.com/yannabraham/c1f9de9b23fb94105ca5
-  meta <- data.frame(name=dimnames(df)[[2]],
-                     desc=paste('this is column',dimnames(df)[[2]],'from your CSV')
-  )
-  meta$range <- apply(apply(df,2,range),2,diff)
-  meta$minRange <- apply(df,2,min)
-  meta$maxRange <- apply(df,2,max)
-
-  ff <- new("flowFrame",
-            exprs=data.matrix(df),
-            parameters=AnnotatedDataFrame(meta)
-  )
-  return(ff)
-}
-
-process_csv <- function(infos) {
-  # cl - cluster for parallel computing
-  # info - file containing metainformation for training
-  csvs = mclapply(infos$FilePaths, read.csv, mc.cores=detectCores())
-  ranges = determine_ranges(csvs)
-  # linear transform of forward scatter
-  # csvs = lapply(csvs, function(x) {
-  # 			   linear_transform(x, 'FS.Lin', ranges['mean', 'FS.Lin'], ranges['var', 'FS.Lin'])
-  # })
-  	  # ranges = determine_ranges(csvs)
-  # mc.cores = detectCores()
-  flows = lapply(csvs, csv_to_flowframe)
-  return(flows)
-}
-
-parse_info <- function(infopath) {
-  infos <- read.csv(infopath, stringsAsFactors=FALSE)
-  # add fixed filepaths to the csv files with a known regular format
-  infos$FilePaths = lapply(infos$FCSFileName, function(x) { sprintf("CSV/%04d.CSV", x)})
-  return(infos)
-}
-
-# get folders in named list, returns a matrix with filenames with associated
-# labels
-get_info <- function(folders, ext) {
-	files = matrix(ncol=3, nrow=0)
-	for (i in names(folders)) {
-		f = list.files(folders[i], pattern=ext, full.names=TRUE)
-		ids = lapply(f, function(x) {
-				   r = regmatches(x, regexec('/([-\\dPBKM]+) CLL', x, perl=TRUE))
-				   r[[1]][[2]]
+get_dir <- function(path, ext) {
+	# infer dataset structure from folder structure and parse filename for id and set information
+	#
+	# Args:
+	# 	path: top directory, child directories determine the classes
+	# 	ext: extension of files inside the directory
+	#
+	# Returns:
+	# 	dataframe with columns filename, group, id, set
+	l = lapply(list.dirs(path, full.names=FALSE, recursive=FALSE), function(i) {
+		filelist = list.files(file.path(path, i), pattern=ext, full.names=FALSE)
+		f = sapply(filelist, function(x) {
+				   r = regexec('^([KMPB\\d-]+) CLL 9F (\\d+).*.LMD$', x, perl=TRUE)
+				   if ('-1' %in% r)
+				   	   return(c(NA, NA, NA, NA))
+				   m = regmatches(x, r)
+				   return(c(file.path(path, i, x), i, m[[1]][[2]], strtoi(m[[1]][[3]])))
   		})
-		files = rbind(files,cbind(filename=f, label=i, ident=ids))
-	}
-	return(files)
+  		f = t(f)
+  		f = f[!is.na(f[,1]),]
+  		colnames(f) = c('filepath', 'group', 'label', 'set')
+  		return(f)
+  		})
+  	files = do.call(rbind, l)
+  	return(files)
 }
 
-read_files <- function(file_matrix, transform) {
-	fcs = cbind(file_matrix
-				, fcs=mclapply(file_matrix[,'filename'], function(x) {
-		f = read.FCS(x, dataset=1)
-		log_names = sapply(featureNames(f), function(y) { if (grepl('LOG', y)) { return(y) }})
-		log_names = log_names[!sapply(log_names, is.null)]
-		if (transform == 'logicle') {
-			lgcl = estimateLogicle(f, channels=unname(log_names))
-			transform(f, lgcl)
-		} else if (transform == 'log') {
-			lg = logTransform(transformationId="defaultLogTransform", logbase=10, r=1, d=1)
-			tl = transformList(unlist(log_names), lg)
-			transform(f, tl)
-		} else {
-			f
-		}
-		}, mc.cores=detectCores(logical=FALSE)))
-	return(fcs)
+read_files <- function(file_list) {
+	# Load fcs files into file matrix
+	#
+	# Args:
+	# 	file_matrix: matrix containing filename, group, id, and set information
+	# 	path: path of top directory used in grouping
+	#
+	# Returns:
+	# 	file_matrix ẃith flowframe column with loaded fcs files
+	fcs_list = lapply(file_list[,'filepath'], function(x) {
+						  f = read.FCS(as.character(x), dataset=1)
+						  m = strsplit(markernames(f), '-')
+						  # use simplified markernames that actually describe biological properties
+						  newn = sapply(m, function(x) { x[[1]] } )
+						  colnames(f) = newn
+						  return(f)
+		})
+
+	return (cbind(file_list, fcs=fcs_list))
 }
 
 create_output_matrix <- function(path, tubenum, metanum){
-	setwd(path)
 	f = c(positive='CLL', negative='normal control')
-	file_matrix = get_info(f, paste(sprintf('CLL 9F %02d ', tubenum), 'N\\d{2} \\d{3}.LMD',sep=''))
-	file_matrix <- read_files(file_matrix, 'logicle')
+	file_matrix = get_info(path, 'LMD')
+	selected_files = file_matrix[file_matrix[,'group'] == 'HZLv',]
+	print(selected_files)
+	# file_matrix = read_files(selected_files, path)
+	# file_matrix <- read_files(file_matrix, 'logicle')
+	return()
 
 	fSOM <- ReadInput(
 		# flowSet(file_matrix[file_matrix[,'label'] == 'negative','fcs'])
@@ -149,8 +108,28 @@ create_output_matrix <- function(path, tubenum, metanum){
 	write.table(result_data, file=sprintf("logic_matrix_output_tube%d.csv",tubenum), sep=";")
 	write.table(meta_result, file=sprintf("logic_matrix_meta_output_tube%d.csv",tubenum), sep=";")
 }
+# use environment variabeles to set configuration
 
-path = "~/DREAM/Krawitz/"
-for (tub in 1:3) {
-	create_output_matrix(path, tub, 7)
+column_occurrences <- function(fcs_info) {
+	# is this reasonable?
+	# get occurence of different terms across all fcs
+	colmatrix = sapply(fcs_info[,'fcs'], function(x) { colnames(x) })
+	print(colmatrix)
 }
+
+# path = "~/DREAM/Krawitz/"
+path = Sys.getenv('PREPROCESS_PATH')
+file_information = get_dir(path, 'LMD')
+
+tube1 = file_information[file_information[,'set'] == 1, ]
+tube2 = file_information[file_information[,'set'] == 2, ]
+
+t1 = read_files(head(tube1, n=10))
+column_occurrences(t1)
+# column_occurrences(tube2)
+
+
+# testframe = create_output_matrix(path, 1, 7)
+# for (tub in 1:3) {
+# 	create_output_matrix(path, tub, 7)
+# }
