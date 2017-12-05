@@ -183,6 +183,25 @@ selected = majority_markers(t1)
 
 t1 = modify_selection(t1, selected)
 
+transform_ff <- function(ff, selection) {
+	logTrans <- logTransform(transformationId="log10-transformation", logbase=10, r=1, d=1)
+	trans_markers = selection[!grepl("LIN", selection)]
+	transform_list = transformList(trans_markers, logTrans)
+	ff['fcs'] = list(transform(ff['fcs'][[1]], transform_list))
+	return(ff)
+}
+transform_ffs <- function(ffs, selection) {
+	# for (i in 1:nrow(ffs)) {
+	# 	ff = ffs[i,'fcs'][[1]]
+	#  	ffs[i,'fcs'] = list(transform(ff, transform_list))
+	# }
+	ffs = apply(ffs,1, function(x) { transform_ff(x, selection) })
+	ffs = do.call(rbind, ffs)
+	return(ffs)
+}
+
+t1 = transform_ffs(t1, selected)
+
 fs = flowSet(t1[,'fcs'])
 
 fsom = create_fsom(fs)
@@ -195,7 +214,7 @@ meta = create_metaclust(fsom, metanum)
 # upsample data in a similar fashion to our fsom generation
 selection_num = 40
 
-selected_rows = matrix(nrow=0, ncol=ncol(tube1))
+selected_rows = matrix(nrow=0, ncol=ncol(tf1))
 for (g in unique(tf1[,'group'])) {
 	selected_rows = rbind(selected_rows, head(tf1[tf1[,'group']==g,], n=selection_num))
 }
