@@ -34,6 +34,16 @@ get_dir <- function(path, ext) {
   	return(files)
 }
 
+read_file <- function(file_row) {
+	f = read.FCS(as.character(file_row[['filepath']]), dataset=1)
+	# use simplified markernames, this might be an inappropriate simplification
+	m = strsplit(markernames(f), '-')
+	newn = sapply(m, function(x) { x[[1]] } )
+	colnames(f) = newn
+
+	return (c(file_row, fcs=f))
+}
+
 read_files <- function(file_list) {
 	# Load fcs files into file matrix
 	#
@@ -43,32 +53,21 @@ read_files <- function(file_list) {
 	#
 	# Returns:
 	# 	file_matrix ẃith flowframe column with loaded fcs files
-	fcs_list = lapply(file_list[,'filepath'], function(x) {
+	fcs_list = mclapply(file_list[,'filepath'], function(x) {
 						  f = read.FCS(as.character(x), dataset=1)
 						  m = strsplit(markernames(f), '-')
 						  # use simplified markernames that actually describe biological properties
 						  newn = sapply(m, function(x) { x[[1]] } )
 						  colnames(f) = newn
 						  return(f)
-		})
+		}, mc.cores=detectCores())
 
 	return (cbind(file_list, fcs=fcs_list))
 }
 
-create_output_matrix <- function(path, tubenum, metanum){
-	f = c(positive='CLL', negative='normal control')
-	file_matrix = get_info(path, 'LMD')
-	selected_files = file_matrix[file_matrix[,'group'] == 'HZLv',]
-	print(selected_files)
-	# file_matrix = read_files(selected_files, path)
-	# file_matrix <- read_files(file_matrix, 'logicle')
-	return()
-
+create_fsom <- function(fs){
 	fSOM <- ReadInput(
-		# flowSet(file_matrix[file_matrix[,'label'] == 'negative','fcs'])
-		flowSet(file_matrix[,'fcs'])
-		#flowSet(file_matrix[1:10,'fcs'])
-		#file_matrix[[183,3]]
+		fs
 		,compensate = FALSE
 		,transform = FALSE
 		,scale = TRUE
@@ -76,60 +75,167 @@ create_output_matrix <- function(path, tubenum, metanum){
 
 	fSOM <- BuildSOM(fSOM)
 	fSOM <- BuildMST(fSOM, tSNE=FALSE)
-
-	META_NUM = metanum
-	meta <- metaClustering_consensus(fSOM$map$codes, k=META_NUM)
-
-	selection <- file_matrix[,]
-
-	fsoms <- mclapply(selection[,'fcs'], function(x) { NewData(fSOM, x)}
-					  ,mc.cores=detectCores(logical=FALSE))
-	# fsoms <- lapply(selection[,'fcs'], function(x) { NewData(fSOM, x)})
-
-	histos <- lapply(fsoms, function(x) {
-		t = tabulate(x$map$mapping, nrow(x$map$codes))
-		t / sum(t)
-		})
-
-	result_data <- do.call(rbind, histos)
-	meta_result <- matrix(0, ncol=META_NUM, nrow=nrow(result_data))
-	for (i in 1:ncol(result_data)) {
-		meta_result[,meta[i]] = meta_result[,meta[i]] + result_data[,i]
-	}
-
-
-	# cheap labeling
-	colnames(result_data) <- c(1:ncol(result_data))
-	colnames(meta_result) <- c(1:META_NUM)
-	result_data <- cbind(result_data, label=selection[,'label'], ident=selection[,'ident'])
-	meta_result <- cbind(meta_result, label=selection[,'label'], ident=selection[,'ident'])
-	#do.call(function(x){ rbind(x[,'freq'])}, histos)
-
-	write.table(result_data, file=sprintf("logic_matrix_output_tube%d.csv",tubenum), sep=";")
-	write.table(meta_result, file=sprintf("logic_matrix_meta_output_tube%d.csv",tubenum), sep=";")
+	return(fSOM)
 }
+
+create_metaclust <- function(fsom, metanum) {
+	meta <- metaClustering_consensus(fsom$map$codes, k=metanum)
+	return(meta)
+}
+
 # use environment variabeles to set configuration
 
 column_occurrences <- function(fcs_info) {
 	# is this reasonable?
 	# get occurence of different terms across all fcs
-	colmatrix = sapply(fcs_info[,'fcs'], function(x) { colnames(x) })
-	print(colmatrix)
+	colmatrix = lapply(fcs_info[,'fcs'], colnames)
+	colen = max(unlist(lapply(colmatrix, length)))
+	colmatrix = sapply(colmatrix, function(x) { length(x) = colen; x})
+
+	tab = table(colmatrix)
+	return(tab)
 }
 
+majority_markers <- function(fcs_info) {
+	threshold = 0.95
+	selected = column_occurrences(fcs_info) / nrow(fcs_info)
+	return(names(selected)[selected > threshold])
+}
+
+modify_selection_row <- function(fcs_row, selection) {
+	ff = fcs_row['fcs'][[1]]
+	ffn = colnames(ff)
+	if (!any(is.na(match(selection, ffn)))) {
+	 	fcs_row['fcs'] = list(ff[,selection])
+	} else {
+		fcs_row['fcs'] = NA
+	}
+	return(fcs_row)
+}
+
+modify_selection <- function(fcs_info, selection) {
+	# modify flowframe columns, accepting only flowframes containing the specified selection
+
+	for (i in 1:nrow(fcs_info)) {
+		ff = fcs_info[i,'fcs'][[1]]
+	 	ffn = colnames(ff)
+	 	if (!any(is.na(match(selection, ffn)))) {
+	 		fcs_info[i,'fcs'] = list(ff[,selection])
+	 	} else {
+	 		fcs_info[i,'fcs'] = NA
+	 	}
+	}
+	fcs_info = fcs_info[!is.na(fcs_info[,'fcs']),]
+	return(fcs_info)
+}
+
+remove_small_cohorts <- function (fcs_info, minsize) {
+	## downsampling for flowsom to bite sized chunks
+	# set a minimum size to exclude very small cohorts first
+	chosen_groups = c()
+	file_groups = unique(fcs_info[,'group'])
+	for (g in file_groups) {
+		if (table(fcs_info[,'group'] == g)['TRUE'] > minsize) {
+			chosen_groups = c(chosen_groups, g)
+		} else {
+			fcs_info = fcs_info[fcs_info[,'group'] != g,]
+		}
+	}
+	return(fcs_info)
+}
+
+THRESHOLD_GROUP_SIZE = 30
 # path = "~/DREAM/Krawitz/"
 path = Sys.getenv('PREPROCESS_PATH')
+cached = Sys.getenv('PREPROCESS_CACHED')
 file_information = get_dir(path, 'LMD')
+
+# remove duplicates until we have a better idea
+file_freq = table(unlist(rownames(file_information)))
+file_freq = file_freq[file_freq > 1 ]
+if (length(file_freq) > 0) {
+	duplicates = names(file_freq)
+	for (d in duplicates) {
+		g = grep(d, rownames(file_information))
+		# remove the file path from both occurences, better not to use this information
+		# TODO clarify and remove this potential source of error
+		file_information[g[1], 'filepath'] = NA
+		file_information[g[2], 'filepath'] = NA
+	}
+	file_information = file_information[!is.na(file_information[,'filepath']),]
+}
+
+file_groups = unique(file_information[,'group'])
 
 tube1 = file_information[file_information[,'set'] == 1, ]
 tube2 = file_information[file_information[,'set'] == 2, ]
 
-t1 = read_files(head(tube1, n=10))
-column_occurrences(t1)
-# column_occurrences(tube2)
+tf1 = remove_small_cohorts(tube1, THRESHOLD_GROUP_SIZE +10)
+tf_subset = matrix(ncol=ncol(tf1), nrow=0)
+for (g in unique(tf1[,'group'])) {
+	tf_subset = rbind(tf_subset, head(tf1[tf1[,'group'] == g,], n=THRESHOLD_GROUP_SIZE))
+}
+print(dim(tf_subset))
 
+# loading files first is a really dumb idea
+t1 = read_files(tf_subset)
+selected = majority_markers(t1)
 
-# testframe = create_output_matrix(path, 1, 7)
-# for (tub in 1:3) {
-# 	create_output_matrix(path, tub, 7)
-# }
+t1 = modify_selection(t1, selected)
+
+fs = flowSet(t1[,'fcs'])
+
+fsom = create_fsom(fs)
+saveRDS(fsom, 'tempfsom.rds')
+
+metanum = 7
+
+meta = create_metaclust(fsom, metanum)
+
+# upsample data in a similar fashion to our fsom generation
+selection_num = 40
+
+selected_rows = matrix(nrow=0, ncol=ncol(tube1))
+for (g in unique(tf1[,'group'])) {
+	selected_rows = rbind(selected_rows, head(tf1[tf1[,'group']==g,], n=selection_num))
+}
+
+rm(histos)
+rm(metas)
+for (i in 1:nrow(selected_rows)) {
+	print(i)
+	cur_info = selected_rows[i,]
+	cur_info = read_file(cur_info)
+	mf = modify_selection_row(cur_info, selected)
+	# skip if we encounter na in the data
+	if (any(is.na(mf))) {
+		cat(paste("Skipping", cur_info['filepath'], "because NA encountered."))
+		next
+	}
+	upsampled = NewData(fsom, mf['fcs'][[1]])
+	histo = tabulate(upsampled$map$mapping, nrow(upsampled$map$codes))
+	histo = histo / sum(histo)
+	meta_hist = rep(0, times=metanum)
+	for (j in 1:length(histo)) {
+		meta_hist[meta[j]] = meta_hist[meta[j]] + histo[j]
+	}
+	names(histo) = c(1:length(histo))
+	names(meta_hist) = c(1:length(meta_hist))
+	histo = c(histo, cur_info['group'], cur_info['label'])
+	meta_hist = c(meta_hist, cur_info['group'], cur_info['label'])
+	if (!exists('histos')) {
+		histos = histo
+	} else {
+		histos = rbind(histos, histo)
+	}
+	if (!exists('metas')) {
+		metas = meta_hist
+	} else {
+		metas = rbind(metas, meta_hist)
+	}
+}
+print(dim(histos))
+print(dim(metas))
+# save to csv file for further processing
+write.table(histos, file="MOREDATA_40ea_histos.csv", sep=";")
+write.table(metas, file="MOREDATA_40ea_metas.csv", sep=";")
