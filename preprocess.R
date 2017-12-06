@@ -60,7 +60,7 @@ read_files <- function(file_list) {
 						  newn = sapply(m, function(x) { x[[1]] } )
 						  colnames(f) = newn
 						  return(f)
-		}, mc.cores=detectCores())
+		}, mc.cores=CPUNUM)
 
 	return (cbind(file_list, fcs=fcs_list))
 }
@@ -144,11 +144,27 @@ remove_small_cohorts <- function (fcs_info, minsize) {
 	return(fcs_info)
 }
 
-THRESHOLD_GROUP_SIZE = 30
-# path = "~/DREAM/Krawitz/"
-path = Sys.getenv('PREPROCESS_PATH')
-cached = Sys.getenv('PREPROCESS_CACHED')
-file_information = get_dir(path, 'LMD')
+transform_ff <- function(ff, selection) {
+	logTrans <- logTransform(transformationId="log10-transformation", logbase=10, r=1, d=1)
+	trans_markers = selection[!grepl("LIN", selection)]
+	transform_list = transformList(trans_markers, logTrans)
+	ff['fcs'] = list(transform(ff['fcs'][[1]], transform_list))
+	return(ff)
+}
+transform_ffs <- function(ffs, selection) {
+	ffs = apply(ffs,1, function(x) { transform_ff(x, selection) })
+	ffs = do.call(rbind, ffs)
+	return(ffs)
+}
+
+THRESHOLD_GROUP_SIZE <- strtoi(Sys.getenv('PREPROCESS_GROUP_THRESHOLD'))
+CPUNUM <- strtoi(Sys.getenv('PREPROCESS_THREADS'))
+PATH <- Sys.getenv('PREPROCESS_PATH')
+CACHED_FSOM <- Sys.getenv('PREPROCESS_CACHED_FSOM')
+CACHED_FSOM <- CACHED_FSOM == 'TRUE'
+METANUM <- strtoi(Sys.getenv('PREPROCESS_METANUM'))
+
+file_information = get_dir(PATH, 'LMD')
 
 # remove duplicates until we have a better idea
 file_freq = table(unlist(rownames(file_information)))
@@ -181,46 +197,34 @@ print(dim(tf_subset))
 t1 = read_files(tf_subset)
 selected = majority_markers(t1)
 
-t1 = modify_selection(t1, selected)
+if (!CACHED_FSOM) {
+	t1 = modify_selection(t1, selected)
 
-transform_ff <- function(ff, selection) {
-	logTrans <- logTransform(transformationId="log10-transformation", logbase=10, r=1, d=1)
-	trans_markers = selection[!grepl("LIN", selection)]
-	transform_list = transformList(trans_markers, logTrans)
-	ff['fcs'] = list(transform(ff['fcs'][[1]], transform_list))
-	return(ff)
-}
-transform_ffs <- function(ffs, selection) {
-	# for (i in 1:nrow(ffs)) {
-	# 	ff = ffs[i,'fcs'][[1]]
-	#  	ffs[i,'fcs'] = list(transform(ff, transform_list))
-	# }
-	ffs = apply(ffs,1, function(x) { transform_ff(x, selection) })
-	ffs = do.call(rbind, ffs)
-	return(ffs)
+	t1 = transform_ffs(t1, selected)
+
+	fs = flowSet(t1[,'fcs'])
+
+	fsom = create_fsom(fs)
+	saveRDS(fsom, 'tempfsom.rds')
+} else {
+	fsom = readRDS('tempfsom.rds')
 }
 
-t1 = transform_ffs(t1, selected)
-
-fs = flowSet(t1[,'fcs'])
-
-fsom = create_fsom(fs)
-saveRDS(fsom, 'tempfsom.rds')
-
-metanum = 7
+metanum = METANUM
 
 meta = create_metaclust(fsom, metanum)
 
 # upsample data in a similar fashion to our fsom generation
-selection_num = 40
+# selection_num = 40
+# 
+# selected_rows = matrix(nrow=0, ncol=ncol(tf1))
+# for (g in unique(tf1[,'group'])) {
+# 	selected_rows = rbind(selected_rows, head(tf1[tf1[,'group']==g,], n=selection_num))
+# }
 
-selected_rows = matrix(nrow=0, ncol=ncol(tf1))
-for (g in unique(tf1[,'group'])) {
-	selected_rows = rbind(selected_rows, head(tf1[tf1[,'group']==g,], n=selection_num))
-}
+# or instead use all the data
+selected_rows = tf1
 
-rm(histos)
-rm(metas)
 for (i in 1:nrow(selected_rows)) {
 	print(i)
 	cur_info = selected_rows[i,]
@@ -231,6 +235,7 @@ for (i in 1:nrow(selected_rows)) {
 		cat(paste("Skipping", cur_info['filepath'], "because NA encountered."))
 		next
 	}
+	print(mf['fcs'][[1]])
 	upsampled = NewData(fsom, mf['fcs'][[1]])
 	histo = tabulate(upsampled$map$mapping, nrow(upsampled$map$codes))
 	histo = histo / sum(histo)
@@ -256,5 +261,5 @@ for (i in 1:nrow(selected_rows)) {
 print(dim(histos))
 print(dim(metas))
 # save to csv file for further processing
-write.table(histos, file="MOREDATA_40ea_histos.csv", sep=";")
-write.table(metas, file="MOREDATA_40ea_metas.csv", sep=";")
+write.table(histos, file="MOREDATA_all_histos.csv", sep=";")
+write.table(metas, file="MOREDATA_all_metas.csv", sep=";")
