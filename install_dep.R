@@ -1,0 +1,5 @@
+source("http://bioconductor.org/biocLite.R")
+biocLite("flowCore")
+install.packages("devtools")
+install_github("xiamaz/flowProc")
+biocLite("FlowSOM")
