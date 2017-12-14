@@ -6,38 +6,13 @@ from sklearn.metrics import classification_report
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.naive_bayes import MultinomialNB, GaussianNB
 
-
-
-def split_frame_cross(df, splits=5):
-    return np.array_split(df.iloc[:,:-1], splits), np.array_split(df['label'], splits)
-def split_frame(df):
-    return df.iloc[:,:-2], df['group'], df['label']
-
-def svm_predict(clf, data, labels, splits=5):
-    scores = []
-    for k in range(splits):
-        x_train = list(data)
-        x_test = x_train.pop(k)
-        x_train = np.concatenate(x_train)
-        y_train = list(labels)
-        y_test = y_train.pop(k)
-        y_train = np.concatenate(y_train)
-        scores.append(clf.fit(x_train, y_train).score(x_test, y_test))
-    return scores
-
-def scale_datas(data):
-    data -= data.min()
-    data /= data.max()
-    return data
-
-def run_optimization(datas, labels):
-    splits = 10
-
-    # datas, labels = split_frame_cross(dataframe, splits=splits)
-    datas = scale_datas(datas)
+def run_optimization(df):
+    # scale the data
+    # datas -= datas.min()
+    # datas /= datas.max()
+    data, group, label = df.iloc[:,:-2], df['group'], df['label']
     X_train, X_test, y_train, y_test = train_test_split(
-            datas, labels, test_size=0.5, random_state=0)
-
+            data, group, test_size=0.5, random_state=0)
     params = {
             'C' : list(range(1,500, 1))
             ,"gamma" : [0.1, 0.01, 0.001]
@@ -58,22 +33,27 @@ def run_optimization(datas, labels):
     # print(scores)
 
 def main():
-    ## TODO one vs all rotational, so that we can better grasp the data quality
-    csvs = [
-            '/home/max/DREAM/flowCat/MOREDATA_40ea_histos.csv'
-            ]
-    csvs_meta = [
-            '/home/max/DREAM/flowCat/MOREDATA_40ea_metas.csv'
-            ]
+    csvs = {
+            'norm':'/home/max/DREAM/MOREDATA_all_histos.csv'
+            ,'meta':'/home/max/DREAM/MOREDATA_all_metas.csv'
+            }
 
-    dataframe = pandas.read_csv(csvs_meta[0], delimiter=';')
-    data, group, label = split_frame(dataframe)
-    # data = scale_datas(data)
-    # clf = MultinomialNB(alpha=1.0, class_prior=None, fit_prior=True)
-    # clf = GaussianNB()
-    clf = svm.LinearSVC(random_state=0,multi_class="crammer_singer", C=1000)
-    y_pred = clf.fit(data, group).predict(data)
-    print("Number of mislabeled points out of a total %d points : %d" % (data.shape[0],(group != y_pred).sum()))
+    dataframes = { k:pandas.read_csv(csv, delimiter=';') for k,csv in csvs.items() }
+    # normal selection
+    normals = { k:df[df['group'] == 'normal'] for k,df in dataframes.items() }
+    others = { k:df[df['group'] != 'normal'] for k,df in dataframes.items() }
+    groups = { k:df['group'].unique() for k,df in others.items() }
+    groups = {k:{ kk:others[k][others[k]['group'] == kk] for kk in l} for k, l in groups.items()}
+
+    # comparisons against normal
+    # for k,d in groups.items():
+    for kk, df in groups['meta'].items():
+        if (df.shape[0] < normals['meta'].shape[0] / 2):
+            print("Skip {} because of size {}".format(kk, df.shape[0]))
+            continue
+        # add normal cohort to test group
+        run_optimization(pandas.concat([df, normals['meta']]))
+
 
 
 if __name__ == '__main__':
