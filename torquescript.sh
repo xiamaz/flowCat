@@ -2,7 +2,7 @@
 #PBS -k o
 #PBS -l nodes=1:ppn=16,walltime=60:00,mem=80gb
 #PBS -M max.zhao@hu-berlin.de
-#PBS -m abe -N flowCatter
+#PBS -m abe -N 0xDEADBEEF
 #PBS -j oe
 export PREPROCESS_PATH="$HOME/Moredata"
 export PREPROCESS_GROUP_THRESHOLD=70
