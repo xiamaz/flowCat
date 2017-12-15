@@ -27,10 +27,6 @@ THRESHOLD_GROUP_SIZE <- strtoi(Sys.getenv('PREPROCESS_GROUP_THRESHOLD'))
 CPUNUM <- strtoi(Sys.getenv('PREPROCESS_THREADS'))
 PATH <- Sys.getenv('PREPROCESS_PATH')
 METANUM <- strtoi(Sys.getenv('PREPROCESS_METANUM'))
-THRESHOLD_GROUP_SIZE = 70
-CPUNUM = 8
-PATH = '/home/max/DREAM/Moredata'
-METANUM = 10
 
 processed = process_dir(PATH, ext='LMD', set=1, threads=CPUNUM, simple_marker_names=FALSE, group_size=70)
 file_info = processed$file_info
@@ -43,6 +39,10 @@ fsom = create_fsom(fs)
 metanum = METANUM
 meta = create_metaclust(fsom, metanum)
 
+jpeg('plots/fsom.jpg')
+PlotStars(fsom)
+dev.off()
+
 selected_rows = create_file_info(PATH, ext='LMD', set=1)
 
 for (i in 1:nrow(selected_rows)) {
@@ -52,6 +52,9 @@ for (i in 1:nrow(selected_rows)) {
 		next
 	}
 	upsampled = NewData(fsom, cur_info['fcs'][[1]])
+	jpeg(paste('plots/',cur_info['group'],cur_info['label'],'.jpg', sep=''))
+	PlotStars(upsampled)
+	dev.off()
 	histo = tabulate(upsampled$map$mapping, nrow(upsampled$map$codes))
 	histo = histo / sum(histo)
 	meta_hist = rep(0, times=metanum)
