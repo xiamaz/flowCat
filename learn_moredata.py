@@ -1,19 +1,22 @@
 import matplotlib
-import matplotlib
-matplotlib.use('Agg')
 matplotlib.use('Agg')
 import os
 import pandas
+import itertools
 import numpy as np
 from sklearn import svm
 from sklearn.utils import shuffle
-from sklearn.metrics import classification_report,precision_recall_fscore_support
+from sklearn.preprocessing import LabelBinarizer,label_binarize,LabelEncoder
+from sklearn.metrics import classification_report,precision_recall_fscore_support,confusion_matrix
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.naive_bayes import MultinomialNB, GaussianNB
 from keras.models import Sequential
 from keras.layers import Dense
+from keras.utils import to_categorical
+from keras.np_utils import probas_to_classes
 import seaborn
 import matplotlib.pyplot as plt
+from functools import reduce
 
 outfile = None
 
@@ -34,18 +37,6 @@ def run_optimization(df): # scale the data
     y_pred = grid_search.predict(X_test)
     print(classification_report(y_test, y_pred),file=outfile)
     return precision_recall_fscore_support(y_test, y_pred, average='weighted')
-
-def run_neural_network(df, outfile_nn):
-    data,group,label = df.iloc[:,:,:-2],df['group'],df['label']
-    X_train, X_test, y_train, y_test = train_test_split(
-            data, group, test_size=0.5, random_state=0)
-    model = Sequential()
-    model.add(units=64, activation='relu', input_dim=data.shape[1])
-    model.add(units=len(label.unique()), activation='softmax')
-    model.compile(loss='categorical_crossentropy',optimizer='sgd',metrics=['accuracy'])
-    model.fit(X_train, y_train, epochs=5, batch_size=32)
-    loss_and_metrics = model.evaluate(X_test, y_test, batch_size=128)
-    print(loss_and_metrics,file=outfile_nn)
 
 def data_histograms(df,groups,k):
     seaborn.set()
@@ -101,6 +92,55 @@ def group_bar_plot(df,k):
     plt.savefig('plots_new/num_overview_{}.png'.format(k), dpi=300)
 
 
+def run_neural_network(df, outfile_nn):
+    data,group,label = df.iloc[:,:-2],df['group'],df['label']
+    X_train, X_test, y_train, y_test = train_test_split(
+            data, group, test_size=0.5, random_state=0)
+    model = Sequential()
+    model.add(units=64, activation='relu', input_dim=data.shape[1])
+    model.add(units=len(label.unique()), activation='softmax')
+    model.compile(loss='categorical_crossentropy',optimizer='sgd',metrics=['accuracy'])
+    model.fit(X_train, y_train, epochs=5, batch_size=32)
+    loss_and_metrics = model.evaluate(X_test, y_test, batch_size=128)
+    print(loss_and_metrics,file=outfile_nn)
+
+def plot_confusion_matrix(cm, classes,
+                          normalize=False,
+                          title='Confusion matrix',
+                          cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    print(cm)
+    plt.close('all')
+    plt.figure()
+
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt),
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.savefig('confusion.png',dpi=300)
+
 def main():
     csvs = {
             'norm1':'/home/max/DREAM/flowCat/4_MOREDATA_SET1_all_histos.csv'
@@ -132,6 +172,64 @@ def main():
             seaborn.heatmap(vv, cmap='YlGnBu', annot=True, fmt='.2f',mask=mask)
             plt.savefig('plots_new/heatmap_{}_{}.png'.format(k,kk))
         plt.close('all')
+
+    #r1 = {str(i):"a{}".format(i) for i in range(0,dataframes['norm1'].shape[1]-1)}
+    #r2 = {str(i):"b{}".format(i) for i in range(0,dataframes['norm2'].shape[1]-1)}
+    test_df1 = dataframes['norm1']
+    test_df2 = dataframes['norm2']
+    test_df = test_df1.set_index('label').join(test_df2.set_index('label'),lsuffix='_a',rsuffix='_b',how='inner')
+    assert ((test_df['group_a'] == test_df['group_b']).value_counts() == test_df.shape[0]).all(), \
+            "Group labels are not identical for same ids"
+
+
+    test_df = test_df.drop(['group_b'],axis=1)
+    test_df = test_df.rename({'group_a':'group'},axis=1)
+
+    test_df = {k:test_df[test_df['group']==k] for k in test_df['group'].unique()}
+    # groups = ['Marginal','CLLPL','HZL','Mantel','CLL','normal']
+    groups = ['CLL', 'normal','CLLPL','HZL', 'Mantel', 'Marginal','MBL']
+    test_df = {k:v for k,v in test_df.items() if k in groups}
+    minsize = min(map(lambda x: x.shape[0], test_df.values()))
+    d = None
+    for k,v in test_df.items():
+        if d is None:
+            d = shuffle(v, random_state=0, n_samples=minsize)
+        else:
+            d = d.append(shuffle(v, random_state=0, n_samples=minsize))
+
+    data,group = d.drop(['group'],axis=1),d['group']
+    lb = LabelBinarizer()
+    lb.fit(groups)
+    bgroup = lb.transform(group)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+            data, bgroup, test_size=0.2, random_state=0)
+    X_train -= X_train.min()
+    X_train /= X_train.max()
+    X_train = X_train.values
+    model = Sequential()
+    model.add(Dense(units=50, activation='relu', input_dim=data.shape[1]))
+    model.add(Dense(units=50, activation='relu', input_dim=50))
+    model.add(Dense(units=50, activation='relu', input_dim=50))
+    #model.add(Dense(units=30, activation='relu', input_dim=40))
+    #model.add(Dense(units=20, activation='relu', input_dim=30))
+    model.add(Dense(units=len(group.unique()), activation='softmax'))
+    model.compile(loss='categorical_crossentropy',optimizer='sgd',metrics=['accuracy'])
+    model.fit(X_train, y_train, epochs=100, batch_size=10)
+    X_test -= X_test.min()
+    X_test /= X_test.max()
+    X_test = X_test.values
+    loss_and_metrics = model.evaluate(X_test, y_test, batch_size=128)
+    print(loss_and_metrics)
+    y_pred = model.predict(X_test, batch_size=128)
+    y_pred = model.predict_classes(X_test, batch_size=128)
+    le = LabelEncoder()
+    le.fit(groups)
+    ly_pred = le.inverse_transform(y_pred)
+    ly_test = lb.inverse_transform(y_test)
+    cm = confusion_matrix(ly_test, ly_pred,labels=groups)
+    plot_confusion_matrix(cm, groups)
+
 
 if __name__ == '__main__':
     main()
