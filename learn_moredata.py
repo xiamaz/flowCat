@@ -13,7 +13,6 @@ from sklearn.naive_bayes import MultinomialNB, GaussianNB
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.utils import to_categorical
-from keras.np_utils import probas_to_classes
 import seaborn
 import matplotlib.pyplot as plt
 from functools import reduce
@@ -37,21 +36,6 @@ def run_optimization(df): # scale the data
     y_pred = grid_search.predict(X_test)
     print(classification_report(y_test, y_pred),file=outfile)
     return precision_recall_fscore_support(y_test, y_pred, average='weighted')
-
-def data_histograms(df,groups,k):
-    seaborn.set()
-    num = df.shape[1] - 2
-    x1 = np.array(range(0,num))
-    if not os.path.exists('plots_new/{}'.format(k)):
-        os.makedirs('plots_new/{}'.format(k))
-    for g in groups:
-        d = df[df['group'] == g]
-        data, group, label = d.iloc[:,:-2], d['group'], d['label']
-        plt.figure()
-        for i in range(0,data.shape[0]):
-            y = np.array(data.iloc[i,:],dtype='float')
-            plt.plot(x1, y)
-        plt.savefig('plots_new/{}/{}.png'.format(k,g))
 
 def binary_processing(dfs, groups, meta):
     if not os.path.exists('logs/{}'.format(meta)):
@@ -82,15 +66,52 @@ def binary_processing(dfs, groups, meta):
         outfile.close()
     return result_dict
 
-def group_bar_plot(df,k):
-    occ = df.groupby('group').size()
-    plt.figure()
-    ax = seaborn.barplot(x=occ.index,y=occ)
-    ax.set(xlabel='Groups', ylabel='Number of files')
-    loc,labels = plt.xticks()
-    ax.set_xticklabels(labels,rotation=30)
-    plt.savefig('plots_new/num_overview_{}.png'.format(k), dpi=300)
+def create_plot(plotf, path):
+    plt.figure(dpi=300)
+    seaborn.set(style='whitegrid')
+    plt.tight_layout()
+    plotf()
+    plt.savefig(path)
+    plt.close('all')
 
+def group_bar_plot(df,k,pdir):
+    occ = df.groupby('group').size()
+    def plotfunc():
+        ax = seaborn.barplot(x=occ.index,y=occ)
+        ax.set(xlabel='Groups', ylabel='Number of files')
+        loc,labels = plt.xticks()
+        ax.set_xticklabels(labels,rotation=30)
+    create_plot(plotfunc,'{}/num_overview_{}.png'.format(pdir,k))
+
+def data_histograms(df,groups,k,pdir):
+    plotdir = os.path.join(pdir,k)
+    num = df.shape[1] - 2
+    x1 = np.array(range(0,num))
+    if not os.path.exists(plotdir):
+        os.makedirs(plotdir)
+    for g in groups:
+        d = df[df['group'] == g]
+        data, group, label = d.iloc[:,:-2], d['group'], d['label']
+        if 'meta' in k:
+            def plotfunc():
+                plt.title('{} {} cell cluster distribution'.format(k,g))
+                # ax = seaborn.violinplot(data=data, palette="Set3", bw=.2, cut=1, linewidth=1)
+                ax = seaborn.swarmplot(data=data)
+                ax.set(xlabel='FlowSOM clusters', ylabel='relative percentage of cells')
+                seaborn.despine(left=True, bottom=True)
+                plt.ylim(0,1)
+        else:
+            x1 = list(range(1,data.shape[1]+1))
+            def plotfunc():
+                plt.title('{} {} cell cluster distribution'.format(k,g))
+                for i in range(0,data.shape[0]):
+                    y = np.array(data.iloc[i,:],dtype='float')
+                    plt.scatter(x1, y)
+                ax = plt.gca()
+                ax.set(xlabel='FlowSOM clusters', ylabel='relative percentage of cells')
+                seaborn.despine(left=True, bottom=True)
+                plt.ylim(0,1)
+        create_plot(plotfunc, os.path.join(plotdir,g))
 
 def run_neural_network(df, outfile_nn):
     data,group,label = df.iloc[:,:-2],df['group'],df['label']
@@ -143,23 +164,30 @@ def plot_confusion_matrix(cm, classes,
     plt.savefig('confusion.png',dpi=300)
 
 def main():
+    # csvs = {
+    #         'norm1':'/home/max/DREAM/flowCat/4_MOREDATA_SET1_all_histos.csv'
+    #         ,'meta1':'/home/max/DREAM/flowCat/4_MOREDATA_SET1_all_metas.csv'
+    #         ,'norm2':'/home/max/DREAM/flowCat/4_MOREDATA_SET2_all_histos.csv'
+    #         ,'meta2':'/home/max/DREAM/flowCat/4_MOREDATA_SET2_all_metas.csv'
+    #         }
     csvs = {
-            'norm1':'/home/max/DREAM/flowCat/4_MOREDATA_SET1_all_histos.csv'
-            ,'meta1':'/home/max/DREAM/flowCat/4_MOREDATA_SET1_all_metas.csv'
-            ,'norm2':'/home/max/DREAM/flowCat/4_MOREDATA_SET2_all_histos.csv'
-            ,'meta2':'/home/max/DREAM/flowCat/4_MOREDATA_SET2_all_metas.csv'
+            'norm1':'/home/max/DREAM/flowCat/1_MOREDATA_SET1_all_histos.csv'
+            ,'meta1':'/home/max/DREAM/flowCat/1_MOREDATA_SET1_all_metas.csv'
+            ,'norm2':'/home/max/DREAM/flowCat/2_MOREDATA_SET2_all_histos.csv'
+            ,'meta2':'/home/max/DREAM/flowCat/2_MOREDATA_SET2_all_metas.csv'
             }
+    PLOT_FOLDER = 'plots_even'
+    LOGS_FOLDER = 'logs_more'
 
-    if not os.path.exists('logs'):
-        os.mkdir('logs')
-    if not os.path.exists('plots_new'):
-        os.mkdir('plots_new')
+    if not os.path.exists(LOGS_FOLDER):
+        os.mkdir(LOGS_FOLDER)
+    if not os.path.exists(PLOT_FOLDER):
+        os.mkdir(PLOT_FOLDER)
 
     dataframes = { k:pandas.read_csv(csv, delimiter=';') for k,csv in csvs.items() }
     all_groups = { k:v['group'].unique() for k,v in dataframes.items() }
-    [ group_bar_plot(v,k) for k,v in dataframes.items() ]
-    [ data_histograms(v,all_groups[k],k) for k,v in dataframes.items() ]
-    plt.close('all')
+    [ group_bar_plot(v,k,PLOT_FOLDER) for k,v in dataframes.items() ]
+    [ data_histograms(v,all_groups[k],k,PLOT_FOLDER) for k,v in dataframes.items() ]
 
 
     results = {k:binary_processing(v,all_groups[k],k) for k,v in dataframes.items()}
@@ -174,14 +202,10 @@ def main():
             plt.savefig('plots_new/heatmap_{}_{}.png'.format(k,kk))
         plt.close('all')
 
-    #r1 = {str(i):"a{}".format(i) for i in range(0,dataframes['norm1'].shape[1]-1)}
-    #r2 = {str(i):"b{}".format(i) for i in range(0,dataframes['norm2'].shape[1]-1)}
-    test_df1 = dataframes['norm1']
-    test_df2 = dataframes['norm2']
-    test_df = test_df1.set_index('label').join(test_df2.set_index('label'),lsuffix='_a',rsuffix='_b',how='inner')
+    test_df = dataframes['norm1'].set_index('label').join(
+            dataframes['norm2'].set_index('label'),lsuffix='_a',rsuffix='_b',how='inner')
     assert ((test_df['group_a'] == test_df['group_b']).value_counts() == test_df.shape[0]).all(), \
             "Group labels are not identical for same ids"
-
 
     test_df = test_df.drop(['group_b'],axis=1)
     test_df = test_df.rename({'group_a':'group'},axis=1)
@@ -212,8 +236,6 @@ def main():
     model.add(Dense(units=50, activation='relu', input_dim=data.shape[1]))
     model.add(Dense(units=50, activation='relu', input_dim=50))
     model.add(Dense(units=50, activation='relu', input_dim=50))
-    #model.add(Dense(units=30, activation='relu', input_dim=40))
-    #model.add(Dense(units=20, activation='relu', input_dim=30))
     model.add(Dense(units=len(group.unique()), activation='softmax'))
     model.compile(loss='categorical_crossentropy',optimizer='sgd',metrics=['accuracy'])
     model.fit(X_train, y_train, epochs=100, batch_size=10)
