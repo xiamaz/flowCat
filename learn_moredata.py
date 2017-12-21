@@ -12,10 +12,29 @@ from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.naive_bayes import MultinomialNB, GaussianNB
 from keras.models import Sequential
 from keras.layers import Dense
-from keras.utils import to_categorical
+from keras.utils import to_categorical,plot_model
+from keras import regularizers
 import seaborn
+import functools
 import matplotlib.pyplot as plt
 from functools import reduce
+'''
+Flowcytometry classification methods
+---
+This file generates binary and multiclass classifications from the histogram data output
+by flowSOM based preprocessing.
+
+The input csv file contains relative numbers of events assigned to each cluster on the SOM
+(self-organizing map) with additional columns containing label and group of each row, which
+represents one fcs file.
+
+The histograms are grouped according to groups and all groups are compared against each
+other in the binary comparison. The larger group is always randomly sampled down to the
+smaller group.
+
+For neural network-based multiclass comparisons selected groups are also downsampled to the
+size of the smallest group.
+'''
 
 outfile = None
 
@@ -113,22 +132,152 @@ def data_histograms(df,groups,k,pdir):
                 plt.ylim(0,1)
         create_plot(plotfunc, os.path.join(plotdir,g))
 
-def run_neural_network(df, outfile_nn):
-    data,group,label = df.iloc[:,:-2],df['group'],df['label']
-    X_train, X_test, y_train, y_test = train_test_split(
-            data, group, test_size=0.5, random_state=0)
+def plot_learning_curve(history):
+    plt.close('all')
+    plt.figure()
+    plt.plot(history.history['acc'])
+    plt.plot(history.history['val_acc'])
+    plt.title('model accuracy')
+    plt.ylabel('accuracy')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'test'], loc='upper left')
+    plt.savefig('model_acc.png')
+    plt.figure()
+    # summarize history for loss
+    plt.plot(history.history['loss'])
+    plt.plot(history.history['val_loss'])
+    plt.title('model loss')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'test'], loc='upper left')
+    plt.savefig('model_loss.png')
+
+def binary_ln(dataframes, positive, negative):
+    test_df = dataframes['norm1'].set_index('label').join(
+            dataframes['norm2'].set_index('label'),lsuffix='_a',rsuffix='_b',how='inner')
+    assert ((test_df['group_a'] == test_df['group_b']).value_counts() == test_df.shape[0]).all(), \
+            "Group labels are not identical for same ids"
+    test_df = test_df.drop(['group_b'],axis=1)
+    test_df = test_df.rename({'group_a':'group'},axis=1)
+    test_df = {k:test_df[test_df['group']==k] for k in test_df['group'].unique()}
+
+    pos_dfs = {k:v for k,v in test_df.items() if k in positive}
+    pos_df = functools.reduce(lambda x,y: x.append(y), pos_dfs.values())
+    neg_dfs = {k:v for k,v in test_df.items() if k in negative}
+    neg_df = functools.reduce(lambda x,y: x.append(y), neg_dfs.values())
+    pos_tag = np.zeros((pos_df.shape[0],2))
+    pos_tag[:,0] = 1
+    neg_tag = np.zeros((neg_df.shape[0],2))
+    neg_tag[:,1] = 1
+
+    num = int(min(pos_df.shape[0],neg_df.shape[0]) * 0.8)
+    neg_df = shuffle(neg_df, random_state=0)
+    neg_train = neg_df.iloc[:num,:]
+    neg_test = neg_df.iloc[num:,:]
+    pos_df = shuffle(pos_df, random_state=0)
+    pos_train = pos_df.iloc[:num,:]
+    pos_test = pos_df.iloc[num:,:]
+
+    train_df = pandas.concat([neg_train,pos_train])
+    train_df = train_df.drop(['group'],axis=1)
+    train_df -= train_df.min()
+    train_df /= train_df.max()
+    train_tags = np.concatenate([neg_tag[:neg_train.shape[0],:],pos_tag[:pos_train.shape[0],:]])
+    train_array = np.empty(train_df.shape)
+    train_tag_list = np.empty(train_tags.shape)
+    il = shuffle(range(train_df.shape[0]))
+    for e,i in enumerate(il):
+        train_array[e,:] = train_df.iloc[i,:].values
+        train_tag_list[e,:] = train_tags[i,:]
+
+    test_df = pandas.concat([neg_test,pos_test])
+    test_df = test_df.drop(['group'],axis=1)
+    test_df -= test_df.min()
+    test_df /= test_df.max()
+    test_tags = np.concatenate([neg_tag[:neg_test.shape[0],:],pos_tag[:pos_test.shape[0],:]])
+    test_array = np.empty(test_df.shape)
+    test_tag_list = np.empty(test_tags.shape)
+    il = shuffle(range(test_df.shape[0]))
+    for e,i in enumerate(il):
+        test_array[e,:] = test_df.iloc[i,:].values
+        test_tag_list[e,:] = test_tags[i,:]
+
     model = Sequential()
-    model.add(units=64, activation='relu', input_dim=data.shape[1])
-    model.add(units=len(label.unique()), activation='softmax')
+    model.add(Dense(units=50, activation='relu', input_dim=train_array.shape[1],kernel_initializer='uniform'))#activity_regularizer=regularizers.l1(0.002)))#, kernel_initializer='uniform'))
+    model.add(Dense(units=50, activation='relu', input_dim=50))#,activity_regularizer=regularizers.l1(0.002)))#, kernel_initializer='uniform'))
+    #model.add(Dense(units=50, activation='relu', input_dim=50))#,kernel_regularizer=regularizers.l1(0.01)))
+    model.add(Dense(units=2, activation='softmax'))
     model.compile(loss='categorical_crossentropy',optimizer='sgd',metrics=['accuracy'])
-    model.fit(X_train, y_train, epochs=5, batch_size=32)
+    history = model.fit(train_array, train_tag_list, epochs=100, batch_size=10, validation_split=0.2)
+    loss_and_metrics = model.evaluate(test_array, test_tag_list, batch_size=128)
+    print(loss_and_metrics)
+    y_pred = model.predict(test_array, batch_size=128)
+    y_pred = model.predict_classes(test_array, batch_size=128)
+    ly_test = [ int(x[1]) for x in test_tag_list ]
+    cm = confusion_matrix(ly_test, y_pred)
+    plot_confusion_matrix(cm, ['patho','normal'],filename='confusion_bin.png')
+
+
+def run_neural_network(dataframes, groups, plotting=False):
+    test_df = dataframes['norm1'].set_index('label').join(
+            dataframes['norm2'].set_index('label'),lsuffix='_a',rsuffix='_b',how='inner')
+    assert ((test_df['group_a'] == test_df['group_b']).value_counts() == test_df.shape[0]).all(), \
+            "Group labels are not identical for same ids"
+
+    test_df = test_df.drop(['group_b'],axis=1)
+    test_df = test_df.rename({'group_a':'group'},axis=1)
+
+    test_df = {k:test_df[test_df['group']==k] for k in test_df['group'].unique()}
+    test_df = {k:v for k,v in test_df.items() if k in groups}
+    minsize = min(map(lambda x: x.shape[0], test_df.values()))
+    d = None
+    for k,v in test_df.items():
+        if d is None:
+            d = shuffle(v, random_state=0, n_samples=minsize)
+        else:
+            d = d.append(shuffle(v, random_state=0, n_samples=minsize))
+
+    data,group = d.drop(['group'],axis=1),d['group']
+    lb = LabelBinarizer()
+    lb.fit(groups)
+    bgroup = lb.transform(group)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+            data, bgroup, test_size=0.2, random_state=0)
+    X_train -= X_train.min()
+    X_train /= X_train.max()
+    X_train = X_train.values
+    model = Sequential()
+    model.add(Dense(units=50, activation='relu', input_dim=data.shape[1],kernel_initializer='uniform'))#activity_regularizer=regularizers.l1(0.002)))#, kernel_initializer='uniform'))
+    model.add(Dense(units=50, activation='relu', input_dim=50))#,activity_regularizer=regularizers.l1(0.002)))#, kernel_initializer='uniform'))
+    #model.add(Dense(units=50, activation='relu', input_dim=50))#,kernel_regularizer=regularizers.l1(0.01)))
+    model.add(Dense(units=len(group.unique()), activation='softmax'))
+    model.compile(loss='categorical_crossentropy',optimizer='sgd',metrics=['accuracy'])
+    if plotting:
+        plot_model(model, to_file='neural_network.png')
+        plot_model(model, show_shapes=True, to_file='network.png')
+    history = model.fit(X_train, y_train, epochs=100, batch_size=10, validation_split=0.2)
+    plot_learning_curve(history)
+    X_test -= X_test.min()
+    X_test /= X_test.max()
+    X_test = X_test.values
     loss_and_metrics = model.evaluate(X_test, y_test, batch_size=128)
-    print(loss_and_metrics,file=outfile_nn)
+    print(loss_and_metrics)
+    y_pred = model.predict(X_test, batch_size=128)
+    y_pred = model.predict_classes(X_test, batch_size=128)
+    le = LabelEncoder()
+    le.fit(groups)
+    ly_pred = le.inverse_transform(y_pred)
+    ly_test = lb.inverse_transform(y_test)
+    cm = confusion_matrix(ly_test, ly_pred,labels=groups)
+    print(cm)
+    if plotting:
+        plot_confusion_matrix(cm, groups)
 
 def plot_confusion_matrix(cm, classes,
                           normalize=False,
                           title='Confusion matrix',
-                          cmap=plt.cm.Blues):
+                          cmap=plt.cm.Blues, filename='confusion.png'):
     """
     This function prints and plots the confusion matrix.
     Normalization can be applied by setting `normalize=True`.
@@ -158,18 +307,12 @@ def plot_confusion_matrix(cm, classes,
                  horizontalalignment="center",
                  color="white" if cm[i, j] > thresh else "black")
 
-    plt.tight_layout()
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
-    plt.savefig('confusion.png',dpi=300)
+    plt.tight_layout()
+    plt.savefig(filename,dpi=300)
 
 def main():
-    # csvs = {
-    #         'norm1':'/home/max/DREAM/flowCat/4_MOREDATA_SET1_all_histos.csv'
-    #         ,'meta1':'/home/max/DREAM/flowCat/4_MOREDATA_SET1_all_metas.csv'
-    #         ,'norm2':'/home/max/DREAM/flowCat/4_MOREDATA_SET2_all_histos.csv'
-    #         ,'meta2':'/home/max/DREAM/flowCat/4_MOREDATA_SET2_all_metas.csv'
-    #         }
     csvs = {
             'norm1':'/home/max/DREAM/flowCat/1_MOREDATA_SET1_all_histos.csv'
             ,'meta1':'/home/max/DREAM/flowCat/1_MOREDATA_SET1_all_metas.csv'
@@ -179,6 +322,14 @@ def main():
     PLOT_FOLDER = 'plots_even'
     LOGS_FOLDER = 'logs_more'
 
+    plotting_data = False
+    binary_comparisons = False
+    plotting_binary = False
+    neural_network = False
+    plotting_neural = False
+
+    binary_lympho = True
+
     if not os.path.exists(LOGS_FOLDER):
         os.mkdir(LOGS_FOLDER)
     if not os.path.exists(PLOT_FOLDER):
@@ -186,72 +337,39 @@ def main():
 
     dataframes = { k:pandas.read_csv(csv, delimiter=';') for k,csv in csvs.items() }
     all_groups = { k:v['group'].unique() for k,v in dataframes.items() }
-    [ group_bar_plot(v,k,PLOT_FOLDER) for k,v in dataframes.items() ]
-    [ data_histograms(v,all_groups[k],k,PLOT_FOLDER) for k,v in dataframes.items() ]
+    if plotting_data:
+        [ group_bar_plot(v,k,PLOT_FOLDER) for k,v in dataframes.items() ]
+        [ data_histograms(v,all_groups[k],k,PLOT_FOLDER) for k,v in dataframes.items() ]
+
+    if binary_comparisons:
+        results = {k:binary_processing(v,all_groups[k],k) for k,v in dataframes.items()}
+        if plotting_binary:
+            for k,v in results.items():
+                for kk,vv in v.items():
+                    plt.figure()
+                    plt.subplots(figsize=(10,8))
+                    plt.title("{} {} heatmap".format(k,kk))
+                    mask = np.zeros_like(vv)
+                    mask[np.triu_indices_from(mask)] = True
+                    seaborn.heatmap(vv, cmap='YlGnBu', annot=True, fmt='.2f',mask=mask)
+                    plt.savefig('plots_new/heatmap_{}_{}.png'.format(k,kk))
+                plt.close('all')
+
+    if neural_network:
+        #groups = ['Marginal','CLLPL','HZL','Mantel','CLL','normal']
+        groups = ['CLL','normal','CLLPL','HZL','Mantel','Marginal','MBL']
+        run_neural_network(dataframes, groups, plotting_neural)
+
+    if binary_lympho:
+        l = list(all_groups['norm1'])
+        l.remove('normal')
+        groups = {
+                'negative':['normal']
+                ,'positive': l
+                }
+        binary_ln(dataframes, groups['positive'],groups['negative'] )
 
 
-    results = {k:binary_processing(v,all_groups[k],k) for k,v in dataframes.items()}
-    for k,v in results.items():
-        for kk,vv in v.items():
-            plt.figure()
-            plt.subplots(figsize=(10,8))
-            plt.title("{} {} heatmap".format(k,kk))
-            mask = np.zeros_like(vv)
-            mask[np.triu_indices_from(mask)] = True
-            seaborn.heatmap(vv, cmap='YlGnBu', annot=True, fmt='.2f',mask=mask)
-            plt.savefig('plots_new/heatmap_{}_{}.png'.format(k,kk))
-        plt.close('all')
-
-    test_df = dataframes['norm1'].set_index('label').join(
-            dataframes['norm2'].set_index('label'),lsuffix='_a',rsuffix='_b',how='inner')
-    assert ((test_df['group_a'] == test_df['group_b']).value_counts() == test_df.shape[0]).all(), \
-            "Group labels are not identical for same ids"
-
-    test_df = test_df.drop(['group_b'],axis=1)
-    test_df = test_df.rename({'group_a':'group'},axis=1)
-
-    test_df = {k:test_df[test_df['group']==k] for k in test_df['group'].unique()}
-    # groups = ['Marginal','CLLPL','HZL','Mantel','CLL','normal']
-    groups = ['CLL', 'normal','CLLPL','HZL', 'Mantel', 'Marginal','MBL']
-    test_df = {k:v for k,v in test_df.items() if k in groups}
-    minsize = min(map(lambda x: x.shape[0], test_df.values()))
-    d = None
-    for k,v in test_df.items():
-        if d is None:
-            d = shuffle(v, random_state=0, n_samples=minsize)
-        else:
-            d = d.append(shuffle(v, random_state=0, n_samples=minsize))
-
-    data,group = d.drop(['group'],axis=1),d['group']
-    lb = LabelBinarizer()
-    lb.fit(groups)
-    bgroup = lb.transform(group)
-
-    X_train, X_test, y_train, y_test = train_test_split(
-            data, bgroup, test_size=0.2, random_state=0)
-    X_train -= X_train.min()
-    X_train /= X_train.max()
-    X_train = X_train.values
-    model = Sequential()
-    model.add(Dense(units=50, activation='relu', input_dim=data.shape[1]))
-    model.add(Dense(units=50, activation='relu', input_dim=50))
-    model.add(Dense(units=50, activation='relu', input_dim=50))
-    model.add(Dense(units=len(group.unique()), activation='softmax'))
-    model.compile(loss='categorical_crossentropy',optimizer='sgd',metrics=['accuracy'])
-    model.fit(X_train, y_train, epochs=100, batch_size=10)
-    X_test -= X_test.min()
-    X_test /= X_test.max()
-    X_test = X_test.values
-    loss_and_metrics = model.evaluate(X_test, y_test, batch_size=128)
-    print(loss_and_metrics)
-    y_pred = model.predict(X_test, batch_size=128)
-    y_pred = model.predict_classes(X_test, batch_size=128)
-    le = LabelEncoder()
-    le.fit(groups)
-    ly_pred = le.inverse_transform(y_pred)
-    ly_test = lb.inverse_transform(y_test)
-    cm = confusion_matrix(ly_test, ly_pred,labels=groups)
-    plot_confusion_matrix(cm, groups)
 
 
 if __name__ == '__main__':
