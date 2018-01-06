@@ -9,15 +9,9 @@ import collections
 import itertools
 from argparse import ArgumentParser
 
-from sklearn.decomposition import PCA
-
 # preprocessing in python by simply generating some distribution identifiers
 
 ID_CELL = re.compile('^([KMPB\d-]+) CLL 9F (\d+).*.LMD$')
-
-BLACKLIST = [
-        'DLBCL'
-        ]
 
 def file_structure(path):
     '''
@@ -52,17 +46,23 @@ def file_structure(path):
     df = pandas.DataFrame.from_dict(dict_array)
     return df
 
-def read_fcs(file_frame):
+def read_fcs(file_frame, meta_only=False):
     flow_frames = []
+    flow_metas = []
     for f in file_frame['filename']:
         try:
             meta, data = fcsparser.parse(f, data_set=0)
             flow_frames.append(data)
+            flow_metas.append(meta)
         except ValueError:
             print("Corrupted file: {}".format(f))
             continue
     flow_frames = pandas.Series(flow_frames)
-    file_frame = file_frame.assign(flowframe=flow_frames.values)
+    flow_metas = pandas.Series(flow_metas)
+    if not meta_only:
+        file_frame = file_frame.assign(flowframe=flow_frames.values)
+    file_frame = file_frame.assign(flowmeta=flow_metas.values)
+
     return file_frame
 
 def scale_flowframes(flowframes):
@@ -189,6 +189,32 @@ def shared_tubes(flows):
                 cols[c] += 1
     return cols
 
+P_N_REG = re.compile("\$P\d+N")
+P_S_REG = re.compile("\$P\d+S")
+
+def regex_filter_list(l, r):
+    lf = [r.search(k) for k in l]
+    lf = list(map(lambda x:x.group(0), filter(lambda x:x is not None,lf)))
+    return lf
+
+def more_info(flows):
+    '''
+    Returns information on contained markers and machine settings.
+    '''
+    cytometers = []
+    stain_lists = []
+    for f in flows['flowmeta']:
+        keys = f.keys()
+        names = regex_filter_list(keys, P_N_REG)
+        stains = regex_filter_list(keys, P_S_REG)
+        s_names = ";".join([f[s] for s in stains])
+        if s_names not in stain_lists:
+            stain_lists.append(s_names)
+        if f['$CYT'] not in cytometers:
+            cytometers.append(f['$CYT'])
+    print(cytometers)
+    print("\n".join(stain_lists))
+
 def data_statistics(file_structure):
     '''
     Returns information about number of files per group, number of unique ids, files per id.
@@ -204,20 +230,22 @@ def data_statistics(file_structure):
     print("Number of unique ids per group")
     print(num)
     ## work on a smaller subset first for speed reasons
-    tube1 = file_structure.loc[file_structure['set'].isin([1])]
-    tube2 = file_structure.loc[file_structure['set'].isin([2])]
-    tubes = [tube1, tube2]
-    groups = tube2['group'].unique()
-    # groups = [ g for g in groups if g not in BLACKLIST ]
-    for i, tube in enumerate(tubes):
+
+    tubes = {
+            v:file_structure.loc[file_structure['set']==v]
+            for v in file_structure['set'].unique()
+            }
+    for i, tube in tubes.items():
         print("----------TUBE {}----------".format(i))
+        groups = tube['group'].unique()
         for g in groups:
             print("----Group {}----".format(g))
-            fls = read_fcs(tube[tube['group'] == g])
-            shared = shared_tubes(fls)
-            size = fls.shape[0]
-            shared_out = [ "{} : {:.3}".format(k, v / size * 100) for k, v in shared.items() ]
-            print("Shared columns: \n", "\n".join(shared_out))
+            fls = read_fcs(tube[tube['group'] == g], meta_only=True)
+            more_info(fls)
+            # shared = shared_tubes(fls)
+            # size = fls.shape[0]
+            # shared_out = [ "{} : {:.3}".format(k, v / size * 100) for k, v in shared.items() ]
+            # print("Shared columns: \n", "\n".join(shared_out))
 
 ## using principal component analysis for dimensionality reduction
 def main():
