@@ -11,7 +11,7 @@ from argparse import ArgumentParser
 
 # preprocessing in python by simply generating some distribution identifiers
 
-ID_CELL = re.compile('^([KMPB\d-]+) CLL 9F (\d+).*.LMD$')
+ID_CELL = re.compile('^(\d+-\d+)-(\w+) CLL 9F (\d+).*.LMD$')
 
 def file_structure(path):
     '''
@@ -28,6 +28,7 @@ def file_structure(path):
             ,'id' : []
             ,'set' : []
             ,'filename' : []
+            ,'material' : []
             }
     for f in os.listdir(path):
         for i in os.listdir(os.path.join(path, f)):
@@ -36,10 +37,12 @@ def file_structure(path):
                 continue
             m = ID_CELL.match(i)
             if m is None:
+                print("File {} does not match. Ignoring".format(i))
                 continue
             dict_array['group'].append(f)
             dict_array['id'].append(m.group(1))
-            dict_array['set'].append(int(m.group(2)))
+            dict_array['material'].append(m.group(2))
+            dict_array['set'].append(int(m.group(3)))
             dict_array['filename'].append(os.path.join(path,f,i))
     for d in dict_array:
         dict_array[d] = numpy.array(dict_array[d])
@@ -202,18 +205,20 @@ def more_info(flows):
     Returns information on contained markers and machine settings.
     '''
     cytometers = []
-    stain_lists = []
+    stain_lists = {}
     for f in flows['flowmeta']:
         keys = f.keys()
         names = regex_filter_list(keys, P_N_REG)
         stains = regex_filter_list(keys, P_S_REG)
         s_names = ";".join([f[s] for s in stains])
         if s_names not in stain_lists:
-            stain_lists.append(s_names)
+            stain_lists[s_names] = 1
+        else:
+            stain_lists[s_names] += 1
         if f['$CYT'] not in cytometers:
             cytometers.append(f['$CYT'])
     print(cytometers)
-    print("\n".join(stain_lists))
+    print("\n".join(["{}:{}".format(v,k) for k,v in stain_lists.items()]))
 
 def data_statistics(file_structure):
     '''
@@ -242,10 +247,10 @@ def data_statistics(file_structure):
             print("----Group {}----".format(g))
             fls = read_fcs(tube[tube['group'] == g], meta_only=True)
             more_info(fls)
-            # shared = shared_tubes(fls)
-            # size = fls.shape[0]
-            # shared_out = [ "{} : {:.3}".format(k, v / size * 100) for k, v in shared.items() ]
-            # print("Shared columns: \n", "\n".join(shared_out))
+            #shared = shared_tubes(fls)
+            #size = fls.shape[0]
+            #shared_out = [ "{} : {:.3}".format(k, v / size * 100) for k, v in shared.items() ]
+            #print("Shared columns: \n", "\n".join(shared_out))
 
 ## using principal component analysis for dimensionality reduction
 def main():
@@ -253,7 +258,9 @@ def main():
     parser.add_argument('directory')
     args = parser.parse_args()
     files = file_structure(args.directory)
-    data_statistics(files)
+    hematological = ['1','2','3','4','KM','PB']
+    hema_files = files.loc[files['material'].isin(hematological)]
+    data_statistics(hema_files)
 
 if __name__ == '__main__':
     main()
