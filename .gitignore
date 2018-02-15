@@ -2,3 +2,5 @@
 env
 logs
 plots
+# directory containing old data
+data

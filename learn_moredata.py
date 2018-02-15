@@ -152,70 +152,131 @@ def plot_learning_curve(history):
     plt.legend(['train', 'test'], loc='upper left')
     plt.savefig('model_loss.png')
 
+def plot_size_acc(res):
+    acc = [v['loss'][1] for v in res.values()]
+    sen = [v['res']['Recall(Sensitivity)'] for v in res.values()]
+    spec = [v['res']['Specificity'] for v in res.values()]
+    x = list(res.keys())
+    plt.close('all')
+    plt.figure()
+    seaborn.set()
+    plt.ylim(0,1)
+    plt.plot(x,acc)
+    plt.plot(x,sen)
+    plt.plot(x,spec)
+    plt.title('Tube 1')
+    plt.xlabel('Size of normal cohort')
+    plt.legend(['accuracy','sensitivity','specificity'])
+    plt.savefig('0000-tube1_size_all_plot.png')
+
+
 def binary_ln(dataframes, positive, negative):
-    test_df = dataframes['norm1'].set_index('label').join(
+    input_df = dataframes['norm1'].set_index('label').join(
             dataframes['norm2'].set_index('label'),lsuffix='_a',rsuffix='_b',how='inner')
-    assert ((test_df['group_a'] == test_df['group_b']).value_counts() == test_df.shape[0]).all(), \
+    assert ((input_df['group_a'] == input_df['group_b']).value_counts() == input_df.shape[0]).all(), \
             "Group labels are not identical for same ids"
-    test_df = test_df.drop(['group_b'],axis=1)
-    test_df = test_df.rename({'group_a':'group'},axis=1)
-    test_df = {k:test_df[test_df['group']==k] for k in test_df['group'].unique()}
+    input_df = input_df.drop(['group_b','material_b','material_a'],axis=1)
+    input_df = input_df.rename({'group_a':'group'},axis=1)
 
-    pos_dfs = {k:v for k,v in test_df.items() if k in positive}
-    pos_df = functools.reduce(lambda x,y: x.append(y), pos_dfs.values())
-    neg_dfs = {k:v for k,v in test_df.items() if k in negative}
-    neg_df = functools.reduce(lambda x,y: x.append(y), neg_dfs.values())
-    pos_tag = np.zeros((pos_df.shape[0],2))
-    pos_tag[:,0] = 1
-    neg_tag = np.zeros((neg_df.shape[0],2))
-    neg_tag[:,1] = 1
+    # inputdf from single tubes
 
-    num = int(min(pos_df.shape[0],neg_df.shape[0]) * 0.8)
-    neg_df = shuffle(neg_df, random_state=0)
-    neg_train = neg_df.iloc[:num,:]
-    neg_test = neg_df.iloc[num:,:]
-    pos_df = shuffle(pos_df, random_state=0)
-    pos_train = pos_df.iloc[:num,:]
-    pos_test = pos_df.iloc[num:,:]
+    input_df = old_df['norm1'].drop(['material','label'],axis=1)
 
-    train_df = pandas.concat([neg_train,pos_train])
-    train_df = train_df.drop(['group'],axis=1)
-    train_df -= train_df.min()
-    train_df /= train_df.max()
-    train_tags = np.concatenate([neg_tag[:neg_train.shape[0],:],pos_tag[:pos_train.shape[0],:]])
-    train_array = np.empty(train_df.shape)
-    train_tag_list = np.empty(train_tags.shape)
-    il = shuffle(range(train_df.shape[0]))
-    for e,i in enumerate(il):
-        train_array[e,:] = train_df.iloc[i,:].values
-        train_tag_list[e,:] = train_tags[i,:]
+    out = {}
+    input_df = dataframes['norm1'].drop(['material','label'],axis=1)
+    input_df = dataframes['norm2'].drop(['material','label'],axis=1)
+    for nsize in range(100,3000,200):
+        input_df = dataframes['norm2'].drop(['material','label'],axis=1)
+        input_df = {k:input_df[input_df['group']==k] for k in input_df['group'].unique()}
+        input_df['normal'] = input_df['normal'].sample(nsize)
+        pos_dfs = {k:v for k,v in input_df.items() if k in positive}
+        pos_df = functools.reduce(lambda x,y: x.append(y), pos_dfs.values())
+        neg_dfs = {k:v for k,v in input_df.items() if k in negative}
+        neg_df = functools.reduce(lambda x,y: x.append(y), neg_dfs.values())
+        pos_tag = np.zeros((pos_df.shape[0],2))
+        pos_tag[:,0] = 2
+        neg_tag = np.zeros((neg_df.shape[0],2))
+        neg_tag[:,1] = 1
 
-    test_df = pandas.concat([neg_test,pos_test])
-    test_df = test_df.drop(['group'],axis=1)
-    test_df -= test_df.min()
-    test_df /= test_df.max()
-    test_tags = np.concatenate([neg_tag[:neg_test.shape[0],:],pos_tag[:pos_test.shape[0],:]])
-    test_array = np.empty(test_df.shape)
-    test_tag_list = np.empty(test_tags.shape)
-    il = shuffle(range(test_df.shape[0]))
-    for e,i in enumerate(il):
-        test_array[e,:] = test_df.iloc[i,:].values
-        test_tag_list[e,:] = test_tags[i,:]
+        # num = int(min(pos_df.shape[0],neg_df.shape[0]) * 0.8)
+        neg_df = shuffle(neg_df)#, random_state=0)
+        # neg_df = neg_df.sample(min(pos_df.shape[0],neg_df.shape[0]))
+        num = int(neg_df.shape[0] / 1.2)
+        neg_train = neg_df.iloc[:num,:]
+        neg_test = neg_df.iloc[num:,:]
+        pos_df = shuffle(pos_df)#, random_state=0)
+        # pos_df = pos_df.sample(min(pos_df.shape[0],neg_df.shape[0]))
+        num = int(pos_df.shape[0] / 1.2)
+        pos_train = pos_df.iloc[:num,:]
+        pos_test = pos_df.iloc[num:,:]
 
-    model = Sequential()
-    model.add(Dense(units=50, activation='relu', input_dim=train_array.shape[1],kernel_initializer='uniform'))#activity_regularizer=regularizers.l1(0.002)))#, kernel_initializer='uniform'))
-    model.add(Dense(units=50, activation='relu', input_dim=50))#,activity_regularizer=regularizers.l1(0.002)))#, kernel_initializer='uniform'))
-    #model.add(Dense(units=50, activation='relu', input_dim=50))#,kernel_regularizer=regularizers.l1(0.01)))
-    model.add(Dense(units=2, activation='softmax'))
-    model.compile(loss='categorical_crossentropy',optimizer='sgd',metrics=['accuracy'])
-    history = model.fit(train_array, train_tag_list, epochs=100, batch_size=10, validation_split=0.2)
-    loss_and_metrics = model.evaluate(test_array, test_tag_list, batch_size=128)
-    print(loss_and_metrics)
-    y_pred = model.predict(test_array, batch_size=128)
-    y_pred = model.predict_classes(test_array, batch_size=128)
-    ly_test = [ int(x[1]) for x in test_tag_list ]
-    cm = confusion_matrix(ly_test, y_pred)
-    plot_confusion_matrix(cm, ['patho','normal'],filename='confusion_bin.png')
+        train_df = pandas.concat([neg_train,pos_train])
+        train_df = train_df.drop(['group'],axis=1)
+        # train_df -= train_df.min()
+        # train_df /= train_df.max()
+        train_tags = np.concatenate([neg_tag[:neg_train.shape[0],:],pos_tag[:pos_train.shape[0],:]])
+        train_array = np.empty(train_df.shape)
+        train_tag_list = np.empty(train_tags.shape)
+        il = shuffle(range(train_df.shape[0]))
+        for e,i in enumerate(il):
+            train_array[e,:] = train_df.iloc[i,:].values
+            train_tag_list[e,:] = train_tags[i,:]
+
+        test_df = pandas.concat([neg_test,pos_test])
+        test_df = test_df.drop(['group'],axis=1)
+        # test_df -= test_df.min()
+        # test_df /= test_df.max()
+        test_tags = np.concatenate([neg_tag[:neg_test.shape[0],:],pos_tag[:pos_test.shape[0],:]])
+        test_array = np.empty(test_df.shape)
+        test_tag_list = np.empty(test_tags.shape)
+        il = shuffle(range(test_df.shape[0]))
+        for e,i in enumerate(il):
+            test_array[e,:] = test_df.iloc[i,:].values
+            test_tag_list[e,:] = test_tags[i,:]
+
+        # auto class weights
+        #class_weight = { 0: (pos_df.shape[0]+neg_df.shape[0]) / neg_df.shape[0]
+        #        ,1:(pos_df.shape[0]+neg_df.shape[0])/pos_df.shape[0]}
+        class_weight = {0:1,
+                1:1 }
+
+        model = Sequential()
+        model.add(Dense(units=200, activation='relu', input_dim=train_array.shape[1],kernel_initializer='uniform'))
+        model.add(Dense(units=200, activation='relu', input_dim=200))
+        model.add(Dense(units=2, activation='softmax'))
+        model.compile(loss='binary_crossentropy',optimizer='adadelta',metrics=['acc'])
+        history = model.fit(train_array, train_tag_list, epochs=150, batch_size=64,class_weight=class_weight,validation_split=0.0)
+        loss_and_metrics = model.evaluate(test_array, test_tag_list, batch_size=128)
+        print(nsize)
+        print(loss_and_metrics)
+        y_pred = model.predict(test_array, batch_size=128)
+        y_pred = model.predict_classes(test_array, batch_size=128)
+        ly_test = [ int(x[1]) for x in test_tag_list ]
+        cm = confusion_matrix(ly_test, y_pred)
+        print(cm)
+        precision = cm[0,0] / (cm[0,0]+cm[1,0])
+        recall = cm[0,0] / (cm[0,1]+cm[0,0])
+        f1 = 2/((1/precision)+(1/recall))
+        specificity = cm[1,1]/(cm[1,1]+cm[1,0])
+        npv = cm[1,1]/(cm[1,1]+cm[0,1])
+        res = { 'Data':'more+new,400,tube2'
+                ,'Precision(PPV)':precision
+                ,'Recall(Sensitivity)':recall
+                ,'F1 score':f1
+                ,'Specificity':specificity
+                ,'NPV':npv}
+        out[nsize] = {'loss':loss_and_metrics
+                ,'res':res}
+        # write_results('tube2_400.txt', **res)
+        # np.savetxt('confusion_400_tube2.txt',cm)
+        # print("\n".join(["{} : {:.2}".format(k,v) for k,v in res.items()]))
+        # plot_confusion_matrix(cm, ['patho','normal'],filename='confusion_bin_tube2_400.png')
+
+def write_results(filename, **kwargs):
+    res = ["{} : {}".format(k,v) for k,v in kwargs.items()]
+    res = "\n".join(res)
+    with open(filename, 'w') as fp:
+        fp.write(res)
 
 
 def run_neural_network(dataframes, groups, plotting=False):
@@ -227,8 +288,11 @@ def run_neural_network(dataframes, groups, plotting=False):
     test_df = test_df.drop(['group_b'],axis=1)
     test_df = test_df.rename({'group_a':'group'},axis=1)
 
+    test_df = old_df['norm1']
     test_df = {k:test_df[test_df['group']==k] for k in test_df['group'].unique()}
-    test_df = {k:v for k,v in test_df.items() if k in groups}
+    #select cohorts over 100 cases
+    test_df = {k:v for k,v in test_df.items() if v.shape[0] >= 100}
+    # test_df = {k:v for k,v in test_df.items() if k in groups}
     minsize = min(map(lambda x: x.shape[0], test_df.values()))
     d = None
     for k,v in test_df.items():
@@ -314,13 +378,27 @@ def plot_confusion_matrix(cm, classes,
 
 def main():
     csvs = {
-            'norm1':'/home/max/DREAM/flowCat/1_MOREDATA_SET1_all_histos.csv'
-            ,'meta1':'/home/max/DREAM/flowCat/1_MOREDATA_SET1_all_metas.csv'
-            ,'norm2':'/home/max/DREAM/flowCat/2_MOREDATA_SET2_all_histos.csv'
-            ,'meta2':'/home/max/DREAM/flowCat/2_MOREDATA_SET2_all_metas.csv'
+             'norm1':'/data/ssdraid/Genetik/flowCat/400_Moredata_SET1_all_histos.csv'
+            ,'meta1':'/data/ssdraid/Genetik/flowCat/400_Moredata_SET1_all_metas.csv'
+            ,'norm2':'/data/ssdraid/Genetik/flowCat/400_Moredata_SET2_all_histos.csv'
+            ,'meta2':'/data/ssdraid/Genetik/flowCat/400_Moredata_SET2_all_metas.csv'
             }
-    PLOT_FOLDER = 'plots_even'
-    LOGS_FOLDER = 'logs_more'
+    csv_add = {
+             'norm1':'/data/ssdraid/Genetik/flowCat/400_Newdata_SET1_all_histos.csv'
+            ,'meta1':'/data/ssdraid/Genetik/flowCat/400_Newdata_SET1_all_metas.csv'
+            ,'norm2':'/data/ssdraid/Genetik/flowCat/400_Newdata_SET2_all_histos.csv'
+            ,'meta2':'/data/ssdraid/Genetik/flowCat/400_Newdata_SET2_all_metas.csv'
+            }
+
+    csv_other = {
+            'norma':'/data/ssdraid/Genetik/flowCat/100_Newdata_SET1_all_histos.csv'
+            ,'normb':'/data/ssdraid/Genetik/flowCat/100_Moredata_SET1_all_histos.csv'
+            }
+    csv_other = {k:pandas.read_csv(csv,delimiter=';') for k,csv in csv_other.items()}
+    old_df = {'norm1':pandas.concat(csv_other.values())}
+
+    PLOT_FOLDER = 'plots_full'
+    LOGS_FOLDER = 'logs_full'
 
     plotting_data = False
     binary_comparisons = False
@@ -335,14 +413,16 @@ def main():
     if not os.path.exists(PLOT_FOLDER):
         os.mkdir(PLOT_FOLDER)
 
-    dataframes = { k:pandas.read_csv(csv, delimiter=';') for k,csv in csvs.items() }
-    all_groups = { k:v['group'].unique() for k,v in dataframes.items() }
+    dataframes_more = { k:pandas.read_csv(csv, delimiter=';') for k,csv in csvs.items() }
+    dataframes_add = { k:pandas.read_csv(csv, delimiter=';') for k,csv in csv_add.items() }
+    all_dataframes = {k:pandas.concat(v) for k,v in zip(dataframes_more.keys(),zip(dataframes_more.values(),dataframes_add.values()))}
+    all_groups = { k:v['group'].unique() for k,v in all_dataframes.items() }
     if plotting_data:
-        [ group_bar_plot(v,k,PLOT_FOLDER) for k,v in dataframes.items() ]
-        [ data_histograms(v,all_groups[k],k,PLOT_FOLDER) for k,v in dataframes.items() ]
+        [ group_bar_plot(v,k,PLOT_FOLDER) for k,v in all_dataframes.items() ]
+        [ data_histograms(v,all_groups[k],k,PLOT_FOLDER) for k,v in all_dataframes.items() ]
 
     if binary_comparisons:
-        results = {k:binary_processing(v,all_groups[k],k) for k,v in dataframes.items()}
+        results = {k:binary_processing(v,all_groups[k],k) for k,v in all_dataframes.items()}
         if plotting_binary:
             for k,v in results.items():
                 for kk,vv in v.items():
@@ -358,7 +438,7 @@ def main():
     if neural_network:
         #groups = ['Marginal','CLLPL','HZL','Mantel','CLL','normal']
         groups = ['CLL','normal','CLLPL','HZL','Mantel','Marginal','MBL']
-        run_neural_network(dataframes, groups, plotting_neural)
+        run_neural_network(all_dataframes, groups, plotting_neural)
 
     if binary_lympho:
         l = list(all_groups['norm1'])
@@ -367,10 +447,7 @@ def main():
                 'negative':['normal']
                 ,'positive': l
                 }
-        binary_ln(dataframes, groups['positive'],groups['negative'] )
-
-
-
+        binary_ln(all_dataframes, groups['positive'],groups['negative'] )
 
 if __name__ == '__main__':
     main()
