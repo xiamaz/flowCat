@@ -18,7 +18,7 @@ fsom_plot <- function(fsom, folder, name) {
 
 save_csv <- function(tabledata, folder, name) {
 	filename = paste(name, '.csv', sep='')
-	write.table(tabledata, file=file.path(folder, filename))
+	write.table(tabledata, file=file.path(folder, filename), sep='\t')
 }
 
 create_node_map <- function(fsom) {
@@ -73,55 +73,55 @@ for (gname in group_names) {
 	stopCluster(cluster)
 }
 
-gates = c('FS INT LIN','SS INT LIN')
-logic = c(T,F)
-case = mbl[[1]]
-
-
-
-
-
-case = normals[[4]]
-g2 = c('CD45-KrOr','SS INT LIN')
-case = process_single(case, selection, trans='log', remove_margins=FALSE)
-nlist = lapply(normals, function(x){process_single(x,selection,trans='log',remove_margins=FALSE)@fcs})
-nset = flowSet(nlist)
-fnset = as(nset, 'flowFrame')
-setden = flowDensity(fnset, channels=g2,position=c(T,F))
-gated = lapply(normals, function(x){
-	i = process_single(x,selection,trans='log',remove_margins=TRUE, lower=FALSE)
-	mi = flowDensity(i@fcs,channels=g2,position=c(T,F),ellip.gate=T,bimodal=c(T,T))
-	i@fcs = i@fcs[mi@index,]
-	return(i)})
-glist = lapply(gated, function(x){x@fcs})
-fsom = FlowSOM(flowSet(glist), compensate=F,transform=F,scale=T,nClus=10,colsToUse=colnames(i@fcs))
-n=0
-jpeg(paste(n,'test.jpg',sep=''),res=300,width=100, height=100, units='mm')
-PlotStars(fsom$FlowSOM, backgroundValues = as.factor(fsom$metaclustering))
-dev.off()
-
-
-case = normals[[4]]
-case = process_single(case, selection, trans='log', remove_margins=FALSE)
-# g2 = c('FS INT LIN', 'SS INT LIN')
-more = flowDensity(case@fcs, channels=g2,position=c(T,F),ellip.gate=T,percentile=c(0.5,0.65))
-lines(more@filter, type='l')
-dev.off()
-
-case2 = clls[[1]]
-case2 = process_single(case2, selection, trans='log', remove_margins=FALSE)
-more2 = flowDensity(case2@fcs, channels=g2,position=c(T,F), control=c(more,more), use.control=c(T,T))
-jpeg('test.jpg',res=300,width=100, height=100, units='mm')
-plotDens(case2@fcs, g2)
-lines(more2@filter, type='l')
-dev.off()
-
-case3 = mbl[[4]]
-case3 = process_single(case3, selection, trans='log', remove_margins=FALSE)
-more3 = flowDensity(case3@fcs, channels=g2,position=c(T,F), control=c(more,more), use.control=c(T,F),ellip.gate=T)
-jpeg('test.jpg',res=300,width=100, height=100, units='mm')
-plotDens(case3@fcs, g2)
-lines(more3@filter, type='l')
-dev.off()
-
-stopCluster(cluster)
+# gates = c('FS INT LIN','SS INT LIN')
+# logic = c(T,F)
+# case = mbl[[1]]
+# 
+# 
+# 
+# 
+# 
+# case = normals[[4]]
+# g2 = c('CD45-KrOr','SS INT LIN')
+# case = process_single(case, selection, trans='log', remove_margins=FALSE)
+# nlist = lapply(normals, function(x){process_single(x,selection,trans='log',remove_margins=FALSE)@fcs})
+# nset = flowSet(nlist)
+# fnset = as(nset, 'flowFrame')
+# setden = flowDensity(fnset, channels=g2,position=c(T,F))
+# gated = lapply(normals, function(x){
+# 	i = process_single(x,selection,trans='log',remove_margins=TRUE, lower=FALSE)
+# 	mi = flowDensity(i@fcs,channels=g2,position=c(T,F),ellip.gate=T,bimodal=c(T,T))
+# 	i@fcs = i@fcs[mi@index,]
+# 	return(i)})
+# glist = lapply(gated, function(x){x@fcs})
+# fsom = FlowSOM(flowSet(glist), compensate=F,transform=F,scale=T,nClus=10,colsToUse=colnames(i@fcs))
+# n=0
+# jpeg(paste(n,'test.jpg',sep=''),res=300,width=100, height=100, units='mm')
+# PlotStars(fsom$FlowSOM, backgroundValues = as.factor(fsom$metaclustering))
+# dev.off()
+# 
+# 
+# case = normals[[4]]
+# case = process_single(case, selection, trans='log', remove_margins=FALSE)
+# # g2 = c('FS INT LIN', 'SS INT LIN')
+# more = flowDensity(case@fcs, channels=g2,position=c(T,F),ellip.gate=T,percentile=c(0.5,0.65))
+# lines(more@filter, type='l')
+# dev.off()
+# 
+# case2 = clls[[1]]
+# case2 = process_single(case2, selection, trans='log', remove_margins=FALSE)
+# more2 = flowDensity(case2@fcs, channels=g2,position=c(T,F), control=c(more,more), use.control=c(T,T))
+# jpeg('test.jpg',res=300,width=100, height=100, units='mm')
+# plotDens(case2@fcs, g2)
+# lines(more2@filter, type='l')
+# dev.off()
+# 
+# case3 = mbl[[4]]
+# case3 = process_single(case3, selection, trans='log', remove_margins=FALSE)
+# more3 = flowDensity(case3@fcs, channels=g2,position=c(T,F), control=c(more,more), use.control=c(T,F),ellip.gate=T)
+# jpeg('test.jpg',res=300,width=100, height=100, units='mm')
+# plotDens(case3@fcs, g2)
+# lines(more3@filter, type='l')
+# dev.off()
+# 
+# stopCluster(cluster)
