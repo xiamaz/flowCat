@@ -12,3 +12,9 @@ Number of cells though join
 Original - Tube 1: 25789 Tube 2: 26698
 10x10 - 3,595,830
 20x20 - 708,005
+
+102 normal cases will need approx 50gb uncompressed storage (3gb compressed,
+since it is very repetitive data)
+
+Dimensionality will need to be drastically reduced to make this approach
+feasible.
