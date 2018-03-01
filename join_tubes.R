@@ -1,11 +1,11 @@
 library(methods)
-library(magrittr)
 library(parallel)
 library(data.table)
 library(flowProc)
 
 source("fsom.R")
 
+add <- function(x ,y) { x + y }
 
 FillMin <- function(col.names, param.df) {
   min.values <- param.df[param.df[, "name"] %in% col.names, "minRange"]
@@ -217,7 +217,7 @@ CreateConsensusFsom <- function(groups.list, sample.size = 20) {
 }
 
 # identification settings
-kRunNumber <- 0
+kRunNumber <- 1
 kRunName <- "JoinedTubes"
 
 # number of cpu threads for parallel processes
@@ -234,7 +234,6 @@ kMaterialSelection <- c("1", "2", "3", "4", "5", "PB", "KM")
 # number of metaclusters in the flowSOM
 kMetaNumber <- 10
 
-
 cluster <- makeCluster(kThreads, type = "FORK")
 all.files <- GetDir(kPath, "LMD", cluster)
 all.files <- remove_duplicates(all.files)
@@ -242,7 +241,6 @@ stopCluster(cluster)
 
 # restrict the different types of materials we will consider
 all.files <- FilterList(all.files, material = kMaterialSelection)
-
 
 # Get all entries with first two entries
 # separate files based on their tube_set
@@ -261,26 +259,45 @@ two.items <- sapply(label.groups, function(x) {
                             })
 label.groups <- label.groups[two.items]
 
-# joining all cases in normal and cll for plain comparison
-normal.groups <- label.groups[sapply(label.groups, function(x) {
-                                      x[[1]]@group == "normal"
-             })]
-cll.groups <- label.groups[sapply(label.groups, function(x) {
-                                    x[[1]]@group == "CLL"
-             })]
+# select sample subset from each list for the consensus fsom
+acc <- function(x, y) { slot(x[[1]], y) }
+fsom.sample <- GroupBy(label.groups, group.on = "group", acc = acc, num.threads = 1)
+# select a small sample for the reduction
+fsom.sample <- lapply(fsom.sample, function(group.list) { sample(group.list, min(20, length(group.list))) })
 
-join.function <- function(entry) { JoinTubesOnSom(entry, join.method = "average") }
+# joining samples in each group
+join.function <- function(entry) {
+  JoinTubesOnSom(entry, join.method = "average")
+}
+fsom.sample.joined <- lapply(fsom.sample, function(samples) {
+                               lapply(samples, join.function)
+                            })
 
-normal.joined <- lapply(normal.groups, join.function)
-cll.joined <- lapply(cll.groups, join.function)
+fsom.samples <- do.call(c, fsom.sample.joined)
 
-consensus.fsom <- CreateConsensusFsom(list(normal = normal.joined,
-                                           cll = cll.joined))
+result <- flowProc::FilterChannelMajority(fsom.samples, threshold = 0.9)
+fsom.samples <- result$entries
+selected.channels <- result$markers
 
-list.ups <- c(normal.joined, cll.joined)
+consensus.fsom <- FsomFromEntries(fsom.samples)
 
-list.ups <- lapply(list.ups, function(up) { UpsampleCase(consensus.fsom, up) })
+saveRDS(consensus.fsom, file.path(kOutputPath, "consensus_fsom.rds"))
 
-mat <- UpsampledListToTable(list.ups)
+upsampled.list <- list()
+for (label.entry in label.groups) {
+  message("Processing ", label.entry[[1]]@label)
+  entry.joined <- join.function(label.entry)
+  message("Joined fcs")
+  if (any(!selected.channels %in% flowCore::colnames(entry.joined@fcs))) {
+    message("Skipping because some names are not contained in fsom")
+    print(flowCore::colnames(entry.joined@fcs))
+    next
+  } else {
+    entry.joined@fcs <- entry.joined@fcs[, selected.channels]
+  }
+  upsampled <- UpsampleCase(consensus.fsom, entry.joined)
+  upsampled.list <- c(upsampled, upsampled.list)
+}
 
+mat <- UpsampledListToTable(upsampled.list)
 SaveMatrix("../joined", "cll_normal.csv", mat)
