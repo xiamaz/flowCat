@@ -2,9 +2,7 @@
 CSV file operations needed for upsampling based classification
 '''
 import logging
-from typing import Union, Callable
-import os
-import random
+from typing import Callable
 
 import pandas as pd
 import numpy as np
@@ -14,6 +12,8 @@ def create_binarizer(names):
     '''Create and parse binary label descriptions
     '''
     def binarizer(factor):
+        '''Create binary array from labels.
+        '''
         value = names.index(factor)
         # bin_array = np.zeros(len(names))
         bin_list = [0] * len(names)
@@ -21,8 +21,13 @@ def create_binarizer(names):
         bin_list[value] = 1
         return pd.Series(bin_list)
 
-    def debinarizer(bin_array):
-        val = np.argmax(bin_array)
+    def debinarizer(bin_array, matrix=True):
+        '''Get label from binary array or position number.
+        '''
+        if matrix:
+            val = np.argmax(bin_array)
+        else:
+            val = bin_array
         return names[val]
 
     return binarizer, debinarizer
@@ -69,7 +74,8 @@ class UpsamplingData:
     def _split_groups(self):
         self._groups = self._data.groupby("group")
         # create closures for label creation
-        self.binarizer, self.debinarizer = self.binarizers(self._data['group'])
+        self.binarizer, self.debinarizer, self.group_names = self.binarizers(
+            self._data['group'])
 
     @classmethod
     def from_file(cls, filepath: str) -> "UpsamplingData":
@@ -84,7 +90,9 @@ class UpsamplingData:
     def binarizers(col_data: pd.Series) -> (Callable, Callable):
         '''Create binarizer and debinarizer from factors in a pandas series.
         '''
-        return create_binarizer(list(col_data.unique()))
+        group_names = list(col_data.unique())
+        binarizer, debinarizer = create_binarizer(group_names)
+        return binarizer, debinarizer, group_names
 
     @staticmethod
     def split_x_y(dataframe: pd.DataFrame, binarizer: Callable) \
