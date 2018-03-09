@@ -2,10 +2,28 @@
 CSV file operations needed for upsampling based classification
 '''
 import logging
+from functools import reduce
 from typing import Callable
 
 import pandas as pd
 import numpy as np
+
+
+def merge_on_label(left_df: pd.DataFrame, right_df: pd.DataFrame) \
+        -> pd.DataFrame:
+    '''Merge two dataframes on label column and drop additional replicated
+    columns such as group.'''
+    merged = left_df.merge(right_df, how="inner", on="label", suffixes=("",
+                                                                        "_y"))
+    merged.drop(["group_y"], inplace=True, axis=1)
+    # continuous field naming
+    names = [m for m in list(merged) if m != "group" and m != "label"]
+    rename_dict = {m: str(i + 1) for i, m in enumerate(names)}
+    merged.rename(columns=rename_dict, inplace=True)
+    # reorder the columns
+    merged_names = list(rename_dict.values()) + ["group", "label"]
+    merged = merged[merged_names]
+    return merged
 
 
 def create_binarizer(names):
@@ -40,8 +58,15 @@ class UpsamplingData:
         self._load_data(dataframe)
 
     def add_data_from_file(self, filepath: str):
+        '''Add additional rows to existing dataframe. Should have same column
+        names.'''
         new_data = self._read_file(filepath)
         self._load_data(new_data)
+
+    def select_groups(self, groups):
+        '''Select only certain groups.'''
+        self._data = self._data.loc[self._data['group'].isin(groups)]
+        self._split_groups()
 
     def get_test_train_split(self, ratio: float=None, abs_num: int=None) \
             -> (pd.DataFrame, pd.DataFrame):
@@ -52,7 +77,10 @@ class UpsamplingData:
         train_list = []
         for group_name, group in self._groups:
             logging.info("Splitting", group_name)
-            i = ratio and int(ratio * group.shape[0]) or abs_num
+            abs_cutoff = abs_num and group.shape[0] - abs_num or abs_num
+            i = ratio and int(ratio * group.shape[0]) or abs_cutoff
+            if (i < 0):
+                raise RuntimeError("Cutoff below zero. Perhaps small cohort.")
             shuffled = group.sample(frac=1)
             test, train = shuffled.iloc[:i, :], shuffled.iloc[i:, :]
             test_list.append(test)
@@ -63,6 +91,24 @@ class UpsamplingData:
         df_train = pd.concat(train_list)
         df_train = df_train.sample(frac=1)
         return df_test, df_train
+
+    def k_fold_split(self, k_num: int=5) -> [pd.DataFrame]:
+        '''Split file into k same-size partitions. Keep the group ratios
+        same.
+        '''
+        df_list = []
+        for group_name, group in self._groups:
+            shuffled = group.sample(frac=1)
+            df_group = []
+            for i in range(k_num):
+                block_size = int(group.shape[0] / k_num)
+                start = block_size * i
+                end = min(block_size * (i+1), group.shape[0])
+                df_group.append(shuffled.iloc[start:end, :])
+            df_list.append(df_group)
+        df_splits = [pd.concat(dfs) for dfs in zip(*df_list)]
+        df_splits = [df.sample(frac=1) for df in df_splits]
+        return df_splits
 
     def _load_data(self, data: pd.DataFrame):
         if hasattr(self, "data"):
@@ -80,6 +126,13 @@ class UpsamplingData:
     @classmethod
     def from_file(cls, filepath: str) -> "UpsamplingData":
         return cls(cls._read_file(filepath))
+
+    @classmethod
+    def from_multiple_tubes(cls, filepaths: [str]) -> "UpsamplingData":
+        '''Create information from multiple tubes by joining dataframes.'''
+        dataframes = [cls._read_file(fp) for fp in filepaths]
+        merged = reduce(merge_on_label, dataframes)
+        return cls(merged)
 
     @staticmethod
     def _read_file(filepath: str) -> pd.DataFrame:

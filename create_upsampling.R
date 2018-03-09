@@ -5,12 +5,12 @@ library(flowProc)
 
 source("lib/fsom.R")
 
-margin.list <- list(MarginUpperLower = c(T, T), MarginUpper = c(T, F), MarginLower = c(F, T))
+# margin.list <- list(MarginUpperLower = c(T, T), MarginUpper = c(T, F), MarginLower = c(F, T))
 
-for (kRunName in c("MarginLower")) {
+# for (kRunName in c("MarginLower")) {
 # identification settings
 kRunNumber <- 1
-# kRunName <- "RemoveMarginUpperLower"
+kRunName <- "PlainNormal"
 
 # number of cpu threads for parallel processes
 kThreads <- 12
@@ -30,16 +30,16 @@ all.files <- CreateFileInfo(kPath,
                             thread.num = kThreads,
                             material = kMaterialSelection)
 
-margins <- margin.list[[kRunName]]
+# margins <- margin.list[[kRunName]]
 
-loader <- function(x, selected) {
-  return(flowProc::ProcessSingle(x, selected, trans = "log",
-                                 remove_margins = T, upper = margins[1], lower = margins[2]))
-}
+# loader <- function(x, selected) {
+#   return(flowProc::ProcessSingle(x, selected, trans = "log",
+#                                  remove_margins = T, upper = margins[1], lower = margins[2]))
+# }
 
-tube.matrix.1 <- CasesToMatrix(all.files, kThreads, filters = list(tube_set = c(1)), load.func = loader)
+tube.matrix.1 <- CasesToMatrix(all.files, kThreads, filters = list(tube_set = c(1)))#, load.func = loader)
 SaveMatrix(kOutputPath, "native_tube1.csv", tube.matrix.1)
 
-tube.matrix.2 <- CasesToMatrix(all.files, kThreads, filters = list(tube_set = c(2)), load.func = loader)
+tube.matrix.2 <- CasesToMatrix(all.files, kThreads, filters = list(tube_set = c(2)))#, load.func = loader)
 SaveMatrix(kOutputPath, "native_tube2.csv", tube.matrix.2)
-}
+#}
