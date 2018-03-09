@@ -7,7 +7,7 @@ source("lib/fsom.R")
 
 margin.list <- list(MarginUpperLower = c(T, T), MarginUpper = c(T, F), MarginLower = c(F, T))
 
-for (kRunName in c("MarginUpperLower", "MarginUpper", "MarginLower")) {
+for (kRunName in c("MarginLower")) {
 # identification settings
 kRunNumber <- 1
 # kRunName <- "RemoveMarginUpperLower"
