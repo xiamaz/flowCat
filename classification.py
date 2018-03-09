@@ -9,7 +9,7 @@ from keras.models import Sequential
 from keras.layers import Dense
 
 from upsampling import UpsamplingData
-import plotting
+from lib import plotting
 
 
 class Classifier:

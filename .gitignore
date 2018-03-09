@@ -7,3 +7,7 @@ data
 *.rds
 *.pyc
 __pycache__
+*.png
+*.jpg
+*.txt
+*.pdf

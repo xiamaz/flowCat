@@ -83,3 +83,93 @@ SaveMatrix <- function(folder.path, file.name, up.matrix) {
   path <- file.path(folder.path, file.name)
   write.table(up.matrix, file = path, sep = ";")
 }
+
+
+SampleGroups <- function(groups.list, sample.size = 20) {
+  entry.list <- list()
+  for (name in names(groups.list)) {
+    cur.group <- groups.list[[name]]
+    cur.sel <- sample(cur.group, min(length(cur.group), sample.size))
+    entry.list <- c(entry.list, cur.sel)
+  }
+  return(entry.list)
+}
+
+
+#' Randomly select samples from each group for SOM
+#'
+#' The consensus fsom is used for upsampling of single cases.
+#' Expected input form is a list of lists.
+#'
+#' @examples
+#' som <- CreateConsensusFsom(list(normal = normal.joined, cll = cll.joined))
+CreateConsensusFsom <- function(groups.list, sample.size = 20) {
+  entry.list <- SampleGroups(groups.list)
+  som <- FsomFromEntries(entry.list)
+  return(som)
+}
+
+CreateLapply <- function(num.threads) {
+  if (num.threads > 1) {
+    lfunc <- function(x, y) {
+      cluster <- parallel::makeCluster(num.threads, type = "FORK")
+      result <- parallel::parLapply(cluster, x, y)
+      parallel::stopCluster(cluster)
+      return(result)
+    }
+  } else {
+    lfunc <- lapply
+  }
+  return(lfunc)
+}
+
+LoadCases <- function(case.list, load.function, num.threads = 1) {
+  lfunc <- CreateLapply(num.threads)
+  return(lfunc(case.list, load.function))
+}
+
+LoadFunction <- function(x, selected) {
+  return(flowProc::ProcessSingle(x, selected, trans = "log", remove_margins = F, upper = F, lower = F))
+}
+
+LoadFunctionBuilder <- function(selected, load.func) {
+  return(function(x) {load.func(x, selected)})
+}
+
+
+#' Create Histogram matrices from fcs case files
+#'
+#' Directly create histograms from files separated for each tube.
+CasesToMatrix <- function(entry.list, thread.num, load.func = LoadFunction, filters = list(tube_set = c(1))) {
+  # filter down to single property, eg the first tube
+  entry.list <- entry.list[flowProc::FilterEntries(entry.list, filters)]
+  message("Getting marker configuration in file set\n")
+  # majority markers and exclude files without these
+  result <- flowProc::FilterChannelMajority(entry.list, threshold = 0.8)
+  entry.list <- result$entries
+  selected.channels <- result$markers
+
+  sample.load.func <- LoadFunctionBuilder(selected.channels, load.func)
+
+  # create consensus fsom
+  selected.samples <- flowProc::GroupBy(entry.list, "group", num.threads = thread.num)
+  message("Create consensus FSOM")
+  selected.samples <- SampleGroups(selected.samples, sample.size = 40)
+  message("Loading cases")
+  selected.samples <- LoadCases(selected.samples, sample.load.func, thread.num)
+  message("FSOM creation")
+  consensus.fsom <- FsomFromEntries(selected.samples)
+
+  # upsample single cases
+  upsampled.list <- lapply(entry.list, function(entry) {
+    message("Upsampling ", entry@label)
+    entry <- sample.load.func(entry)
+    if (!isS4(entry)) {
+      print("Entry not valid. Skipping...")
+      return(NA)
+    }
+    UpsampleCase(consensus.fsom, entry)
+                             })
+  upsampled.list <- upsampled.list[!is.na(upsampled.list)]
+  return(UpsampledListToTable(upsampled.list))
+}
