@@ -20,7 +20,7 @@ def avg_dicts(dicts: [dict]) -> dict:
     '''Average a list of dicts.'''
     avg_dict = defaultdict(float)
     for item in dicts:
-        for key, value in item:
+        for key, value in item.items():
             avg_dict[key] += value
     avg_dict = {k: v/len(dicts) for k, v in avg_dict.items()}
     return avg_dict
@@ -39,6 +39,8 @@ class Classifier:
         if os.path.exists(self.output_path):
             raise RuntimeError("{} already exists. Move or delete it.".format(
                 self.output_path))
+        os.makedirs(self.output_path)
+
         self.experiment_name = name
 
     def k_fold_validation(self,
@@ -52,26 +54,32 @@ class Classifier:
         splits = self.data.k_fold_split(k_num)
         eval_results = []
         for i in range(k_num):
-            test = splits[i]
-            train = pd.concat(splits[i+1:] + splits[:i])
-            model = self.create_sequential_model(train, self.data.binarizer)
-            result = self.evaluate_model(
-                model, test, self.data.binarizer, self.data.debinarizer)
-            eval_results.append(result)
+            # train on all other parts
+            model = self.create_sequential_model(
+                pd.concat(splits[i+1:] + splits[:i]),
+                self.data.binarizer)
+            # test using selected part i
+            confusion, stat, mism = self.evaluate_model(
+                model, splits[i], self.data.binarizer, self.data.debinarizer)
+            # add results for later batched interpretation
+            eval_results.append((confusion, stat, mism))
+            # output individual results, if wanted
             if save_individual_results:
-                self.generate_output(*result, name_tag=name_tag)
+                self.generate_output((confusion, self.data.group_names),
+                                     stat, mism,
+                                     name_tag="{}_{}".format(name_tag, i))
 
         avg_confusion = sum([t[0] for t in eval_results])
         avg_stats = avg_dicts([t[1] for t in eval_results])
         self.generate_output(
-            (avg_confusion, self.data.group_names),
-            avg_stats,
+            confusion_data=(avg_confusion, self.data.group_names),
+            statistics=avg_stats,
             mismatches=None,
-            name_tag=name_tag
-        )
+            name_tag=name_tag)
 
     def holdout_validation(self, ratio: float = 0.8,
-                           abs_num: int = None):
+                           abs_num: int = None,
+                           save_weights: bool = True):
         '''Simple holdout validation. If given abs_num, then each test cohort
         will contain the absolute number of cases.'''
         if abs_num:
@@ -84,11 +92,19 @@ class Classifier:
         model = self.create_sequential_model(
             train, self.data.binarizer)
 
+        if save_weights:
+            weight_file = os.path.join(self.output_path,
+                                       "weights_" + name_tag + ".hdf5")
+            model.save_weights(weight_file)
+
         confusion, stats, mismatches = self.evaluate_model(
             model, test, self.data.binarizer, self.data.debinarizer)
 
-        self.generate_output((confusion, self.data.group_names),
-                             stats, mismatches, name_tag)
+        self.generate_output(
+            confusion_data=(confusion, self.data.group_names),
+            statistics=stats,
+            mismatches=mismatches,
+            name_tag=name_tag)
 
     def generate_output(
             self,
@@ -101,28 +117,28 @@ class Classifier:
         '''
         tagged_name = self.experiment_name + name_tag
 
-        if confusion_data:
+        if confusion_data is not None:
             logging.info("Create confusion matrix plot.")
             plot_name = os.path.join(self.output_path,
                                      tagged_name + "_confusion.png")
             plotting.plot_confusion_matrix(*confusion_data,
-                                           normalize=False,
+                                           normalize=True,
                                            filename=plot_name)
-        if statistics:
+        if statistics is not None:
             logging.info("Saving statistics information to text file.")
             stat_file = os.path.join(self.output_path,
-                                     self.experiment_name + "_statistics.txt")
+                                     tagged_name + "_statistics.txt")
             open(stat_file, "w").write(
                 "{}\n====\n{}".format(tagged_name, statistics))
 
-        if mismatches:
+        if mismatches is not None:
             logging.info("Creating text list from mismatch information.")
             mism_file = os.path.join(self.output_path,
                                      tagged_name + "_mismatches.txt")
             mismatch_lines = [
-                "{}: T<{}>|F<{}>".format(
+                "{}: T<{}>|F<{}>\n".format(
                     label, value["true"], value["predicted"])
-                for label, value in mismatches
+                for label, value in mismatches.items()
             ]
             with open(mism_file, "w") as mismatch_output:
                 mismatch_output.writelines(mismatch_lines)

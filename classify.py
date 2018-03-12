@@ -13,11 +13,12 @@ from lib.classification import Classifier
 def evaluate(files: List[Tuple[str]], name: str) -> None:
     '''Evaluate upsampling data.'''
     data = UpsamplingData.from_files(files)
-    # data.select_groups(["CLL", "normal", "CLLPL", "HZL",
-    #                     "Mantel", "Marginal", "MBL"])
+    data.select_groups(["CLL", "normal", "CLLPL", "HZL",
+                        "Mantel", "Marginal", "MBL"])
     # data.limit_size_to_smallest()
     clas = Classifier(data, name=name)
-    clas.k_fold_validation(k_num=5)
+    clas.holdout_validation(ratio=0.8)
+    # clas.k_fold_validation(k_num=5)
 
 
 def main():
