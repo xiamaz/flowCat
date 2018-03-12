@@ -12,8 +12,8 @@ from lib.classification import Classifier
 
 def evaluate(files: List[Tuple[str]], name: str, input_path: str):
     '''Evaluate upsampling data.'''
-    if len(files) > 1:
-        data = UpsamplingData.from_multiple_tubes(files)
+    for tube_files in files:
+
 
 def joined_tubes(files: [str], name: str):
     '''Classification based on tubes joined on SOM level.'''
@@ -46,31 +46,7 @@ def main():
     '''
     input_folder = "output/preprocess"
     files = [("native_tube1.csv", "native_tube2.csv")]
-    # files_plain = [
-    #     "/data/ssdraid/Genetik/PlainNormal_1_output/native_tube1.csv",
-    #     "/data/ssdraid/Genetik/PlainNormal_1_output/native_tube2.csv"
-    # ]
-    # files_margin_all = [
-    #     "/data/ssdraid/Genetik/MarginUpperLower_1_output/native_tube1.csv",
-    #     "/data/ssdraid/Genetik/MarginUpperLower_1_output/native_tube2.csv"
-    # ]
-    # files_margin_upper = [
-    #     "/data/ssdraid/Genetik/MarginUpper_1_output/native_tube1.csv",
-    #     "/data/ssdraid/Genetik/MarginUpper_1_output/native_tube2.csv",
-    # ]
-    # files_margin_lower = [
-    #     "/data/ssdraid/Genetik/MarginLower_1_output/native_tube1.csv",
-    #     "/data/ssdraid/Genetik/MarginLower_1_output/native_tube2.csv",
-    # ]
-    # files_joined = [
-    #     "/data/ssdraid/Genetik/joined/joined_all.csv"
-    # ]
     evaluate(files, "network_analysis", input_folder)
-    # separate_tubes(files_plain, "plain")
-    # separate_tubes(files_margin_all, "margin_all")
-    # separate_tubes(files_margin_upper, "margin_upper")
-    # separate_tubes(files_margin_lower, "margin_lower")
-    # joined_tubes(files_joined, "joined")
 
 
 if __name__ == '__main__':
