@@ -38,7 +38,9 @@ class Classifier:
         self.output_path = output_path
         self.experiment_name = name
 
-    def k_fold_validation(self, k_num: int = 5):
+    def k_fold_validation(self,
+                          k_num: int = 5,
+                          save_individual_results: bool = True):
         '''Do k-fold validation on data set.
         '''
         # put all output into a separate folder
@@ -50,10 +52,11 @@ class Classifier:
             test = splits[i]
             train = pd.concat(splits[i+1:] + splits[:i])
             model = self.create_sequential_model(train, self.data.binarizer)
-            eval_results.append(
-                self.evaluate_model(
-                    model, test, self.data.binarizer, self.data.debinarizer)
-            )
+            result = self.evaluate_model(
+                model, test, self.data.binarizer, self.data.debinarizer)
+            eval_results.append(result)
+            if save_individual_results:
+                self.generate_output(*result, name_tag=name_tag)
 
         avg_confusion = sum([t[0] for t in eval_results])
         avg_stats = avg_dicts([t[1] for t in eval_results])
