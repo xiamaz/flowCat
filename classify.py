@@ -2,11 +2,18 @@
 Neural network classification using keras
 '''
 # from typing import Callable
+import os
+from typing import List, Tuple
 
 from lib.upsampling import UpsamplingData
 from lib.classification import Classifier
 # from lib import plotting
 
+
+def evaluate(files: List[Tuple[str]], name: str, input_path: str):
+    '''Evaluate upsampling data.'''
+    if len(files) > 1:
+        data = UpsamplingData.from_multiple_tubes(files)
 
 def joined_tubes(files: [str], name: str):
     '''Classification based on tubes joined on SOM level.'''
@@ -37,10 +44,12 @@ def separate_tubes(files: [str], name: str):
 def main():
     '''Classification of single tubes
     '''
-    files_plain = [
-        "/data/ssdraid/Genetik/PlainNormal_1_output/native_tube1.csv",
-        "/data/ssdraid/Genetik/PlainNormal_1_output/native_tube2.csv"
-    ]
+    input_folder = "output/preprocess"
+    files = [("native_tube1.csv", "native_tube2.csv")]
+    # files_plain = [
+    #     "/data/ssdraid/Genetik/PlainNormal_1_output/native_tube1.csv",
+    #     "/data/ssdraid/Genetik/PlainNormal_1_output/native_tube2.csv"
+    # ]
     # files_margin_all = [
     #     "/data/ssdraid/Genetik/MarginUpperLower_1_output/native_tube1.csv",
     #     "/data/ssdraid/Genetik/MarginUpperLower_1_output/native_tube2.csv"
@@ -53,14 +62,15 @@ def main():
     #     "/data/ssdraid/Genetik/MarginLower_1_output/native_tube1.csv",
     #     "/data/ssdraid/Genetik/MarginLower_1_output/native_tube2.csv",
     # ]
-    files_joined = [
-        "/data/ssdraid/Genetik/joined/joined_all.csv"
-    ]
-    separate_tubes(files_plain, "plain")
+    # files_joined = [
+    #     "/data/ssdraid/Genetik/joined/joined_all.csv"
+    # ]
+    evaluate(files, "network_analysis", input_folder)
+    # separate_tubes(files_plain, "plain")
     # separate_tubes(files_margin_all, "margin_all")
     # separate_tubes(files_margin_upper, "margin_upper")
     # separate_tubes(files_margin_lower, "margin_lower")
-    joined_tubes(files_joined, "joined")
+    # joined_tubes(files_joined, "joined")
 
 
 if __name__ == '__main__':

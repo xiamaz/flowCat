@@ -3,7 +3,7 @@ CSV file operations needed for upsampling based classification
 '''
 import logging
 from functools import reduce
-from typing import Callable
+from typing import Callable, List, Tuple
 
 import pandas as pd
 import numpy as np
@@ -55,18 +55,21 @@ class UpsamplingData:
     '''Data from upsampling in pandas dataframe form.'''
 
     def __init__(self, dataframe: pd.DataFrame):
-        self._load_data(dataframe)
+        self._data = dataframe
+        self._groups, (self.binarizer, self.debinarizer), self.group_names = \
+            self.split_groups(self._data)
 
-    def add_data_from_file(self, filepath: str):
-        '''Add additional rows to existing dataframe. Should have same column
-        names.'''
-        new_data = self._read_file(filepath)
-        self._load_data(new_data)
+    def update_data(self, data: pd.DataFrame):
+        '''Update internal data with new data and refresh the group
+        representations.
+        '''
+        self._data = data
+        self._groups, (self.binarizer, self.debinarizer), self.group_names = \
+            self.split_groups(self._data)
 
     def select_groups(self, groups):
         '''Select only certain groups.'''
-        self._data = self._data.loc[self._data['group'].isin(groups)]
-        self._split_groups()
+        self.update_data(self._data.loc[self._data['group'].isin(groups)])
 
     def exclude_small_cohorts(self, cutoff=50):
         '''Exclude cohorts below threshold and report these.'''
@@ -79,8 +82,7 @@ class UpsamplingData:
             if group.shape[0] < cutoff
         }
         print("Excluded groups: ", excluded_groups)
-        self._data = pd.concat(selected_groups)
-        self._split_groups()
+        self.update_data(pd.concat(selected_groups))
 
     def limit_size_to_smallest(self):
         '''Limit size of all cohorts to smallest.'''
@@ -90,21 +92,23 @@ class UpsamplingData:
             group.sample(n=min_size)
             for group_name, group in self._groups
         ]
-        self._data = pd.concat(sample_data)
-        self._split_groups()
+        self.update_data(pd.concat(sample_data))
 
-    def get_test_train_split(self, ratio: float=None, abs_num: int=None) \
+    def get_test_train_split(self, ratio: float = None, abs_num: int = None) \
             -> (pd.DataFrame, pd.DataFrame):
+        '''Test and training split for data evaluation.
+        Ratio and abs_num are applied per cohort (eg unique label).
+        '''
         if not (ratio or abs_num):
             raise TypeError("Neither ratio nor absolute number cutoff given")
 
         test_list = []
         train_list = []
         for group_name, group in self._groups:
-            logging.info("Splitting", group_name)
-            abs_cutoff = abs_num and group.shape[0] - abs_num or abs_num
-            i = ratio and int(ratio * group.shape[0]) or abs_cutoff
-            if (i < 0):
+            logging.info("Splitting %s", group_name)
+            i = (group.shape[0] - abs_num) \
+                if abs_num else int(ratio * group.shape[0])
+            if i < 0:
                 raise RuntimeError("Cutoff below zero. Perhaps small cohort.")
             shuffled = group.sample(frac=1)
             test, train = shuffled.iloc[:i, :], shuffled.iloc[i:, :]
@@ -117,12 +121,12 @@ class UpsamplingData:
         df_train = df_train.sample(frac=1)
         return df_test, df_train
 
-    def k_fold_split(self, k_num: int=5) -> [pd.DataFrame]:
+    def k_fold_split(self, k_num: int = 5) -> [pd.DataFrame]:
         '''Split file into k same-size partitions. Keep the group ratios
         same.
         '''
         df_list = []
-        for group_name, group in self._groups:
+        for _, group in self._groups:
             shuffled = group.sample(frac=1)
             df_group = []
             for i in range(k_num):
@@ -135,34 +139,32 @@ class UpsamplingData:
         df_splits = [df.sample(frac=1) for df in df_splits]
         return df_splits
 
-    def _load_data(self, data: pd.DataFrame):
-        if hasattr(self, "data"):
-            self._data = pd.concat([self._data, data])
-        else:
-            self._data = data
-        self._split_groups()
-
-    def _split_groups(self):
-        self._groups = list(self._data.groupby("group"))
-        # create closures for label creation
-        self.binarizer, self.debinarizer, self.group_names = self.binarizers(
-            self._data['group'])
-
     @classmethod
-    def from_file(cls, filepath: str) -> "UpsamplingData":
-        return cls(cls._read_file(filepath))
-
-    @classmethod
-    def from_multiple_tubes(cls, filepaths: [str]) -> "UpsamplingData":
-        '''Create information from multiple tubes by joining dataframes.'''
-        dataframes = [cls._read_file(fp) for fp in filepaths]
-        merged = reduce(merge_on_label, dataframes)
-        return cls(merged)
+    def from_files(cls, files: List[Tuple[str]]) -> "UpsamplingData":
+        '''Create upsampling data from structure containing multiple tubes
+        for multiple files.
+        The input structure contains a list of items to be joined by row,
+        which are in turn joined on columns. (eg multiple tubes on the inner
+        level split into multiple output files on the outer level)
+        '''
+        merged_tubes = [cls.merge_tubes(f) for f in files]
+        return cls(pd.concat(merged_tubes))
 
     @staticmethod
-    def _read_file(filepath: str) -> pd.DataFrame:
+    def read_file(filepath: str) -> pd.DataFrame:
+        '''Read output from preprocessing in csv format.
+        '''
         csv_data = pd.read_table(filepath, sep=";")
         return csv_data
+
+    @staticmethod
+    def merge_tubes(files: Tuple[str]) -> pd.DataFrame:
+        '''Merge results from different tubes joining on label.
+        Labels only contained in some of the tubes will be excluded in the join
+        operation.'''
+        dataframes = [UpsamplingData.read_file(fp) for fp in files]
+        merged = reduce(merge_on_label, dataframes)
+        return merged
 
     @staticmethod
     def binarizers(col_data: pd.Series) -> (Callable, Callable):
@@ -180,6 +182,17 @@ class UpsamplingData:
         y_matrix = dataframe['group'].apply(binarizer).as_matrix()
         return x_matrix, y_matrix
 
+    @staticmethod
+    def split_groups(data):
+        '''Split data into separate groups and binarizer functions and group
+        name lists for easier processing.
+        '''
+        groups = list(data.groupby("group"))
+        # create closures for label creation
+        binarizer, debinarizer, group_names = UpsamplingData.binarizers(
+            data['group'])
+        return groups, (binarizer, debinarizer), group_names
+
     def __repr__(self) -> str:
         return repr(self._data)
 
@@ -187,9 +200,9 @@ class UpsamplingData:
 def main():
     '''Tests based on using the joined upsampling tests.
     '''
-    data = UpsamplingData.from_file("../joined/cll_normal.csv")
-    test, train = data.get_test_train_split(abs_num=60)
-    x_matrix, y_matrix = data.split_x_y(test, data.binarizer)
+    data = UpsamplingData.from_files([("../joined/cll_normal.csv")])
+    test, _ = data.get_test_train_split(abs_num=60)
+    data.split_x_y(test, data.binarizer)
 
 
 if __name__ == '__main__':
