@@ -22,16 +22,27 @@ class Classifier:
     def k_fold_validation(self, name: str="expname", k_num: int=5):
         '''Do k-fold validation on data set.
         '''
+        # put all output into a separate folder
+        name = "output/" + name
+
         splits = self.data.k_fold_split(k_num)
         evals = []
+        confusions = []
         for i in range(k_num):
             test = splits[i]
             train = pd.concat(splits[i+1:] + splits[:i])
             model = self.create_sequential_model(train, self.data.binarizer)
-            stats = self.evaluate_model(
+            stats, confusion_data = self.evaluate_model(
                 model, test, self.data.binarizer, self.data.debinarizer,
                 self.data.group_names, filename=name + "_kfold_{}".format(i))
             evals.append(stats)
+            confusions.append(confusion_data)
+
+        avg_confusion = sum(confusions)
+        plotting.plot_confusion_matrix(
+            avg_confusion, self.data.group_names, normalize=True,
+            filename=name+"_kfold_confusion.png")
+
         averaged = {}
         for eval_data in evals:
             for key, value in eval_data.items():
@@ -51,11 +62,10 @@ class Classifier:
         self.model = self.create_sequential_model(self.train,
                                                   self.data.binarizer)
 
-        self.evaluation = self.evaluate_model(self.model, self.test,
-                                              self.data.binarizer,
-                                              self.data.debinarizer,
-                                              self.data.group_names,
-                                              filename=name + "_holdout")
+        self.evaluate_model(
+            self.model, self.test, self.data.binarizer,
+            self.data.debinarizer, self.data.group_names,
+            filename=name + "_holdout")
 
     def absolute_validation(self, name="expname", abs_num=20):
         '''Validate on fixed size test.'''
@@ -64,11 +74,9 @@ class Classifier:
         self.model = self.create_sequential_model(self.train,
                                                   self.data.binarizer)
 
-        self.evaluation = self.evaluate_model(self.model, self.test,
-                                              self.data.binarizer,
-                                              self.data.debinarizer,
-                                              self.data.group_names,
-                                              filename=name + "_absolute")
+        self.evaluate_model(
+            self.model, self.test, self.data.binarizer, self.data.debinarizer,
+            self.data.group_names, filename=name + "_absolute")
 
     @staticmethod
     def create_sequential_model(training_data: "DataFrame",
@@ -125,35 +133,22 @@ class Classifier:
         stats = "Loss and metrics\n" + repr(loss_and_metrics) + "\n"
         accuracy = skm.accuracy_score(ly_test, y_pred)
         stats += "Accuracy\n" + repr(accuracy) + "\n"
-        # avg_precision = skm.average_precision_score(ly_test, y_pred,
-        #                                            average="weighted")
-        # stats += "Average precision\n" + repr(avg_precision) + "\n"
         precision = skm.precision_score(ly_test, y_pred, average="weighted")
         stats += "Weighted precision\n" + repr(precision) + "\n"
         recall = skm.recall_score(ly_test, y_pred, average="weighted")
         stats += "Weighted recall\n" + repr(recall) + "\n"
+        f1_score = skm.f1_score(ly_test, y_pred, average="weighted")
+        stats += "F1 Score\n" + repr(f1_score) + "\n"
         open(filename + "_log.txt", "w").write(stats)
-        # precision = cm[0,0] / (cm[0,0]+cm[1,0])
-        # recall = cm[0,0] / (cm[0,1]+cm[0,0])
-        # f1 = 2/((1/precision)+(1/recall))
-        # specificity = cm[1,1]/(cm[1,1]+cm[1,0])
-        # npv = cm[1,1]/(cm[1,1]+cm[0,1])
-        # res = { 'Data':'more+new,400,tube2'
-        #         ,'Precision(PPV)':precision
-        #         ,'Recall(Sensitivity)':recall
-        #         ,'F1 score':f1
-        #         ,'Specificity':specificity
-        #         ,'NPV':npv}
-        # out[nsize] = {'loss':loss_and_metrics
-        #         ,'res':res}
 
         stats = {
             # 'loss_metrics': loss_and_metrics,
             'accuracy': accuracy,
             'precision': precision,
             'recall': recall,
+            'f1': f1_score
         }
-        return stats
+        return stats, confusion
 
 
 def main():

@@ -68,6 +68,31 @@ class UpsamplingData:
         self._data = self._data.loc[self._data['group'].isin(groups)]
         self._split_groups()
 
+    def exclude_small_cohorts(self, cutoff=50):
+        '''Exclude cohorts below threshold and report these.'''
+        selected_groups = [
+            group for gn, group in self._groups
+            if group.shape[0] >= cutoff
+        ]
+        excluded_groups = {
+            gn: group.shape[0] for gn, group in self._groups
+            if group.shape[0] < cutoff
+        }
+        print("Excluded groups: ", excluded_groups)
+        self._data = pd.concat(selected_groups)
+        self._split_groups()
+
+    def limit_size_to_smallest(self):
+        '''Limit size of all cohorts to smallest.'''
+        min_size = min([group.shape[0] for gn, group in self._groups])
+        print(min_size)
+        sample_data = [
+            group.sample(n=min_size)
+            for group_name, group in self._groups
+        ]
+        self._data = pd.concat(sample_data)
+        self._split_groups()
+
     def get_test_train_split(self, ratio: float=None, abs_num: int=None) \
             -> (pd.DataFrame, pd.DataFrame):
         if not (ratio or abs_num):
@@ -118,7 +143,7 @@ class UpsamplingData:
         self._split_groups()
 
     def _split_groups(self):
-        self._groups = self._data.groupby("group")
+        self._groups = list(self._data.groupby("group"))
         # create closures for label creation
         self.binarizer, self.debinarizer, self.group_names = self.binarizers(
             self._data['group'])
@@ -143,7 +168,7 @@ class UpsamplingData:
     def binarizers(col_data: pd.Series) -> (Callable, Callable):
         '''Create binarizer and debinarizer from factors in a pandas series.
         '''
-        group_names = list(col_data.unique())
+        group_names = sorted(list(col_data.unique()))
         binarizer, debinarizer = create_binarizer(group_names)
         return binarizer, debinarizer, group_names
 

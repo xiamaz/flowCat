@@ -11,8 +11,8 @@ from lib.classification import Classifier
 def joined_tubes(files: [str], name: str):
     '''Classification based on tubes joined on SOM level.'''
     data = UpsamplingData.from_file(files[0])
-    data.select_groups(["CLL", "normal", "CLLPL", "HZL",
-                        "Mantel", "Marginal", "MBL"])
+    # data.select_groups(["CLL", "normal", "CLLPL", "HZL",
+    #                     "Mantel", "Marginal", "MBL"])
     clas = Classifier(data)
     # clas.holdout_validation(name="joined", ratio=0.9)
     # clas.absolute_validation(name="joined")
@@ -25,6 +25,8 @@ def separate_tubes(files: [str], name: str):
     data = UpsamplingData.from_multiple_tubes(files)
     data.select_groups(["CLL", "normal", "CLLPL", "HZL",
                         "Mantel", "Marginal", "MBL"])
+    # data.exclude_small_cohorts(cutoff=50)
+    data.limit_size_to_smallest()
     clas = Classifier(data)
 
     # clas.holdout_validation(name="merged_all", ratio=0.9)
@@ -54,11 +56,11 @@ def main():
     files_joined = [
         "/data/ssdraid/Genetik/joined/joined_all.csv"
     ]
-    # separate_tubes(files_plain, "plain")
+    separate_tubes(files_plain, "plain")
     # separate_tubes(files_margin_all, "margin_all")
     # separate_tubes(files_margin_upper, "margin_upper")
     # separate_tubes(files_margin_lower, "margin_lower")
-    joined_tubes(files_joined, "joined")
+    # joined_tubes(files_joined, "joined")
 
 
 if __name__ == '__main__':
