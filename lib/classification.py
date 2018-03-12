@@ -35,7 +35,10 @@ class Classifier:
                  name: str = "expname"):
         self.data = data
         os.makedirs(output_path, exist_ok=True)
-        self.output_path = output_path
+        self.output_path = os.path.join(output_path, name)
+        if os.path.exists(self.output_path):
+            raise RuntimeError("{} already exists. Move or delete it.".format(
+                self.output_path))
         self.experiment_name = name
 
     def k_fold_validation(self,
@@ -201,7 +204,8 @@ class Classifier:
 def main():
     '''Simple binary classification
     '''
-    data = UpsamplingData.from_file("../joined/joined_all.csv")
+    files = [("../joined/joined_all.csv")]
+    data = UpsamplingData.from_files(files)
     Classifier(data)
 
 
