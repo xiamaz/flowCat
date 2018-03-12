@@ -4,6 +4,8 @@ logs
 plots
 # directory containing old data
 data
+# output directory for plots and other information
+output
 *.rds
 *.pyc
 __pycache__
