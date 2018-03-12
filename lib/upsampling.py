@@ -111,7 +111,7 @@ class UpsamplingData:
             if i < 0:
                 raise RuntimeError("Cutoff below zero. Perhaps small cohort.")
             shuffled = group.sample(frac=1)
-            test, train = shuffled.iloc[:i, :], shuffled.iloc[i:, :]
+            train, test = shuffled.iloc[:i, :], shuffled.iloc[i:, :]
             test_list.append(test)
             train_list.append(train)
 
@@ -119,7 +119,7 @@ class UpsamplingData:
         df_test = df_test.sample(frac=1)
         df_train = pd.concat(train_list)
         df_train = df_train.sample(frac=1)
-        return df_test, df_train
+        return df_train, df_test
 
     def k_fold_split(self, k_num: int = 5) -> [pd.DataFrame]:
         '''Split file into k same-size partitions. Keep the group ratios
@@ -129,10 +129,10 @@ class UpsamplingData:
         for _, group in self._groups:
             shuffled = group.sample(frac=1)
             df_group = []
+            block_size = round(group.shape[0] / k_num)
             for i in range(k_num):
-                block_size = int(group.shape[0] / k_num)
                 start = block_size * i
-                end = min(block_size * (i+1), group.shape[0])
+                end = block_size * (i+1) if i+1 < k_num else group.shape[0]
                 df_group.append(shuffled.iloc[start:end, :])
             df_list.append(df_group)
         df_splits = [pd.concat(dfs) for dfs in zip(*df_list)]
