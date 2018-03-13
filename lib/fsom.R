@@ -140,7 +140,8 @@ LoadFunctionBuilder <- function(selected, load.func) {
 #' Create Histogram matrices from fcs case files
 #'
 #' Directly create histograms from files separated for each tube.
-CasesToMatrix <- function(entry.list, thread.num, load.func = LoadFunction, filters = list(tube_set = c(1))) {
+CasesToMatrix <- function(entry.list, thread.num, load.func = LoadFunction, filters = list(tube_set = c(1)),
+                          output.dir = "", name = "", sample.size = 40) {
   # filter down to single property, eg the first tube
   entry.list <- entry.list[flowProc::FilterEntries(entry.list, filters)]
   message("Getting marker configuration in file set\n")
@@ -154,11 +155,13 @@ CasesToMatrix <- function(entry.list, thread.num, load.func = LoadFunction, filt
   # create consensus fsom
   selected.samples <- flowProc::GroupBy(entry.list, "group", num.threads = thread.num)
   message("Create consensus FSOM")
-  selected.samples <- SampleGroups(selected.samples, sample.size = 40)
+  selected.samples <- SampleGroups(selected.samples, sample.size = sample.size)
   message("Loading cases")
   selected.samples <- LoadCases(selected.samples, sample.load.func, thread.num)
   message("FSOM creation")
   consensus.fsom <- FsomFromEntries(selected.samples)
+  fsom.file <- file.path(output.dir, sprintf("stored_consensus_fsom_%s.rds", name))
+  saveRDS(consensus.fsom, fsom.file, compress = F)
 
   # upsample single cases
   upsampled.list <- lapply(entry.list, function(entry) {
