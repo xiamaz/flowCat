@@ -8,7 +8,7 @@ import h5py
 import numpy as np
 
 
-def get_threshold_indices(array: np.array, threshold: float = 0.2):
+def get_threshold_indices(array: np.array, threshold: float = 0.4):
     '''Get all indices above a threshold.'''
     sorted_items = sorted(array)
     sorted_index = [np.where(array == v)[0][0]
