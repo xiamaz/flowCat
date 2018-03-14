@@ -1,4 +1,5 @@
 *.csv
+*.json
 env
 logs
 plots
