@@ -3,7 +3,9 @@ Neural network classification using keras
 '''
 import os
 import logging
-from typing import Callable, List, Union, Tuple
+import json
+from datetime import datetime
+from typing import Callable, List, Union
 from collections import defaultdict
 
 import pandas as pd
@@ -33,7 +35,7 @@ class Classifier:
                  data: UpsamplingData,
                  output_path: str = "output/classification",
                  name: str = "expname"):
-        self.data = data
+        self._data = data
         os.makedirs(output_path, exist_ok=True)
         self.output_path = os.path.join(output_path, name)
         if os.path.exists(self.output_path):
@@ -43,54 +45,77 @@ class Classifier:
 
         self.experiment_name = name
 
+        # log past experiment information in a dict
+        self.past_experiments = []
+
+    def dump_experiment_info(self, note: str = "") -> None:
+        '''Output all past run validations into a json file for later
+        inference.'''
+        dumpdata = {
+            "experiment_name": self.experiment_name,
+            "date": str(datetime.now()),
+            "note": note,
+            "experiments": self.past_experiments,
+        }
+        dumppath = os.path.join(
+            self.output_path, self.experiment_name+"_info.json")
+        json.dump(dumpdata, open(dumppath, "w"), indent=4)
+
     def k_fold_validation(self,
                           k_num: int = 5,
-                          save_individual_results: bool = True):
+                          save_individual_results: bool = True) -> None:
         '''Do k-fold validation on data set.
         '''
         # put all output into a separate folder
-        name_tag = "_kfold"
+        name_tag = "kfold"
 
-        splits = self.data.k_fold_split(k_num)
+        splits = self._data.k_fold_split(k_num)
         eval_results = []
         for i in range(k_num):
             # train on all other parts
             model = self.create_sequential_model(
                 pd.concat(splits[i+1:] + splits[:i]),
-                self.data.binarizer)
+                self._data.binarizer)
             # test using selected part i
             confusion, stat, mism = self.evaluate_model(
-                model, splits[i], self.data.binarizer, self.data.debinarizer)
+                model, splits[i], self._data.binarizer, self._data.debinarizer)
             # add results for later batched interpretation
             eval_results.append((confusion, stat, mism))
             # output individual results, if wanted
             if save_individual_results:
-                self.generate_output((confusion, self.data.group_names),
-                                     stat, mism,
-                                     name_tag="{}_{}".format(name_tag, i))
+                self.generate_output(confusion, stat, mism,
+                                     name_tag="_{}_{}".format(name_tag, i))
 
         avg_confusion = sum([t[0] for t in eval_results])
         avg_stats = avg_dicts([t[1] for t in eval_results])
         self.generate_output(
-            confusion_data=(avg_confusion, self.data.group_names),
+            confusion_data=(avg_confusion, self._data.group_names),
             statistics=avg_stats,
             mismatches=None,
             name_tag=name_tag)
 
+        experiment_info = {
+            "setting": name_tag,
+            "config_param": k_num,
+            "splits": [s.shape[0] for s in splits],
+            "group_names": self._data.group_names
+        }
+        self.past_experiments.append(experiment_info)
+
     def holdout_validation(self, ratio: float = 0.8,
                            abs_num: int = None,
-                           save_weights: bool = True):
+                           save_weights: bool = True) -> None:
         '''Simple holdout validation. If given abs_num, then each test cohort
         will contain the absolute number of cases.'''
         if abs_num:
-            name_tag = "_absolute"
-            train, test = self.data.get_test_train_split(abs_num=abs_num)
+            name_tag = "absolute"
+            train, test = self._data.get_test_train_split(abs_num=abs_num)
         else:
-            name_tag = "_holdout"
-            train, test = self.data.get_test_train_split(ratio=ratio)
+            name_tag = "holdout"
+            train, test = self._data.get_test_train_split(ratio=ratio)
 
         model = self.create_sequential_model(
-            train, self.data.binarizer)
+            train, self._data.binarizer)
 
         if save_weights:
             weight_file = os.path.join(self.output_path,
@@ -98,39 +123,49 @@ class Classifier:
             model.save_weights(weight_file)
 
         confusion, stats, mismatches = self.evaluate_model(
-            model, test, self.data.binarizer, self.data.debinarizer)
+            model, test, self._data.binarizer, self._data.debinarizer)
 
         self.generate_output(
-            confusion_data=(confusion, self.data.group_names),
+            confusion_data=confusion,
             statistics=stats,
             mismatches=mismatches,
             name_tag=name_tag)
 
+        experiment_info = {
+            "setting": name_tag,
+            "config_param": abs_num or ratio,
+            "splits": [train.shape[0], test.shape[0]],
+            "group_names": self._data.group_names
+        }
+        self.past_experiments.append(experiment_info)
+
     def generate_output(
             self,
-            confusion_data: Union[Tuple[np.matrix, List[str]], None],
+            confusion_data: Union[np.matrix, None],
             statistics: Union[dict, None],
             mismatches: Union[dict, None],
             name_tag: str) -> None:
         '''Create confusion matrix and text statistics and save them to the
         output folder.
         '''
-        tagged_name = self.experiment_name + name_tag
+        tagged_name = "{}_{}".format(self.experiment_name, name_tag)
 
+        # save confusion matrix
         if confusion_data is not None:
             logging.info("Create confusion matrix plot.")
-            plot_name = os.path.join(self.output_path,
-                                     tagged_name + "_confusion.png")
-            plotting.plot_confusion_matrix(*confusion_data,
-                                           normalize=True,
-                                           filename=plot_name)
+            plot_name = os.path.join(
+                self.output_path, tagged_name + "_confusion.png")
+            plotting.plot_confusion_matrix(
+                confusion_data, self._data.group_names,
+                normalize=True, filename=plot_name)
+        # save metrics of experiment
         if statistics is not None:
             logging.info("Saving statistics information to text file.")
             stat_file = os.path.join(self.output_path,
                                      tagged_name + "_statistics.txt")
             open(stat_file, "w").write(
                 "{}\n====\n{}".format(tagged_name, statistics))
-
+        # save list of mismatched cases
         if mismatches is not None:
             logging.info("Creating text list from mismatch information.")
             mism_file = os.path.join(self.output_path,

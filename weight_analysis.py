@@ -1,6 +1,7 @@
 '''
 Analyze neural network weights
 '''
+from collections import defaultdict
 import h5py
 import numpy as np
 
@@ -10,10 +11,10 @@ def get_threshold_indices(array: np.array, threshold: float = 0.5):
     sorted_items = sorted(array)
     sorted_index = [np.where(array == v)[0][0]
                     for v in sorted_items]
-    filter_sorted = list(
-        map(lambda x: x >= threshold, sorted_items)
-    ).index(True)
-    return sorted_index[filter_sorted:]
+    truth_list = list(map(lambda x: x >= threshold, sorted_items))
+    threshold_indices = sorted_index[truth_list.index(True):] \
+        if True in truth_list else []
+    return threshold_indices
 
 
 def analyze_output_layers(hd_file):
@@ -49,7 +50,12 @@ def analyze_output_layers(hd_file):
         get_threshold_indices(tk)
         for tk in third_kernel[test_largest]
     ]
-    print(tube_positive)
+    node_counts = defaultdict(int)
+    for node_list in tube_positive:
+        for node in node_list:
+            node_counts[node] += 1
+    sorted_vals = sorted(node_counts.items(), key=lambda x: x[1])
+    print(sorted_vals)
 
 
 def get_hd_file_structure(hd_file):
@@ -81,7 +87,7 @@ def print_file_structure(file_structure: any,
 
 def main():
     network_weights = \
-        "output/classification/network_analysis/weights__holdout.hdf5"
+        "output/classification/network_analysis_2/weights__holdout.hdf5"
     hdfile = h5py.File(network_weights, "r")
     # ret = get_hd_file_structure(hdfile)
     # print_file_structure(ret)
