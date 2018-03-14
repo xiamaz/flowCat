@@ -1,12 +1,14 @@
 '''
 Analyze neural network weights
 '''
+import os
+import json
 from collections import defaultdict
 import h5py
 import numpy as np
 
 
-def get_threshold_indices(array: np.array, threshold: float = 0.5):
+def get_threshold_indices(array: np.array, threshold: float = 0.2):
     '''Get all indices above a threshold.'''
     sorted_items = sorted(array)
     sorted_index = [np.where(array == v)[0][0]
@@ -17,8 +19,11 @@ def get_threshold_indices(array: np.array, threshold: float = 0.5):
     return threshold_indices
 
 
-def analyze_output_layers(hd_file):
+def analyze_output_layers(hd_file, experiment_info):
     '''Analyze the output class weights.'''
+
+    group_names = experiment_info["experiments"][0]["group_names"]
+    print(group_names)
     output_layer = "dense_3"
     first_layer = hd_file[output_layer][output_layer]
     first_kernel = first_layer["kernel:0"][:].transpose()
@@ -31,31 +36,34 @@ def analyze_output_layers(hd_file):
     third_layer = hd_file[third_name][third_name]
     third_kernel = third_layer["kernel:0"][:].transpose()
 
-    # bias = output_data["bias:0"]
-    # print(bias)
     # analyze the first one
-    positive_first = get_threshold_indices(first_kernel[0])
-    print(positive_first)
+    output_data = {}
+    for i, group in enumerate(group_names):
+        # positive_first = get_threshold_indices(first_kernel[i])
+        # print(positive_first)
 
-    biased_first = first_kernel[0] + second_layer["bias:0"][:]
-    positive_bias = get_threshold_indices(biased_first)
+        biased_first = first_kernel[i] + second_layer["bias:0"][:]
+        positive_bias = get_threshold_indices(biased_first)
 
-    positive_seconds = [
-        get_threshold_indices(s + third_layer["bias:0"])
-        for s in second_kernel[positive_bias]
-    ]
+        positive_seconds = [
+            get_threshold_indices(s + third_layer["bias:0"])
+            for s in second_kernel[positive_bias]
+        ]
 
-    test_largest = positive_seconds[-1]
-    tube_positive = [
-        get_threshold_indices(tk)
-        for tk in third_kernel[test_largest]
-    ]
-    node_counts = defaultdict(int)
-    for node_list in tube_positive:
-        for node in node_list:
-            node_counts[node] += 1
-    sorted_vals = sorted(node_counts.items(), key=lambda x: x[1])
-    print(sorted_vals)
+        test_largest = positive_seconds[-1]
+        tube_positive = [
+            get_threshold_indices(tk)
+            for tk in third_kernel[test_largest]
+        ]
+        node_counts = defaultdict(int)
+        for node_list in tube_positive:
+            for node in node_list:
+                node_counts[node] += 1
+        sorted_vals = sorted(node_counts.items(), key=lambda x: x[1])
+        print("---> Group {}".format(group))
+        print(sorted_vals)
+        output_data[group] = {int(x): int(y) for x, y in sorted_vals}
+    json.dump(output_data, open("output_layers.json", "w"))
 
 
 def get_hd_file_structure(hd_file):
@@ -86,13 +94,15 @@ def print_file_structure(file_structure: any,
 
 
 def main():
-    network_weights = \
-        "output/classification/network_analysis_2/weights__holdout.hdf5"
+    output_folder = "output/classification/network_analysis_3"
+    network_weights = os.path.join(output_folder, "weights_holdout.hdf5")
+    experiment_info = json.load(open(os.path.join(
+        output_folder, "network_analysis_3_info.json")))
     hdfile = h5py.File(network_weights, "r")
     # ret = get_hd_file_structure(hdfile)
     # print_file_structure(ret)
 
-    analyze_output_layers(hdfile)
+    analyze_output_layers(hdfile, experiment_info)
 
 
 if __name__ == '__main__':
