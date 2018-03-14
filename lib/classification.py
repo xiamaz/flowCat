@@ -55,7 +55,8 @@ class Classifier:
             "experiment_name": self.experiment_name,
             "date": str(datetime.now()),
             "note": note,
-            "experiments": self.past_experiments,
+            "group_names": self._data.group_names,
+            "experiments": self.past_experiments
         }
         dumppath = os.path.join(
             self.output_path, self.experiment_name+"_info.json")
@@ -97,8 +98,7 @@ class Classifier:
         experiment_info = {
             "setting": name_tag,
             "config_param": k_num,
-            "splits": [s.shape[0] for s in splits],
-            "group_names": self._data.group_names
+            "splits": [s.shape[0] for s in splits]
         }
         self.past_experiments.append(experiment_info)
 
@@ -134,8 +134,7 @@ class Classifier:
         experiment_info = {
             "setting": name_tag,
             "config_param": abs_num or ratio,
-            "splits": [train.shape[0], test.shape[0]],
-            "group_names": self._data.group_names
+            "splits": [train.shape[0], test.shape[0]]
         }
         self.past_experiments.append(experiment_info)
 
