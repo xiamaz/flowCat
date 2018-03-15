@@ -109,10 +109,10 @@ CreateConsensusFsom <- function(groups.list, sample.size = 20) {
   return(som)
 }
 
-CreateLapply <- function(num.threads) {
-  if (num.threads > 1) {
+CreateLapply <- function(thread.num) {
+  if (thread.num > 1) {
     lfunc <- function(x, y) {
-      cluster <- parallel::makeCluster(num.threads, type = "FORK")
+      cluster <- parallel::makeCluster(thread.num, type = "FORK")
       result <- parallel::parLapply(cluster, x, y)
       parallel::stopCluster(cluster)
       return(result)
@@ -123,8 +123,8 @@ CreateLapply <- function(num.threads) {
   return(lfunc)
 }
 
-LoadCases <- function(case.list, load.function, num.threads = 1) {
-  lfunc <- CreateLapply(num.threads)
+LoadCases <- function(case.list, load.function, thread.num = 1) {
+  lfunc <- CreateLapply(thread.num)
   return(lfunc(case.list, load.function))
 }
 
@@ -153,11 +153,11 @@ CasesToMatrix <- function(entry.list, thread.num, load.func = LoadFunction, filt
   sample.load.func <- LoadFunctionBuilder(selected.channels, load.func)
 
   # create consensus fsom
-  selected.samples <- flowProc::GroupBy(entry.list, "group", num.threads = thread.num)
+  selected.samples <- flowProc::GroupBy(entry.list, "group", thread.num = thread.num)
   message("Create consensus FSOM")
   selected.samples <- SampleGroups(selected.samples, sample.size = sample.size)
   message("Loading cases")
-  selected.samples <- LoadCases(selected.samples, sample.load.func, thread.num)
+  selected.samples <- LoadCases(selected.samples, sample.load.func, thread.num = thread.num)
   message("FSOM creation")
   consensus.fsom <- FsomFromEntries(selected.samples)
   fsom.file <- file.path(output.dir, sprintf("stored_consensus_fsom_%s.rds", name))

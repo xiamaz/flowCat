@@ -10,7 +10,7 @@ source("lib/fsom.R")
 # for (kRunName in c("MarginLower")) {
 # identification settings
 kRunNumber <- 1
-kRunName <- "NetworkAnalysis"
+kRunName <- "TestFlowProc"
 
 # number of cpu threads for parallel processes
 kThreads <- 12
@@ -25,7 +25,7 @@ if (dir.exists(kOutputPath)){
 dir.create(kOutputPath, recursive = T, showWarnings = T)
 
 # group size for inclusion in the flowSOM
-kThresholdGroupSize <- 100
+kThresholdGroupSize <- 40
 kMaterialSelection <- c("1", "2", "3", "4", "5", "PB", "KM")
 # number of metaclusters in the flowSOM - currently unused
 # kMetaNumber <- 10

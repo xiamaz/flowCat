@@ -98,7 +98,7 @@ GroupBy <- function(upsampled.list, group.on, num.threads = 1) {
 JoinTubesOnSom <- function(entry.list, seed = 42, xdim = 20, ydim = 20) {
   print(entry.list[[1]]@label)
   # get joined tubes
-  ret <- flowProc::filter_flowFrame_majority(entry.list, threshold = 1.0)
+  ret <- flowProc::FilterCommonChannels(entry.list, threshold = 1.0)
   entry.list <- ret$entries
   markers <- ret$markers
   # create a joined som from both files

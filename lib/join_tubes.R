@@ -139,7 +139,7 @@ JoinTubesOnSom <- function(entry.list, seed = 42, xdim = 20, ydim = 20,
                            join.method = "average") {
   print(entry.list[[1]]@label)
   # get joined tubes
-  tm <- system.time(ret <- flowProc::filter_flowFrame_majority(entry.list, threshold = 1.0))
+  tm <- system.time(ret <- flowProc::FilterCommonChannels(entry.list, threshold = 1.0))
   message("Flow frame maj ", tm[3])
   entry.list <- ret$entries
   markers <- ret$markers
@@ -240,7 +240,7 @@ all.files <- remove_duplicates(all.files)
 stopCluster(cluster)
 
 # restrict the different types of materials we will consider
-all.files <- FilterList(all.files, material = kMaterialSelection)
+all.files <- all.files[FilterEntries(all.files, list(material = kMaterialSelection))]
 
 # Get all entries with first two entries
 # separate files based on their tube_set
