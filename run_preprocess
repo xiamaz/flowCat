@@ -1,7 +1,0 @@
-#!/bin/sh
-export PREPROCESS_RUNUM=4
-export PREPROCESS_GROUP_THRESHOLD=70
-export PREPROCESS_THREADS=6
-export PREPROCESS_PATH="/home/max/DREAM/Moredata"
-export PREPROCESS_METANUM=20
-Rscript ./preprocess.R
