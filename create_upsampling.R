@@ -30,9 +30,7 @@ kMaterialSelection <- c("1", "2", "3", "4", "5", "PB", "KM")
 # number of metaclusters in the flowSOM - currently unused
 # kMetaNumber <- 10
 
-all.files <- CreateFileInfo(kPath,
-                            thread.num = kThreads,
-                            material = kMaterialSelection)
+all.files <- ReadDataset(kPath, thread.num = kThreads, material = kMaterialSelection)
 
 # margins <- margin.list[[kRunName]]
 

@@ -14,7 +14,7 @@ if (dir.exists(kOutputDirectory)) {
   stop(paste(kOutputDirectory, "already exists. Move or delete it."))
 }
 
-all.files <- CreateFileInfo(kInputFiles, num.threads = 12)
+all.files <- ReadDataset(kInputFiles, num.threads = 12)
 
 file.groups <- GroupBy(all.files, "group", num.threads = 12)
 
