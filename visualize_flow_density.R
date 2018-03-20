@@ -1,12 +1,14 @@
 library(flowProc)
 library(flowDensity)
 
-kGatingSequences <- list(`1` = list(list(c("CD45-KrOr", "SS INT LIN"), c(T, F)))
+# kGatingSequences <- list(`1` = list(list(c("CD45-KrOr", "SS INT LIN"), c(T, F)))
+#                          )
+kGatingSequences <- list(`1` = list(list(c("FS INT LIN", "SS INT LIN"), c(F, F)))
                          )
 
 kInputFiles <- "../Moredata"
 
-kExperimentName <- "flowdensity_0"
+kExperimentName <- "debris_detect_0"
 
 kOutputDirectory <- file.path("output/visualization", kExperimentName)
 
