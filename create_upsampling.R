@@ -1,3 +1,4 @@
+#!/usr/bin/env Rscript
 library(methods)
 library(parallel)
 library(data.table)
