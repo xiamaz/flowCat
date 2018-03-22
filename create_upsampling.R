@@ -49,6 +49,22 @@ filters <- list(material = kMaterialSelection, group = kGroupSelection)
 data.reader <- ifelse(parsed.options$dataset, ReadDataset, ReadDatasets)
 all.files <- data.reader(kPath, thread.num = kThreads, filters = filters)
 
+# randomly sample the larger cohort down to the smaller one
+group.files <- GroupBy(all.files, "group", num.threads = kThreads)
+
+group.files <- lapply(group.files, function(group){
+                        group <- cGroupBy(group, "label", c(1, 2))
+                        return(group)
+                                })
+minimal.size <- min(sapply(group.files, length))
+group.files <- lapply(group.files, function(group) {
+                        group <- sample(group, minimal.size)
+                        # flatten list
+                        group <- do.call(c, group)
+                        return(group)
+                                })
+all.files <- do.call(c, group.files)
+
 # CREATE output directory
 # annoying by design to prevent overwriting previous results
 if (dir.exists(kOutputPath)){
