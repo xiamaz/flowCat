@@ -90,7 +90,7 @@ class Classifier:
         avg_confusion = sum([t[0] for t in eval_results])
         avg_stats = avg_dicts([t[1] for t in eval_results])
         self.generate_output(
-            confusion_data=(avg_confusion, self._data.group_names),
+            confusion_data=avg_confusion,
             statistics=avg_stats,
             mismatches=None,
             name_tag=name_tag)

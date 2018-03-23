@@ -41,7 +41,7 @@ kThresholdGroupSize <- parsed.options$groupsize
 
 # selectors for filtering of cases
 kMaterialSelection <- c("1", "2", "3", "4", "5", "PB", "KM")
-kGroupSelection <- c("MBL", "normal")
+kGroupSelection <- c("CLL", "normal")
 
 # general filters to all files
 filters <- list(material = kMaterialSelection, group = kGroupSelection)
