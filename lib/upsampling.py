@@ -3,10 +3,12 @@ CSV file operations needed for upsampling based classification
 '''
 import logging
 from functools import reduce
-from typing import Callable, List, Tuple
+from typing import Callable, Tuple
 
 import pandas as pd
 import numpy as np
+
+from lib.types import FilesDict
 
 
 def merge_on_label(left_df: pd.DataFrame, right_df: pd.DataFrame) \
@@ -140,14 +142,14 @@ class UpsamplingData:
         return df_splits
 
     @classmethod
-    def from_files(cls, files: List[Tuple[str]]) -> "UpsamplingData":
+    def from_files(cls, files: FilesDict) -> "UpsamplingData":
         '''Create upsampling data from structure containing multiple tubes
         for multiple files.
         The input structure contains a list of items to be joined by row,
         which are in turn joined on columns. (eg multiple tubes on the inner
         level split into multiple output files on the outer level)
         '''
-        merged_tubes = [cls.merge_tubes(f) for f in files]
+        merged_tubes = [cls.merge_tubes(f) for f in files.values()]
         return cls(pd.concat(merged_tubes))
 
     @staticmethod
