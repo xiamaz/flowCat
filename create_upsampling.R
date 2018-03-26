@@ -6,6 +6,13 @@ library(flowProc)
 library(optparse)
 
 source("lib/fsom.R")
+source("lib/utils.R")
+
+kTextNote <- c(
+               "Three class classification with CLL MBL and normal.",
+               "This serves as comparison to the binary classifications between mbl, cll and normal results."
+               )
+kTextNote <- paste(kTextNote, sep = "")
 
 threads.option <- make_option(c("--threads", "-t"), type = "numeric", default = 1,
                               help = "Number of threads", metavar = "threads")
@@ -41,7 +48,7 @@ kThresholdGroupSize <- parsed.options$groupsize
 
 # selectors for filtering of cases
 kMaterialSelection <- c("1", "2", "3", "4", "5", "PB", "KM")
-kGroupSelection <- c("CLL", "normal")
+kGroupSelection <- c("CLL", "MBL", "normal")
 
 # general filters to all files
 filters <- list(material = kMaterialSelection, group = kGroupSelection)
@@ -67,10 +74,8 @@ all.files <- do.call(c, group.files)
 
 # CREATE output directory
 # annoying by design to prevent overwriting previous results
-if (dir.exists(kOutputPath)){
-  stop(paste(kOutputPath, "already exists. Move or delete it."))
-}
-dir.create(kOutputPath, recursive = T, showWarnings = T)
+# save logging information
+CreateOutputDirectory(kOutputPath, kTextNote)
 
 tube.matrix.1 <- CasesToMatrix(all.files, kThreads, filters = list(tube_set = c(1)),
                                output.dir = kOutputPath, name = "tube1", sample.size = kThresholdGroupSize)
