@@ -47,8 +47,14 @@ CreateMetaclustering <- function(fsom, meta.num = 10) {
 #' @param fsom SOM for upsampling of entry.
 #' @param entry File object being upsampled.
 #' @return Upsampled entry with cell distribution in histogram.
-UpsampleCase <- function(fsom, entry) {
-  upsampled <- FlowSOM::NewData(fsom, entry@fcs)
+UpsampleCase <- function(fsom, entry, sample.load.func) {
+    message("Upsampling ", entry@label)
+    loaded <- sample.load.func(entry)
+    if (!isS4(loaded)) {
+      print("Entry not valid. Skipping...")
+      return(NA)
+    }
+  upsampled <- FlowSOM::NewData(fsom, loaded@fcs)
   cell.dist <- tabulate(upsampled$map$mapping, nbins = upsampled$map$nNodes)
   cell.dist.rel <- cell.dist / sum(cell.dist)
 
@@ -165,13 +171,7 @@ CasesToMatrix <- function(entry.list, thread.num, load.func = LoadFunction, filt
 
   # upsample single cases
   upsampled.list <- lapply(entry.list, function(entry) {
-    message("Upsampling ", entry@label)
-    entry <- sample.load.func(entry)
-    if (!isS4(entry)) {
-      print("Entry not valid. Skipping...")
-      return(NA)
-    }
-    UpsampleCase(consensus.fsom, entry)
+    UpsampleCase(consensus.fsom, entry, sample.load.func)
                              })
   upsampled.list <- upsampled.list[!is.na(upsampled.list)]
   return(UpsampledListToTable(upsampled.list))
