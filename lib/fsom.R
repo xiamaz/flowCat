@@ -2,7 +2,7 @@
 #'
 #' Most fields are inherited from FlowEntry. Will be used to save upsampling
 #' results and facilitate conversion to the csv format.
-Upsampled <- setClass("Upsampled", contains = "FlowEntry", representation(histo = "vector"))
+Upsampled <- methods::setClass("Upsampled", contains = "FlowEntry", methods::representation(histo = "vector"))
 
 #' Create flowsom from flowFrame or flowSeries
 #'
