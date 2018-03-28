@@ -1,3 +1,5 @@
+library(ggplot2)
+
 Backtickize <- function(x) {return(paste("`", x, "`", sep = ""))}
 
 #' Plot cluster nodes and mark selected nodes with another color
