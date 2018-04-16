@@ -1,4 +1,6 @@
-from typing import List, Dict
+'''Types information for data structures used in the classification process.'''
+import typing
 
 # Information for upsampled tubes with multiple parts
-FilesDict = Dict[str, List[str]]
+FilesDict = typing.Dict[str, typing.List[str]]
+GroupSelection = list

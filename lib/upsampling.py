@@ -8,7 +8,7 @@ from typing import Callable, Tuple
 import pandas as pd
 import numpy as np
 
-from lib.types import FilesDict
+from lib.types import FilesDict, GroupSelection
 
 
 def merge_on_label(left_df: pd.DataFrame, right_df: pd.DataFrame) \
@@ -69,9 +69,23 @@ class UpsamplingData:
         self._groups, (self.binarizer, self.debinarizer), self.group_names = \
             self.split_groups(self._data)
 
-    def select_groups(self, groups):
+    def select_groups(self, groups: GroupSelection):
         '''Select only certain groups.'''
-        self.update_data(self._data.loc[self._data['group'].isin(groups)])
+        data = self._data
+
+        for group in groups:
+            if (
+                    not len(group["tags"]) == 1
+                    or not group["name"] == group["tags"][0]
+            ):
+                data.loc[
+                    data["group"].isin(group["tags"]),
+                    "group"
+                ] = group["name"]
+        group_names = [group["name"] for group in groups]
+
+        # limit data to ones inside group
+        self.update_data(data.loc[data['group'].isin(group_names)])
 
     def exclude_small_cohorts(self, cutoff=50):
         '''Exclude cohorts below threshold and report these.'''

@@ -16,7 +16,6 @@ from lib.types import FilesDict
 # from lib import plotting
 
 # datatypes
-DEFAULT_NAME = "tri_classif_0"
 NOTE = "Testing visualization of neural network classifcations"
 
 
@@ -50,18 +49,32 @@ def handle_input(inputfunc):
             exit_script()
 
 
+def apply_option(option: str, data: UpsamplingData) -> None:
+    '''Apply a filter option to the data.'''
+    # limit size to smallest cohort
+    if option == "smallest":
+        data.limit_size_to_smallest()
+    else:
+        print("Option", option, "unrecognized")
+
+
 def evaluate(
         files: FilesDict,
         output: str,
         name: str,
         note: str,
-        method: dict
+        method: dict,
+        groups: dict,
+        data_filters: list
 ) -> None:
     '''Evaluate upsampling data.'''
     data = UpsamplingData.from_files(files)
-    # data.select_groups(["CLL", "normal", "CLLPL", "HZL",
-    #                     "Mantel", "Marginal", "MBL"])
-    # data.limit_size_to_smallest()
+    if groups:
+        data.select_groups(groups)
+
+    for filter_opt in data_filters:
+        apply_option(filter_opt, data)
+
     clas = Classifier(data, name=name, output_path=output)
 
     clas.dump_experiment_info(note)
@@ -114,12 +127,16 @@ def get_arguments() -> (FilesDict, str, str, str, dict):
     parser = ArgumentParser()
     parser.add_argument(
         "name",
-        help="Experiment name"
+        help="Experiment name",
     )
     parser.add_argument(
         "-i", "--input",
         help="Input files location.",
         default="output/preprocess"
+    )
+    parser.add_argument(
+        "--note",
+        help="Adding a string note text describing the experiment."
     )
     parser.add_argument(
         "-o", "--output",
@@ -133,39 +150,70 @@ def get_arguments() -> (FilesDict, str, str, str, dict):
     )
     parser.add_argument(
         "-m", "--method",
-        help="Analysis method. Holdout or kfold",
+        help="Analysis method. Holdout or kfold. <name>:<prefix><num>",
         default="holdout:r0.8,kfold:10"
+    )
+    parser.add_argument(
+        "-g", "--group",
+        help="Groups included in analysis. Eg CLL;normal or g1:CLL,MBL;normal"
+    )
+    parser.add_argument(
+        "-f", "--filters",
+        help=("Add data preprocessing options. "
+              "smallest - Limit size of all cohorts to smallest cohort.")
     )
 
     args = parser.parse_args()
 
-    name = args.name or DEFAULT_NAME
-    path = args.input or os.path.join("output", name)
-    if not args.noninteractive:
+    if not args.note:
         note = handle_input(lambda: input("Enter short note: "))
     else:
-        note = NOTE
+        note = args.note
 
     method = dict(
         tuple(m.split(":", 2))
         for m in args.method.split(",")
     )
-    return (
-        get_files(path, args.noninteractive),
-        args.output,
-        name,
-        note,
-        method
+    files = get_files(
+        args.input or os.path.join("output", name),
+        args.noninteractive
     )
+
+    groups = [
+        {
+            "name": group[0],
+            "tags": (
+                group[1].split(",")
+                if len(group) > 1
+                else [group[0]]
+            )
+        }
+        for group in
+        [m.split(":") for m in args.group.split(";")]
+    ] if args.group else []
+
+    filters = args.filters.split(",") if args.filters else []
+
+    options = {
+        "files": files,
+        "output": args.output,
+        "note": note,
+        "name": args.name,
+        "method": method,
+        "groups": groups,
+        "data_filters": filters
+    }
+    return options
 
 
 def main():
     '''Classification of single tubes
     '''
-    files, output, name, note, method = get_arguments()
+    # files, output, name, note, method = get_arguments()
     # files = [("output/1_large_cohort_reduction/tube1.csv",
     #           "output/1_large_cohort_reduction/tube2.csv")]
-    evaluate(files, output, name, note, method)
+    # evaluate(files, output, name, note, method)
+    evaluate(**get_arguments())
 
 
 if __name__ == '__main__':
