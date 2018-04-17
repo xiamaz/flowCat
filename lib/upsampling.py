@@ -53,66 +53,15 @@ def create_binarizer(names):
     return binarizer, debinarizer
 
 
-class UpsamplingData:
-    '''Data from upsampling in pandas dataframe form.'''
+class DataView:
+    '''Contains upsampling data with possiblity to apply filters, keeping
+    state.
+    '''
 
-    def __init__(self, dataframe: pd.DataFrame):
-        self._data = dataframe
-        self._groups, (self.binarizer, self.debinarizer), self.group_names = \
-            self.split_groups(self._data)
-
-    def update_data(self, data: pd.DataFrame):
-        '''Update internal data with new data and refresh the group
-        representations.
-        '''
+    def __init__(self, data: pd.DataFrame):
         self._data = data
         self._groups, (self.binarizer, self.debinarizer), self.group_names = \
             self.split_groups(self._data)
-
-    def select_groups(self, groups: GroupSelection):
-        '''Select only certain groups.'''
-        data = self._data
-
-        for group in groups:
-            if (
-                    not len(group["tags"]) == 1
-                    or not group["name"] == group["tags"][0]
-            ):
-                data.loc[
-                    data["group"].isin(group["tags"]),
-                    "group"
-                ] = group["name"]
-        group_names = [group["name"] for group in groups]
-
-        # limit data to ones inside group
-        self.update_data(data.loc[data['group'].isin(group_names)])
-
-    def exclude_small_cohorts(self, cutoff=50):
-        '''Exclude cohorts below threshold and report these.'''
-        selected_groups = [
-            group for gn, group in self._groups
-            if group.shape[0] >= cutoff
-        ]
-        excluded_groups = {
-            gn: group.shape[0] for gn, group in self._groups
-            if group.shape[0] < cutoff
-        }
-        print("Excluded groups: ", excluded_groups)
-        self.update_data(pd.concat(selected_groups))
-
-    def limit_size(self, size):
-        '''Limit size of cohorts to specified size. If cohorts are smaller
-        than this size, they will not be changed.'''
-        sample_data = [
-            group.sample(n=min(group.shape[0], size))
-            for group_name, group in self._groups
-        ]
-        self.update_data(pd.concat(sample_data))
-
-    def limit_size_to_smallest(self):
-        '''Limit size of all cohorts to smallest.'''
-        min_size = min([group.shape[0] for gn, group in self._groups])
-        self.limit_size(min_size)
 
     def get_test_train_split(self, ratio: float = None, abs_num: int = None) \
             -> (pd.DataFrame, pd.DataFrame):
@@ -159,33 +108,6 @@ class UpsamplingData:
         df_splits = [df.sample(frac=1) for df in df_splits]
         return df_splits
 
-    @classmethod
-    def from_files(cls, files: FilesDict) -> "UpsamplingData":
-        '''Create upsampling data from structure containing multiple tubes
-        for multiple files.
-        The input structure contains a list of items to be joined by row,
-        which are in turn joined on columns. (eg multiple tubes on the inner
-        level split into multiple output files on the outer level)
-        '''
-        merged_tubes = [cls.merge_tubes(f) for f in files.values()]
-        return cls(pd.concat(merged_tubes))
-
-    @staticmethod
-    def read_file(filepath: str) -> pd.DataFrame:
-        '''Read output from preprocessing in csv format.
-        '''
-        csv_data = pd.read_table(filepath, sep=";")
-        return csv_data
-
-    @staticmethod
-    def merge_tubes(files: Tuple[str]) -> pd.DataFrame:
-        '''Merge results from different tubes joining on label.
-        Labels only contained in some of the tubes will be excluded in the join
-        operation.'''
-        dataframes = [UpsamplingData.read_file(fp) for fp in files]
-        merged = reduce(merge_on_label, dataframes)
-        return merged
-
     @staticmethod
     def binarizers(col_data: pd.Series) -> (Callable, Callable):
         '''Create binarizer and debinarizer from factors in a pandas series.
@@ -209,9 +131,99 @@ class UpsamplingData:
         '''
         groups = list(data.groupby("group"))
         # create closures for label creation
-        binarizer, debinarizer, group_names = UpsamplingData.binarizers(
+        binarizer, debinarizer, group_names = DataView.binarizers(
             data['group'])
         return groups, (binarizer, debinarizer), group_names
+
+
+class UpsamplingData:
+    '''Data from upsampling in pandas dataframe form.'''
+
+    def __init__(self, dataframe: pd.DataFrame):
+        self._data = dataframe
+
+    @classmethod
+    def from_files(cls, files: FilesDict) -> "UpsamplingData":
+        '''Create upsampling data from structure containing multiple tubes
+        for multiple files.
+        The input structure contains a list of items to be joined by row,
+        which are in turn joined on columns. (eg multiple tubes on the inner
+        level split into multiple output files on the outer level)
+        '''
+        merged_tubes = [cls._merge_tubes(f) for f in files.values()]
+        return cls(pd.concat(merged_tubes))
+
+    def get_data(self):
+        '''Get unfiltered data as dataframe.'''
+        return self._data
+
+    def get_group_sizes(self):
+        '''Get number of rows per group.'''
+        return self._group_sizes(self._data)
+
+    def filter_data(
+            self, groups: GroupSelection, cutoff: int, max_size: int
+    ) -> DataView:
+        '''Filter data based on criteria and return a data view.'''
+        data = self._data
+        if groups:
+            data = self._select_groups(data, groups)
+        if cutoff or max_size:
+            data = self._limit_size_per_group(
+                data, lower=cutoff, upper=max_size
+            )
+        return DataView(data)
+
+    @staticmethod
+    def _select_groups(data: pd.DataFrame, groups: GroupSelection):
+        '''Select only certain groups.'''
+        for group in groups:
+            if (
+                    not len(group["tags"]) == 1
+                    or not group["name"] == group["tags"][0]
+            ):
+                data.loc[
+                    data["group"].isin(group["tags"]),
+                    "group"
+                ] = group["name"]
+        group_names = [group["name"] for group in groups]
+        data = data.loc[data["group"].isin(group_names)]
+        return data
+
+    @staticmethod
+    def _limit_size_per_group(data: pd.DataFrame, lower: int, upper: int):
+        '''Limit size per group.
+        Lower limit of size - group will be excluded if smaller
+        Upper limit of size - group will be downsampled if larger
+        '''
+        new_data = []
+        for _, group in data.groupby("group"):
+            if lower and group.shape[0] < lower:
+                continue
+            if upper and group.shape[0] > upper:
+                group = group.sample(n=upper)
+            new_data.append(group)
+        return pd.concat(new_data)
+
+    @staticmethod
+    def _group_sizes(data: pd.DataFrame) -> pd.Series:
+        return data.groupby("group").size()
+
+    @staticmethod
+    def _read_file(filepath: str) -> pd.DataFrame:
+        '''Read output from preprocessing in csv format.
+        '''
+        csv_data = pd.read_table(filepath, sep=";")
+        return csv_data
+
+    @staticmethod
+    def _merge_tubes(files: Tuple[str]) -> pd.DataFrame:
+        '''Merge results from different tubes joining on label.
+        Labels only contained in some of the tubes will be excluded in the join
+        operation.'''
+        dataframes = [UpsamplingData._read_file(fp) for fp in files]
+        merged = reduce(merge_on_label, dataframes)
+        return merged
 
     def __repr__(self) -> str:
         return repr(self._data)
@@ -220,9 +232,7 @@ class UpsamplingData:
 def main():
     '''Tests based on using the joined upsampling tests.
     '''
-    data = UpsamplingData.from_files([("../joined/cll_normal.csv")])
-    test, _ = data.get_test_train_split(abs_num=60)
-    data.split_x_y(test, data.binarizer)
+    UpsamplingData.from_files([("../joined/cll_normal.csv")])
 
 
 if __name__ == '__main__':

@@ -49,31 +49,25 @@ def handle_input(inputfunc):
             exit_script()
 
 
-def apply_option(option: str, data: UpsamplingData) -> None:
-    '''Apply a filter option to the data.'''
-    # limit size to smallest cohort
-    if option == "smallest":
-        data.limit_size_to_smallest()
-    elif "max_size" in option:
-        size = int(option.lstrip("max_size:"))
-        data.limit_size(size)
-    else:
-        print("Option", option, "unrecognized")
-
-
 def preprocess_data(
         files: FilesDict,
         groups: list,
         data_filters: list
 ) -> UpsamplingData:
     '''Apply grouping and other manipulation of the input data.'''
-    data = UpsamplingData.from_files(files)
-    if groups:
-        data.select_groups(groups)
 
-    for filter_opt in data_filters:
-        apply_option(filter_opt, data)
-    return data
+    data = UpsamplingData.from_files(files)
+
+    cutoff = 0
+    max_size = 0
+    for option in data_filters:
+        if option == "smallest":
+            max_size = min(data.get_group_sizes)
+        elif "max_size" in option:
+            max_size = int(option.lstrip("max_size:"))
+
+    view = data.filter_data(groups=groups, cutoff=cutoff, max_size=max_size)
+    return data, view
 
 
 def evaluate(
@@ -85,8 +79,8 @@ def evaluate(
 ) -> None:
     '''Evaluate upsampling data.'''
 
-    data = preprocess_data(**file_data)
-    clas = Classifier(data, name=name, output_path=output)
+    _, view = preprocess_data(**file_data)
+    clas = Classifier(view, name=name, output_path=output)
 
     for method_name, method_info in method.items():
         if method_name == "holdout":
