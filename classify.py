@@ -54,30 +54,40 @@ def apply_option(option: str, data: UpsamplingData) -> None:
     # limit size to smallest cohort
     if option == "smallest":
         data.limit_size_to_smallest()
+    elif "max_size" in option:
+        size = int(option.lstrip("max_size:"))
+        data.limit_size(size)
     else:
         print("Option", option, "unrecognized")
 
 
-def evaluate(
+def preprocess_data(
         files: FilesDict,
-        output: str,
-        name: str,
-        note: str,
-        method: dict,
-        groups: dict,
+        groups: list,
         data_filters: list
-) -> None:
-    '''Evaluate upsampling data.'''
+) -> UpsamplingData:
+    '''Apply grouping and other manipulation of the input data.'''
     data = UpsamplingData.from_files(files)
     if groups:
         data.select_groups(groups)
 
     for filter_opt in data_filters:
         apply_option(filter_opt, data)
+    return data
 
+
+def evaluate(
+        file_data: dict,
+        output: str,
+        name: str,
+        info_args: str,
+        method: dict,
+) -> None:
+    '''Evaluate upsampling data.'''
+
+    data = preprocess_data(**file_data)
     clas = Classifier(data, name=name, output_path=output)
 
-    clas.dump_experiment_info(note)
     for method_name, method_info in method.items():
         if method_name == "holdout":
             if method_info.startswith("a"):
@@ -88,6 +98,8 @@ def evaluate(
                 clas.holdout_validation(ratio=ratio)
         elif method_name == "kfold":
             clas.k_fold_validation(int(method_info))
+
+    clas.dump_experiment_info(**info_args)
 
 
 def get_files(path: str, noninteractive: bool = False) -> FilesDict:
@@ -135,7 +147,7 @@ def get_arguments() -> (FilesDict, str, str, str, dict):
         default="output/preprocess"
     )
     parser.add_argument(
-        "--note",
+        "-n", "--note",
         help="Adding a string note text describing the experiment."
     )
     parser.add_argument(
@@ -144,7 +156,7 @@ def get_arguments() -> (FilesDict, str, str, str, dict):
         default="output/classification"
     )
     parser.add_argument(
-        "-n", "--noninteractive",
+        "-x", "--noninteractive",
         help="Run script without confirmation.",
         action="store_true"
     )
@@ -160,15 +172,22 @@ def get_arguments() -> (FilesDict, str, str, str, dict):
     parser.add_argument(
         "-f", "--filters",
         help=("Add data preprocessing options. "
-              "smallest - Limit size of all cohorts to smallest cohort.")
+              "smallest - Limit size of all cohorts to smallest cohort. "
+              "max_size - Set highest size to maximum size.")
     )
 
     args = parser.parse_args()
 
+    # additional info
     if not args.note:
         note = handle_input(lambda: input("Enter short note: "))
     else:
         note = args.note
+    # get cmd line
+    cmd = __name__ + " " + " ".join(sys.argv)
+    additional = {"note": note, "cmd": cmd}
+
+    name = args.name
 
     method = dict(
         tuple(m.split(":", 2))
@@ -195,13 +214,15 @@ def get_arguments() -> (FilesDict, str, str, str, dict):
     filters = args.filters.split(",") if args.filters else []
 
     options = {
-        "files": files,
-        "output": args.output,
-        "note": note,
-        "name": args.name,
+        "name": name,
         "method": method,
-        "groups": groups,
-        "data_filters": filters
+        "output": args.output,
+        "file_data": {
+            "files": files,
+            "groups": groups,
+            "data_filters": filters
+        },
+        "info_args": additional,
     }
     return options
 
@@ -209,10 +230,6 @@ def get_arguments() -> (FilesDict, str, str, str, dict):
 def main():
     '''Classification of single tubes
     '''
-    # files, output, name, note, method = get_arguments()
-    # files = [("output/1_large_cohort_reduction/tube1.csv",
-    #           "output/1_large_cohort_reduction/tube2.csv")]
-    # evaluate(files, output, name, note, method)
     evaluate(**get_arguments())
 
 

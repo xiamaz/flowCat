@@ -5,5 +5,5 @@ CreateOutputDirectory <- function(dir.path, text.note) {
   dir.create(dir.path, recursive = T, showWarnings = T)
 
   info.path <- file.path(dir.path, "00-INFO.txt")
-  write(c(Sys.time(), text.note), info.path, sep = "\n")
+  write(c(as.character(Sys.time()), text.note), info.path, sep = "\n")
 }

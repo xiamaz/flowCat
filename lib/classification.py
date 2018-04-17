@@ -48,13 +48,18 @@ class Classifier:
         # log past experiment information in a dict
         self.past_experiments = []
 
-    def dump_experiment_info(self, note: str = "") -> None:
+    def dump_experiment_info(
+            self,
+            note: str = "",
+            cmd: str = ""
+    ) -> None:
         '''Output all past run validations into a json file for later
         inference.'''
         dumpdata = {
             "experiment_name": self.experiment_name,
             "date": str(datetime.now()),
             "note": note,
+            "command": cmd,
             "group_names": self._data.group_names,
             "experiments": self.past_experiments
         }
@@ -84,21 +89,32 @@ class Classifier:
             eval_results.append((confusion, stat, mism))
             # output individual results, if wanted
             if save_individual_results:
-                self.generate_output(confusion, stat, mism,
+                self.generate_output(confusion, mism,
                                      name_tag="_{}_{}".format(name_tag, i))
 
         avg_confusion = sum([t[0] for t in eval_results])
         avg_stats = avg_dicts([t[1] for t in eval_results])
         self.generate_output(
             confusion_data=avg_confusion,
-            statistics=avg_stats,
             mismatches=None,
-            name_tag=name_tag)
+            name_tag=name_tag
+        )
 
         experiment_info = {
             "setting": name_tag,
             "config_param": k_num,
-            "splits": [s.shape[0] for s in splits]
+            "splits": [
+                {
+                    "size": s.shape[0],
+                    "groups": s.groupby("group").size().to_dict("records")
+                }
+                for s in splits
+            ],
+            "avg_result": avg_stats,
+            "individual": [
+                {"result": stat, "mismatches": mismatches}
+                for _, stat, mismatches in eval_results
+            ]
         }
         self.past_experiments.append(experiment_info)
 
@@ -127,21 +143,31 @@ class Classifier:
 
         self.generate_output(
             confusion_data=confusion,
-            statistics=stats,
             mismatches=mismatches,
             name_tag=name_tag)
 
         experiment_info = {
             "setting": name_tag,
             "config_param": abs_num or ratio,
-            "splits": [train.shape[0], test.shape[0]]
+            "splits": [
+                {
+                    "size": t.shape[0],
+                    "groups": t.groupby("group").size().to_dict()
+                } for t in [train, test]
+            ],
+            "avg_result": stats,
+            "individual": [
+                {
+                    "result": stats,
+                    "mismatches": mismatches
+                }
+            ]
         }
         self.past_experiments.append(experiment_info)
 
     def generate_output(
             self,
             confusion_data: Union[np.matrix, None],
-            statistics: Union[dict, None],
             mismatches: Union[dict, None],
             name_tag: str) -> None:
         '''Create confusion matrix and text statistics and save them to the
@@ -157,13 +183,6 @@ class Classifier:
             plotting.plot_confusion_matrix(
                 confusion_data, self._data.group_names,
                 normalize=True, filename=plot_name)
-        # save metrics of experiment
-        if statistics is not None:
-            logging.info("Saving statistics information to text file.")
-            stat_file = os.path.join(self.output_path,
-                                     tagged_name + "_statistics.txt")
-            open(stat_file, "w").write(
-                "{}\n====\n{}".format(tagged_name, statistics))
         # save list of mismatched cases
         if mismatches is not None:
             logging.info("Creating text list from mismatch information.")

@@ -100,15 +100,19 @@ class UpsamplingData:
         print("Excluded groups: ", excluded_groups)
         self.update_data(pd.concat(selected_groups))
 
-    def limit_size_to_smallest(self):
-        '''Limit size of all cohorts to smallest.'''
-        min_size = min([group.shape[0] for gn, group in self._groups])
-        print(min_size)
+    def limit_size(self, size):
+        '''Limit size of cohorts to specified size. If cohorts are smaller
+        than this size, they will not be changed.'''
         sample_data = [
-            group.sample(n=min_size)
+            group.sample(n=min(group.shape[0], size))
             for group_name, group in self._groups
         ]
         self.update_data(pd.concat(sample_data))
+
+    def limit_size_to_smallest(self):
+        '''Limit size of all cohorts to smallest.'''
+        min_size = min([group.shape[0] for gn, group in self._groups])
+        self.limit_size(min_size)
 
     def get_test_train_split(self, ratio: float = None, abs_num: int = None) \
             -> (pd.DataFrame, pd.DataFrame):
