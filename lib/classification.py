@@ -14,7 +14,7 @@ import sklearn.metrics as skm
 from keras.models import Sequential
 from keras.layers import Dense
 
-from lib.upsampling import UpsamplingData
+from lib.upsampling import DataView
 from lib import plotting
 
 
@@ -32,7 +32,7 @@ class Classifier:
     '''Basic sequential dense classifier.'''
 
     def __init__(self,
-                 data: UpsamplingData,
+                 data: DataView,
                  output_path: str = "output/classification",
                  name: str = "expname"):
         self._data = data
@@ -47,6 +47,10 @@ class Classifier:
 
         # log past experiment information in a dict
         self.past_experiments = []
+
+    def get_results(self) -> dict:
+        '''Get results from previously run experiments.'''
+        return self.past_experiments
 
     def dump_experiment_info(
             self,
@@ -106,7 +110,7 @@ class Classifier:
             "splits": [
                 {
                     "size": s.shape[0],
-                    "groups": s.groupby("group").size().to_dict("records")
+                    "groups": s.groupby("group").size().to_dict()
                 }
                 for s in splits
             ],
@@ -204,7 +208,7 @@ class Classifier:
         data and labels. (Labels are converted to binary matrix, which is
         why the binarizer is necessary)
         '''
-        x_matrix, y_matrix = UpsamplingData.split_x_y(training_data, binarizer)
+        x_matrix, y_matrix = DataView.split_x_y(training_data, binarizer)
 
         model = Sequential()
         model.add(Dense(units=100,
@@ -227,8 +231,7 @@ class Classifier:
                        debinarizer: Callable) -> (np.matrix, dict, List[dict]):
         '''Evaluate model against test data and return a number of metrics.
         '''
-        x_matrix, y_matrix = UpsamplingData.split_x_y(test_data,
-                                                      binarizer)
+        x_matrix, y_matrix = DataView.split_x_y(test_data, binarizer)
         loss_and_metrics = model.evaluate(x_matrix, y_matrix, batch_size=128)
         print(loss_and_metrics)
         # y_pred = model.predict(x_matrix, batch_size=128)
@@ -268,15 +271,3 @@ class Classifier:
                 "predicted": debinarizer(y_vals[1], matrix=False)
             }
         return mismatches
-
-
-def main():
-    '''Simple binary classification
-    '''
-    files = [("../joined/joined_all.csv")]
-    data = UpsamplingData.from_files(files)
-    Classifier(data)
-
-
-if __name__ == '__main__':
-    main()

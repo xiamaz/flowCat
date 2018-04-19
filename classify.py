@@ -13,6 +13,7 @@ from collections import defaultdict
 from lib.upsampling import UpsamplingData
 from lib.classification import Classifier
 from lib.types import FilesDict
+from lib.plotting import plot_combined
 # from lib import plotting
 
 # datatypes
@@ -60,14 +61,22 @@ def preprocess_data(
 
     cutoff = 0
     max_size = 0
+    sizes = []
     for option in data_filters:
         if option == "smallest":
             max_size = min(data.get_group_sizes)
         elif "max_size" in option:
             max_size = int(option.lstrip("max_size:"))
+        elif "iter_size" in option:
+            # used in conjunction with max_size
+            step = int(option.lstrip("iter_size:"))
+            sizes = range(step, max_size+1, step)
+    if not sizes:
+        sizes = [max_size]
 
-    view = data.filter_data(groups=groups, cutoff=cutoff, max_size=max_size)
-    return data, view
+    for size in sizes:
+        view = data.filter_data(groups=groups, cutoff=cutoff, max_size=size)
+        yield size, view
 
 
 def evaluate(
@@ -79,21 +88,29 @@ def evaluate(
 ) -> None:
     '''Evaluate upsampling data.'''
 
-    _, view = preprocess_data(**file_data)
-    clas = Classifier(view, name=name, output_path=output)
+    results = []
 
-    for method_name, method_info in method.items():
-        if method_name == "holdout":
-            if method_info.startswith("a"):
-                abs_num = int(method_info.strip("a"))
-                clas.holdout_validation(abs_num=abs_num)
-            elif method_info.startswith("r"):
-                ratio = float(method_info.strip("r"))
-                clas.holdout_validation(ratio=ratio)
-        elif method_name == "kfold":
-            clas.k_fold_validation(int(method_info))
+    output_path = os.path.join(output, name)
 
-    clas.dump_experiment_info(**info_args)
+    for i, view in preprocess_data(**file_data):
+        subname = "{}_{}".format(name, i)
+        clas = Classifier(view, name=subname, output_path=output_path)
+
+        for method_name, method_info in method.items():
+            if method_name == "holdout":
+                if method_info.startswith("a"):
+                    abs_num = int(method_info.strip("a"))
+                    clas.holdout_validation(abs_num=abs_num)
+                elif method_info.startswith("r"):
+                    ratio = float(method_info.strip("r"))
+                    clas.holdout_validation(ratio=ratio)
+            elif method_name == "kfold":
+                clas.k_fold_validation(int(method_info))
+
+        clas.dump_experiment_info(**info_args)
+        results.append((i, clas.get_results()))
+
+    plot_combined(results, output_path)
 
 
 def get_files(path: str, noninteractive: bool = False) -> FilesDict:
