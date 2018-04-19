@@ -71,60 +71,38 @@ class Classifier:
             self.output_path, self.experiment_name+"_info.json")
         json.dump(dumpdata, open(dumppath, "w"), indent=4)
 
-    def k_fold_validation(self,
-                          k_num: int = 5,
-                          save_individual_results: bool = True) -> None:
+    def k_fold_validation(
+            self,
+            k_num: int = 5,
+            **kwargs
+    ) -> None:
         '''Do k-fold validation on data set.
         '''
         # put all output into a separate folder
         name_tag = "kfold"
 
         splits = self._data.k_fold_split(k_num)
-        eval_results = []
-        for i in range(k_num):
-            # train on all other parts
-            model = self.create_sequential_model(
-                pd.concat(splits[i+1:] + splits[:i]),
-                self._data.binarizer)
-            # test using selected part i
-            confusion, stat, mism = self.evaluate_model(
-                model, splits[i], self._data.binarizer, self._data.debinarizer)
-            # add results for later batched interpretation
-            eval_results.append((confusion, stat, mism))
-            # output individual results, if wanted
-            if save_individual_results:
-                self.generate_output(confusion, mism,
-                                     name_tag="_{}_{}".format(name_tag, i))
+        train_test_sets = [
+            (pd.concat(splits[:i] + splits[i+1:]), splits[i])
+            for i in range(k_num)
+        ]
 
-        avg_confusion = sum([t[0] for t in eval_results])
-        avg_stats = avg_dicts([t[1] for t in eval_results])
-        self.generate_output(
-            confusion_data=avg_confusion,
-            mismatches=None,
-            name_tag=name_tag
+        experiment_info = self.validation(
+            train_test_sets,
+            name_tag=name_tag,
+            **kwargs
         )
+        experiment_info["config_param"] = k_num
 
-        experiment_info = {
-            "setting": name_tag,
-            "config_param": k_num,
-            "splits": [
-                {
-                    "size": s.shape[0],
-                    "groups": s.groupby("group").size().to_dict()
-                }
-                for s in splits
-            ],
-            "avg_result": avg_stats,
-            "individual": [
-                {"result": stat, "mismatches": mismatches}
-                for _, stat, mismatches in eval_results
-            ]
-        }
         self.past_experiments.append(experiment_info)
 
-    def holdout_validation(self, ratio: float = 0.8,
-                           abs_num: int = None,
-                           save_weights: bool = True) -> None:
+    def holdout_validation(
+            self,
+            ratio: float = 0.8,
+            abs_num: int = None,
+            save_weights: bool = True,
+            val_split: float = 0.2
+    ) -> None:
         '''Simple holdout validation. If given abs_num, then each test cohort
         will contain the absolute number of cases.'''
         if abs_num:
@@ -134,46 +112,106 @@ class Classifier:
             name_tag = "holdout"
             train, test = self._data.get_test_train_split(ratio=ratio)
 
-        model = self.create_sequential_model(
-            train, self._data.binarizer)
+        train_test_sets = [(train, test)]
 
-        if save_weights:
-            weight_file = os.path.join(self.output_path,
-                                       "weights_" + name_tag + ".hdf5")
-            model.save_weights(weight_file)
+        experiment_info = self.validation(
+            train_test_sets, name_tag=name_tag,
+            save_weights=save_weights,
+            save_individual_results=True,
+            plot_history=True,
+            val_split=val_split
+        )
 
-        confusion, stats, mismatches = self.evaluate_model(
-            model, test, self._data.binarizer, self._data.debinarizer)
+        experiment_info["config_param"] = abs_num or ratio
+        self.past_experiments.append(experiment_info)
+
+    def validation(
+            self,
+            train_test_sets: list,
+            name_tag: str,
+            save_weights: bool = False,
+            save_individual_results: bool = False,
+            plot_history: bool = False,
+            val_split: float = 0.0
+    ) -> dict:
+        '''Build models and create statistics for a list of train, test sets.
+        '''
+        eval_results = []
+        for i, (train, test) in enumerate(train_test_sets):
+            model, history = self.create_sequential_model(
+                train, self._data.binarizer,
+                val_split=val_split
+            )
+            if save_weights:
+                weight_file = os.path.join(
+                    self.output_path, "weights_{}_{}.hdf5".format(name_tag, i)
+                )
+                model.save_weights(weight_file)
+
+            if plot_history:
+                plot_path = os.path.join(
+                    self.output_path,
+                    "training_history_{}_{}.png".format(name_tag, i)
+                )
+                plotting.plot_history(history, plot_path)
+            training_stats = self.get_training_stats(history)
+
+            confusion, stat, mism = self.evaluate_model(
+                model, test, self._data.binarizer, self._data.debinarizer
+            )
+            # add results for later batched interpretation
+            eval_results.append((confusion, stat, mism, training_stats))
+            # output individual results, if wanted
+            if save_individual_results:
+                self.generate_output(
+                    confusion, mism, name_tag="_{}_{}".format(name_tag, i)
+                )
+
+        avg_confusion = sum([t[0] for t in eval_results])
+        avg_stats = avg_dicts([t[1] for t in eval_results])
+        avg_training = avg_dicts([t[3] for t in eval_results])
 
         self.generate_output(
-            confusion_data=confusion,
-            mismatches=mismatches,
-            name_tag=name_tag)
+            confusion_data=avg_confusion,
+            mismatches=None,
+            name_tag=name_tag
+        )
 
         experiment_info = {
             "setting": name_tag,
-            "config_param": abs_num or ratio,
             "splits": [
-                {
-                    "size": t.shape[0],
-                    "groups": t.groupby("group").size().to_dict()
-                } for t in [train, test]
+                dict(
+                    zip(
+                        ["train", "test"],
+                        [
+                            {
+                                "size": tv.shape[0],
+                                "groups": tv.groupby("group").size().to_dict(),
+                            } for tv in t
+                        ]
+                    )
+                )
+                for t in train_test_sets
             ],
-            "avg_result": stats,
+            "avg_training": avg_training,
+            "avg_result": avg_stats,
             "individual": [
                 {
-                    "result": stats,
-                    "mismatches": mismatches
+                    "result": stat,
+                    "mismatches": mismatches,
+                    "training": training
                 }
+                for _, stat, mismatches, training in eval_results
             ]
         }
-        self.past_experiments.append(experiment_info)
+        return experiment_info
 
     def generate_output(
             self,
             confusion_data: Union[np.matrix, None],
             mismatches: Union[dict, None],
-            name_tag: str) -> None:
+            name_tag: str
+    ) -> None:
         '''Create confusion matrix and text statistics and save them to the
         output folder.
         '''
@@ -201,8 +239,11 @@ class Classifier:
                 mismatch_output.writelines(mismatch_lines)
 
     @staticmethod
-    def create_sequential_model(training_data: "DataFrame",
-                                binarizer: Callable) -> Sequential:
+    def create_sequential_model(
+            training_data: "DataFrame",
+            binarizer: Callable,
+            val_split: float = 0.0
+    ) -> Sequential:
         '''Create a sequential neural network with specified hidden layers.
         The input and output dimensions are inferred from the given
         data and labels. (Labels are converted to binary matrix, which is
@@ -221,14 +262,19 @@ class Classifier:
                         activation="softmax"))
         model.compile(loss='binary_crossentropy', optimizer='adadelta',
                       metrics=['acc'])
-        model.fit(x_matrix, y_matrix, epochs=100, batch_size=16)
-        return model
+        history = model.fit(
+            x_matrix, y_matrix, epochs=100, batch_size=16,
+            validation_split=val_split
+        )
+        return model, history
 
     @staticmethod
-    def evaluate_model(model: Sequential,
-                       test_data: "DataFrame",
-                       binarizer: Callable,
-                       debinarizer: Callable) -> (np.matrix, dict, List[dict]):
+    def evaluate_model(
+            model: Sequential,
+            test_data: "DataFrame",
+            binarizer: Callable,
+            debinarizer: Callable
+    ) -> (np.matrix, dict, List[dict]):
         '''Evaluate model against test data and return a number of metrics.
         '''
         x_matrix, y_matrix = DataView.split_x_y(test_data, binarizer)
@@ -271,3 +317,12 @@ class Classifier:
                 "predicted": debinarizer(y_vals[1], matrix=False)
             }
         return mismatches
+
+    @staticmethod
+    def get_training_stats(history: "History") -> dict:
+        '''Get training stats from the training history.
+        Currently only get get the last reported loss and accuracy.
+        '''
+        loss = history.history["loss"]
+        acc = history.history["acc"]
+        return {"loss": loss[-1], "acc": acc[-1]}

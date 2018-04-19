@@ -55,21 +55,42 @@ def plot_confusion_matrix(confusion_matrix: "numpy.matrix", classes: [str],
     plt.savefig(filename, dpi=300)
 
 
+def plot_history(history: "History", path: str):
+    '''Plot training history as graph.'''
+    df_data = pandas.DataFrame(history.history)
+    df_data["i"] = df_data.index
+
+    axes = df_data.plot(x="i")
+    axes.set_xlabel("Iterations")
+    axes.set_ylabel("Ratio")
+    axes.set_title("Training loss and accuracy")
+
+    fig = axes.get_figure()
+
+    plt.tight_layout()
+
+    fig.savefig(path, dpi=300)
+
+    plt.close(fig)
+
+
 def plot_splits(splits, path):
     '''Plot splits with group label distributions.'''
     df_data = [
         {
             "i": i,
             "size": size,
-            "group": name
+            "group": name,
+            "type": exptype
         }
         for i, s in enumerate(splits)
-        for j, (name, size) in enumerate(s["groups"].items())
+        for exptype, info in s.items()
+        for j, (name, size) in enumerate(info["groups"].items())
     ]
     df_data = pandas.DataFrame(df_data)
 
     grouped = seaborn.factorplot(
-        x="i", hue="group", y="size", data=df_data,
+        x="type", hue="group", y="size", data=df_data, col="i",
         size=6, kind="bar", palette="muted"
     )
 
@@ -91,18 +112,17 @@ def plot_single(results: list, path: str, name: str) -> None:
         plot_splits(result["splits"], split_path)
 
 
-def plot_change(data, target, path, xlabel="Size change"):
+def plot_change(data, path, xlabel="Size change"):
     '''Plot change in data according to specified target.'''
 
-    output = os.path.join(path, "{}_combined.png".format(target))
+    output = os.path.join(path, "stat_combined.png")
     plt.close('all')
 
-    axes = data.plot(x="set", y=target)
-    axes.set_xlabel(xlabel)
-    axes.set_ylabel(target)
-    fig = axes.get_figure()
+    axes = data.plot(x="set", ylim=(0, 1))
 
-    fig.suptitle("{} by size".format(target))
+    axes.set_xlabel(xlabel)
+    axes.set_title("Metrics change with size.")
+    fig = axes.get_figure()
 
     plt.tight_layout()
     fig.savefig(output, dpi=300)
@@ -120,17 +140,21 @@ def plot_combined(results: list, path: str) -> None:
     for i, result in results:
         plot_single(result, output_path, str(i))
         avg_stats += [
-            dict({
-                "setting": r["setting"],
-                "set": i
-            }, **{
-                k: v for k, v in r["avg_result"].items()
-            })
+            dict(
+                {
+                    "setting": r["setting"],
+                    "set": i
+                }, **dict(
+                    {
+                        k: v for k, v in r["avg_result"].items()
+                    }, **{
+                        "train_"+k: v for k, v in r["avg_training"].items()
+                    }
+                )
+            )
             for r in result
         ]
 
     avg_stats = pandas.DataFrame(avg_stats)
 
-    plot_change(avg_stats, "accuracy", output_path)
-    plot_change(avg_stats, "f1", output_path)
-    plot_change(avg_stats, "precision", output_path)
+    plot_change(avg_stats, output_path)
