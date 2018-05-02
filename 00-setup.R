@@ -8,6 +8,7 @@ biocLite()
 # install flowcore
 biocLite("flowCore")
 biocLite("FlowSOM")
+biocLite("flowDensity")
 
 # install flowproc
 devtools::install_github("xiamaz/flowProc")
