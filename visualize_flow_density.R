@@ -1,12 +1,12 @@
 library(flowProc)
 library(flowDensity)
 
-# kGatingSequences <- list(`1` = list(list(c("CD45-KrOr", "SS INT LIN"), c(T, F)))
+kGatingSequences <- list(`1` = list(list(c("CD45-KrOr", "SS INT LIN"), c(T, F)))
 #                          )
-kGatingSequences <- list(`1` = list(list(c("FS INT LIN", "SS INT LIN"), c(F, F)))
+# kGatingSequences <- list(`1` = list(list(c("FS INT LIN", "SS INT LIN"), c(F, F)))
                          )
 
-kInputFiles <- "../Moredata"
+kInputFiles <- "../mll_data"
 
 kExperimentName <- "debris_detect_0"
 
@@ -16,7 +16,7 @@ if (dir.exists(kOutputDirectory)) {
   stop(paste(kOutputDirectory, "already exists. Move or delete it."))
 }
 
-all.files <- ReadDataset(kInputFiles, num.threads = 12)
+all.files <- ReadDatasets(kInputFiles)
 
 file.groups <- GroupBy(all.files, "group", num.threads = 12)
 
@@ -36,7 +36,8 @@ for (group.name in names(file.groups)){
     if (!tube.num %in% names(kGatingSequences)) {
       next
     }
-    for (entry in group.file[[tube.num]]) {
+    limited_tube <- group.file[[tube.num]][1:30]
+    for (entry in limited_tube) {
       for (gating in kGatingSequences[[tube.num]]) {
         plot.name <- sprintf("%s_%s.png", entry@label, paste(gating[[1]], collapse = "_"))
         plot.path <- file.path(plotting.folder, plot.name)
