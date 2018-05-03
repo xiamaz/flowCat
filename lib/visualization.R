@@ -34,11 +34,11 @@ CreatePngPlot <- function(path, plot.func, ...) {
 #' Plot flowSOM to different visualizations
 PlotClustering <- function(path, fsom, meta) {
   stars.path <- sprintf("%s_stars.png", path)
-  CreatePngPlot(stars.path, FlowSOM::PlotStars, backgroundValues = as.factor(meta))
+  CreatePngPlot(stars.path, FlowSOM::PlotStars, fsom, backgroundValues = as.factor(meta))
   tsne.path <- sprintf("%s_tsne.png", path)
-  CreatePngPlot(tsne.path, FlowSOM::PlotStars, view = "tSNE", backgroundValues = as.factor(meta))
+  CreatePngPlot(tsne.path, FlowSOM::PlotStars, fsom, view = "tSNE", backgroundValues = as.factor(meta))
   grid.path <- sprintf("%s_grid.png", path)
-  CreatePngPlot(grid.path, FlowSOM::PlotStars, view = "grid", backgroundValues = as.factor(meta))
+  CreatePngPlot(grid.path, FlowSOM::PlotStars, fsom, view = "grid", backgroundValues = as.factor(meta))
   # png(stars.path, width = 10, height = 10, units = "in", res = 300)
   # # png(stars.path)
   # FlowSOM::PlotStars(fsom, backgroundValues = as.factor(meta))
