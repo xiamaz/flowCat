@@ -1,4 +1,7 @@
 #!/usr/bin/env Rscript
+# Date: 2018-05-03
+# Note: Used in summary presentation on variation of SOM generation sizes and
+# impact on metacluster specificity
 library(methods)
 library(parallel)
 library(data.table)
