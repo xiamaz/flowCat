@@ -62,6 +62,7 @@ def preprocess_data(
     cutoff = 0
     max_size = 0
     sizes = []
+    iter_group = ""
     for option in data_filters:
         if option == "smallest":
             max_size = min(data.get_group_sizes)
@@ -69,12 +70,19 @@ def preprocess_data(
             max_size = int(option.lstrip("max_size:"))
         elif "iter_size" in option:
             # used in conjunction with max_size
-            step = int(option.lstrip("iter_size:"))
-            sizes = range(step, max_size+1, step)
+            iter_group, max_group, step = option.lstrip(
+                "iter_size:").split(",")
+            sizes = range(max_size, int(max_group)+1, int(step))
+
     if not sizes:
         sizes = [max_size]
 
     for size in sizes:
+        if iter_group:
+            size = {
+                g: size if g == iter_group else max_size
+                for g in data.get_group_names()
+            }
         view = data.filter_data(groups=groups, cutoff=cutoff, max_size=size)
         yield size, view
 
@@ -222,7 +230,7 @@ def get_arguments() -> (FilesDict, str, str, str, dict):
         [m.split(":") for m in args.group.split(";")]
     ] if args.group else []
 
-    filters = args.filters.split(",") if args.filters else []
+    filters = args.filters.split(";") if args.filters else []
 
     options = {
         "name": name,

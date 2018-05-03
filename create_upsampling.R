@@ -9,8 +9,8 @@ source("lib/fsom.R")
 source("lib/utils.R")
 
 kTextNote <- c(
-               "Three class classification with CLL MBL and normal.",
-               "This serves as comparison to the binary classifications between mbl, cll and normal results."
+               "Comparisons of size differences for individual classification results.",
+               "Process all usable classes for the demo."
                )
 kTextNote <- paste(kTextNote, sep = "")
 
@@ -48,7 +48,7 @@ kThresholdGroupSize <- parsed.options$groupsize
 
 # selectors for filtering of cases
 kMaterialSelection <- c("1", "2", "3", "4", "5", "PB", "KM")
-kGroupSelection <- c("CLL", "MBL", "normal")
+kGroupSelection <- c("CLL", "MBL", "normal", "Marginal", "CLLPL", "LPL", "HZL", "Mantel", "FL", "DLBCL")
 
 # general filters to all files
 filters <- list(material = kMaterialSelection, group = kGroupSelection)
@@ -63,13 +63,22 @@ group.files <- lapply(group.files, function(group){
                         group <- cGroupBy(group, "label", c(1, 2))
                         return(group)
                                 })
-minimal.size <- min(sapply(group.files, length))
+
+# set high cutoff to reduce runtime for large cohorts
 group.files <- lapply(group.files, function(group) {
-                        group <- sample(group, minimal.size)
+                        group <- sample(group, min(length(group), 1000))
                         # flatten list
                         group <- do.call(c, group)
                         return(group)
                                 })
+
+# minimal.size <- min(sapply(group.files, length))
+# group.files <- lapply(group.files, function(group) {
+#                         group <- sample(group, minimal.size)
+#                         # flatten list
+#                         group <- do.call(c, group)
+#                         return(group)
+#                                 })
 all.files <- do.call(c, group.files)
 
 # CREATE output directory

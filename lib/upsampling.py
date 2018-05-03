@@ -8,7 +8,7 @@ from typing import Callable, Tuple
 import pandas as pd
 import numpy as np
 
-from lib.types import FilesDict, GroupSelection
+from lib.types import FilesDict, GroupSelection, SizeOption
 
 
 def merge_on_label(left_df: pd.DataFrame, right_df: pd.DataFrame) \
@@ -161,14 +161,22 @@ class UpsamplingData:
         '''Get number of rows per group.'''
         return self._group_sizes(self._data)
 
+    def get_group_names(self):
+        return self._data["group"].unique()
+
     def filter_data(
-            self, groups: GroupSelection, cutoff: int, max_size: int
+            self, groups: GroupSelection, cutoff: SizeOption, max_size: SizeOption
     ) -> DataView:
         '''Filter data based on criteria and return a data view.'''
         data = self._data
         if groups:
             data = self._select_groups(data, groups)
         if cutoff or max_size:
+            if not isinstance(cutoff, dict):
+                cutoff = {g: cutoff for g in self.get_group_names()}
+            if not isinstance(max_size, dict):
+                max_size = {g: max_size for g in self.get_group_names()}
+
             data = self._limit_size_per_group(
                 data, lower=cutoff, upper=max_size
             )
@@ -191,17 +199,17 @@ class UpsamplingData:
         return data
 
     @staticmethod
-    def _limit_size_per_group(data: pd.DataFrame, lower: int, upper: int):
+    def _limit_size_per_group(data: pd.DataFrame, lower: dict, upper: dict):
         '''Limit size per group.
         Lower limit of size - group will be excluded if smaller
         Upper limit of size - group will be downsampled if larger
         '''
         new_data = []
-        for _, group in data.groupby("group"):
-            if lower and group.shape[0] < lower:
+        for name, group in data.groupby("group"):
+            if name in lower and group.shape[0] < lower[name]:
                 continue
-            if upper and group.shape[0] > upper:
-                group = group.sample(n=upper)
+            if name in upper and group.shape[0] > upper[name]:
+                group = group.sample(n=upper[name])
             new_data.append(group)
         return pd.concat(new_data)
 
