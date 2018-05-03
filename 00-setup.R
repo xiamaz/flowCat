@@ -1,6 +1,7 @@
 #!/bin/env/Rscript
 install.packages("devtools")
 install.packages("ggplot2")
+install.packages("optparse")
 # install bioconductor
 source("https://bioconductor.org/biocLite.R")
 biocLite()
