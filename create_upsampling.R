@@ -9,8 +9,7 @@ source("lib/fsom.R")
 source("lib/utils.R")
 
 kTextNote <- c(
-               "Comparisons of size differences for individual classification results.",
-               "Process all usable classes for the demo."
+               "Cloud adaptations for running in AWS."
                )
 kTextNote <- paste(kTextNote, sep = "")
 
@@ -50,23 +49,39 @@ kThresholdGroupSize <- parsed.options$groupsize
 kMaterialSelection <- c("1", "2", "3", "4", "5", "PB", "KM")
 kGroupSelection <- c("CLL", "MBL", "normal", "Marginal", "CLLPL", "LPL", "HZL", "Mantel", "FL", "DLBCL")
 
+# s3 config
+kS3Info <- "case_info.json"
+kS3Bucket <- "mll-flowdata"
+kS3Temp <- "s3cache"
+kS3 <- T
+
+aws.signature::use_credentials(profile = "pipeline")
+
 # general filters to all files
 filters <- list(material = kMaterialSelection, group = kGroupSelection)
 
-data.reader <- ifelse(parsed.options$dataset, ReadDataset, ReadDatasets)
-all.files <- data.reader(kPath, thread.num = kThreads, filters = filters)
+# get case descriptions from json file
+if (kS3){
+  dir.create(kS3Temp, recursive = T, showWarnings = F)
+  info.path <- file.path(kS3Temp, kS3Info)
+  aws.s3::save_object(kS3Info, kS3Bucket, file = info.path)
+  group.files <- ReadDatasetJson(info.path)
+} else {
+  data.reader <- ifelse(parsed.options$dataset, ReadDataset, ReadDatasets)
+  all.files <- data.reader(kPath, thread.num = kThreads, filters = filters)
 
-# randomly sample the larger cohort down to the smaller one
-group.files <- GroupBy(all.files, "group", num.threads = kThreads)
+  # randomly sample the larger cohort down to the smaller one
+  group.files <- GroupBy(all.files, "group", num.threads = kThreads)
 
-group.files <- lapply(group.files, function(group){
-                        group <- cGroupBy(group, "label", c(1, 2))
-                        return(group)
-                                })
+  group.files <- lapply(group.files, function(group){
+                          group <- cGroupBy(group, "label", c(1, 2))
+                          return(group)
+                                  })
+}
 
 # set high cutoff to reduce runtime for large cohorts
 group.files <- lapply(group.files, function(group) {
-                        group <- sample(group, min(length(group), 1000))
+                        group <- sample(group, min(length(group), 30))
                         # flatten list
                         group <- do.call(c, group)
                         return(group)
@@ -87,7 +102,9 @@ all.files <- do.call(c, group.files)
 CreateOutputDirectory(kOutputPath, kTextNote)
 
 tube.matrix.1 <- CasesToMatrix(all.files, kThreads, filters = list(tube_set = c(1)),
-                               output.dir = kOutputPath, name = "tube1", sample.size = kThresholdGroupSize)
+                               output.dir = kOutputPath, name = "tube1",
+                               sample.size = kThresholdGroupSize,
+                               s3 = T, bucketname = kS3Bucket)
 SaveMatrix(kOutputPath, "tube1.csv", tube.matrix.1)
 
 tube.matrix.2 <- CasesToMatrix(all.files, kThreads, filters = list(tube_set = c(2)),

@@ -143,15 +143,37 @@ LoadFunctionBuilder <- function(selected, load.func) {
 }
 
 
+AWSReadTemp <- function(flow.entry, bucketname, cachedir) {
+  tmppath = file.path(cachedir, flow.entry@awspath)
+  dir.create(dirname(tmppath), recursive = T, showWarnings = F)
+  if(!file.exists(tmppath)){
+    aws.s3::save_object(flow.entry@awspath, tmppath, bucket=bucketname)
+  }
+  flow.entry@filepath <- tmppath
+  return(flow.entry)
+}
+
+PullS3 <- function(entry.list, bucketname, cachedir) {
+  return(lapply(entry.list, function(entry) {
+                  AWSReadTemp(entry, bucketname, cachedir)
+  }))
+}
+
+
 #' Create Histogram matrices from fcs case files
 #'
 #' Directly create histograms from files separated for each tube.
 CasesToMatrix <- function(entry.list, thread.num, load.func = LoadFunction, filters = list(tube_set = c(1)),
-                          output.dir = "", name = "", sample.size = 40) {
+                          output.dir = "", name = "", sample.size = 40,
+                          s3 = T, cachedir = "s3cache", bucketname = "mll-flowdata") {
   # filter down to single property, eg the first tube
   entry.list <- entry.list[flowProc::FilterEntries(entry.list, filters)]
   message("Getting marker configuration in file set\n")
   # majority markers and exclude files without these
+  if (s3) {
+    entry.list <- PullS3(entry.list, bucketname, cachedir)
+  }
+
   result <- flowProc::FilterChannelMajority(entry.list, threshold = 0.8)
   entry.list <- result$entries
   selected.channels <- result$markers
