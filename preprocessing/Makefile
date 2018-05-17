@@ -3,8 +3,8 @@ CREATE_SOM = ./create_upsampling.R
 OUTPUT = s3://mll-flow-classification/preprocess
 INPUT = s3://mll-flowdata
 TEMP = output/cache
-SIZE = 1
-GROUP = 10
+SIZE = 5
+GROUP = 500
 
 RUN = AWSTEST
 
