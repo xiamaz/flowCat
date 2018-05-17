@@ -82,12 +82,9 @@ UpsampledListToTable <- function(upsampled.list) {
 #' Save matrix to csv file
 #'
 #' @param folder.path Folder for csv file.
-#' @param file.name Filename.
-#' @param up.matrix Data to be saved.
-SaveMatrix <- function(folder.path, file.name, up.matrix) {
-  dir.create(folder.path, showWarnings = F, recursive = T)
-  path <- file.path(folder.path, file.name)
-  write.table(up.matrix, file = path, sep = ";")
+#' @param outpath Output file path.
+SaveMatrix <- function(up.matrix, outpath) {
+  write.table(up.matrix, file = outpath, sep = ";")
 }
 
 
@@ -143,36 +140,16 @@ LoadFunctionBuilder <- function(selected, load.func) {
 }
 
 
-AWSReadTemp <- function(flow.entry, bucketname, cachedir) {
-  tmppath = file.path(cachedir, flow.entry@awspath)
-  dir.create(dirname(tmppath), recursive = T, showWarnings = F)
-  if(!file.exists(tmppath)){
-    aws.s3::save_object(flow.entry@awspath, tmppath, bucket=bucketname)
-  }
-  flow.entry@filepath <- tmppath
-  return(flow.entry)
-}
-
-PullS3 <- function(entry.list, bucketname, cachedir) {
-  return(lapply(entry.list, function(entry) {
-                  AWSReadTemp(entry, bucketname, cachedir)
-  }))
-}
-
-
 #' Create Histogram matrices from fcs case files
 #'
 #' Directly create histograms from files separated for each tube.
-CasesToMatrix <- function(entry.list, thread.num, load.func = LoadFunction, filters = list(tube_set = c(1)),
-                          output.dir = "", name = "", sample.size = 40,
-                          s3 = T, cachedir = "s3cache", bucketname = "mll-flowdata") {
+CasesToMatrix <- function(entry.list, thread.num = 1, load.func = LoadFunction,
+                          filters = list(tube_set = c(1)),
+                          output.dir = "output/preprocess", temp.dir = "output/cache",
+                          name = "", sample.size = 40) {
   # filter down to single property, eg the first tube
   entry.list <- entry.list[flowProc::FilterEntries(entry.list, filters)]
   message("Getting marker configuration in file set\n")
-  # majority markers and exclude files without these
-  if (s3) {
-    entry.list <- PullS3(entry.list, bucketname, cachedir)
-  }
 
   result <- flowProc::FilterChannelMajority(entry.list, threshold = 0.8)
   entry.list <- result$entries
@@ -188,8 +165,9 @@ CasesToMatrix <- function(entry.list, thread.num, load.func = LoadFunction, filt
   selected.samples <- LoadCases(selected.samples, sample.load.func, thread.num = thread.num)
   message("FSOM creation")
   consensus.fsom <- FsomFromEntries(selected.samples)
-  fsom.file <- file.path(output.dir, sprintf("stored_consensus_fsom_%s.rds", name))
-  saveRDS(consensus.fsom, fsom.file, compress = F)
+  fsom.name <- sprintf("stored_consensus_fsom_%s.rds", name)
+  save.fsom <- function(dat, path) {saveRDS(dat, path, compress = F)}
+  PutFile(consensus.fsom, fsom.name, output.dir, save.fsom, save.fsom, temp.dir)
 
   # upsample single cases
   upsampled.list <- lapply(entry.list, function(entry) {
