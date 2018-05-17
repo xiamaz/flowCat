@@ -167,7 +167,7 @@ CasesToMatrix <- function(entry.list, thread.num = 1, load.func = LoadFunction,
   consensus.fsom <- FsomFromEntries(selected.samples)
   fsom.name <- sprintf("stored_consensus_fsom_%s.rds", name)
   save.fsom <- function(dat, path) {saveRDS(dat, path, compress = F)}
-  PutFile(consensus.fsom, fsom.name, output.dir, save.fsom, save.fsom, temp.dir)
+  PutFile(consensus.fsom, fsom.name, output.dir, save.fsom, temp.dir)
 
   # upsample single cases
   upsampled.list <- lapply(entry.list, function(entry) {
