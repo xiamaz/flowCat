@@ -56,9 +56,6 @@ kUpsamplingGroupSize <- parsed.options$groupsize
 kMaterialSelection <- c("1", "2", "3", "4", "5", "PB", "KM")
 kGroupSelection <- c("CLL", "MBL", "normal", "Marginal", "CLLPL", "LPL", "HZL", "Mantel", "FL", "DLBCL")
 
-
-aws.signature::use_credentials(profile = "pipeline")
-
 # general filters to all files
 filters <- list(material = kMaterialSelection, group = kGroupSelection)
 
