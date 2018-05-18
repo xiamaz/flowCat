@@ -6,12 +6,14 @@ TEMP = output/cache
 SIZE = 5
 GROUP = 500
 
+PROC = 4
+
 RUN = AWSTEST
 
 .PHONY: run clean
 run:
 	Rscript $(CREATE_SOM) -o $(OUTPUT) -i $(INPUT) \
-		-s $(SIZE) -g $(GROUP) -t $(TEMP) $(RUN)
+		-s $(SIZE) -g $(GROUP) -t $(TEMP) -p $(PROC) $(RUN)
 
 clean:
 	rm -rf output/preprocess/$(NUM)_$(RUN)
