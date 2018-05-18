@@ -1,8 +1,8 @@
 # minimal bioconductor image for deploying flowSOM
+FROM bioconductor/release_core2
 
-FROM r-base
-RUN apt-get update && \
-	apt-get -y install libxml2-dev libcurl4-openssl-dev libgeos-dev libssl-dev git
+# RUN apt-get update && \
+# 	apt-get -y install libxml2-dev libcurl4-openssl-dev libgeos-dev libssl-dev git
 
 ADD docker/install_base.R /tmp/
 RUN R -f "/tmp/install_base.R"

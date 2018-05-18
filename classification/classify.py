@@ -14,6 +14,7 @@ from lib.upsampling import UpsamplingData
 from lib.classification import Classifier
 from lib.types import FilesDict
 from lib.plotting import plot_combined
+from lib.stamper import create_stamp
 # from lib import plotting
 
 # datatypes
@@ -65,7 +66,7 @@ def preprocess_data(
     iter_group = ""
     for option in data_filters:
         if option == "smallest":
-            max_size = min(data.get_group_sizes)
+            max_size = min(data.get_group_sizes())
         elif "max_size" in option:
             max_size = int(option.lstrip("max_size:"))
         elif "iter_size" in option:
@@ -95,6 +96,8 @@ def evaluate(
         method: dict,
 ) -> None:
     '''Evaluate upsampling data.'''
+
+    name = "{}_{}".format(name, create_stamp())
 
     results = []
 

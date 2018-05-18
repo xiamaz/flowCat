@@ -10,10 +10,13 @@ PROC = 4
 
 RUN = AWSTEST
 
-.PHONY: run clean
+.PHONY: run clean image
 run:
 	Rscript $(CREATE_SOM) -o $(OUTPUT) -i $(INPUT) \
 		-s $(SIZE) -g $(GROUP) -t $(TEMP) -p $(PROC) $(RUN)
 
 clean:
 	rm -rf output/preprocess/$(NUM)_$(RUN)
+
+image:
+	$(MAKE) -C docker

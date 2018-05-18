@@ -15,6 +15,7 @@ from keras.models import Sequential
 from keras.layers import Dense
 
 from lib.upsampling import DataView
+from lib.stamper import create_stamp
 from lib import plotting
 
 
@@ -35,15 +36,13 @@ class Classifier:
                  data: DataView,
                  output_path: str = "output/classification",
                  name: str = "expname"):
-        self._data = data
-        os.makedirs(output_path, exist_ok=True)
-        self.output_path = os.path.join(output_path, name)
-        if os.path.exists(self.output_path):
-            raise RuntimeError("{} already exists. Move or delete it.".format(
-                self.output_path))
-        os.makedirs(self.output_path)
+        # concatenate experiment name with a current timestamp
+        self.name = name
 
-        self.experiment_name = name
+        self._data = data
+
+        self.output_path = os.path.join(output_path, self.name)
+        os.makedirs(self.output_path, exist_ok=True)
 
         # log past experiment information in a dict
         self.past_experiments = []
@@ -60,7 +59,7 @@ class Classifier:
         '''Output all past run validations into a json file for later
         inference.'''
         dumpdata = {
-            "experiment_name": self.experiment_name,
+            "experiment_name": self.name,
             "date": str(datetime.now()),
             "note": note,
             "command": cmd,
@@ -68,7 +67,7 @@ class Classifier:
             "experiments": self.past_experiments
         }
         dumppath = os.path.join(
-            self.output_path, self.experiment_name+"_info.json")
+            self.output_path, self.name+"_info.json")
         json.dump(dumpdata, open(dumppath, "w"), indent=4)
 
     def k_fold_validation(
@@ -215,7 +214,7 @@ class Classifier:
         '''Create confusion matrix and text statistics and save them to the
         output folder.
         '''
-        tagged_name = "{}_{}".format(self.experiment_name, name_tag)
+        tagged_name = "{}_{}".format(self.name, name_tag)
 
         # save confusion matrix
         if confusion_data is not None:
@@ -263,7 +262,7 @@ class Classifier:
         model.compile(loss='binary_crossentropy', optimizer='adadelta',
                       metrics=['acc'])
         history = model.fit(
-            x_matrix, y_matrix, epochs=100, batch_size=16,
+            x_matrix, y_matrix, epochs=200, batch_size=16,
             validation_split=val_split
         )
         return model, history
