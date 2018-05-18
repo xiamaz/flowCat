@@ -1,8 +1,0 @@
-* implementation of pre-gating using flowsom clusters
-* comprehensive analysis of flowdensity
-
-Cloud adaptations
-
-usage of case json file to create s4 objects for classification
-
-pull interesting files from aws s3
