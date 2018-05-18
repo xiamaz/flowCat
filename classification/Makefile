@@ -1,5 +1,9 @@
-NAME = containern
+CONTAINER_NAME = flow-classification
+REGISTRY = 463789428463.dkr.ecr.eu-central-1.amazonaws.com
+DOCKERFILE = docker/Dockerfile
 
+# Program settings
+NAME = containern
 NOTE = Cloud deployment testing
 
 BUCKET = mll-flow-classification
@@ -14,13 +18,10 @@ FILTERS = smallest
 
 BIN = python3 classify.py
 
-
-.PHONY: all
-all: upload
+.PHONY: all run clean image image-run image-upload
 
 upload: run
 	aws s3 cp --recursive $(OUTPUT) s3://$(BUCKET)/classification
-
 run: download
 	# always use newest results
 	$(eval INPUT := $(INDATA)/$(shell ls $(INDATA) | sort -r | head -n 1))
@@ -29,5 +30,12 @@ run: download
 download:
 	aws s3 cp --recursive --exclude "*" --include "*.csv" s3://$(BUCKET) $(DATA)
 
-image:
-	$(MAKE) -C docker
+image: $(DOCKERFILE)
+	@sudo docker build -f $(DOCKERFILE) -t $(CONTAINER_NAME) ../
+
+image-run: image
+	@sudo docker run -it --rm $(CONTAINER_NAME)
+
+image-upload: image
+	docker tag $(CONTAINER_NAME):latest $(REGISTRY)/$(CONTAINER_NAME):latest
+	docker push $(REGISTRY)/$(CONTAINER_NAME):latest
