@@ -1,5 +1,7 @@
 # minimal bioconductor image for deploying flowSOM
-FROM floydhub/dl-docker:cpu
+FROM python:3.6
+
+RUN pip install awscli && apt-get update && apt-get install git
 
 # adding user repositories
 ADD classification /app

@@ -24,12 +24,4 @@ run:
 clean:
 	@rm -rf output/preprocess/$(NUM)_$(RUN)
 
-image-run: image
-	@sudo docker run -it --env-file .env --rm $(CONTAINER_NAME)
-
-image-upload: image
-	@docker tag flow-preprocessing:latest $(REGISTRY)/$(CONTAINER_NAME):latest
-	@docker push $(REGISTRY)/$(CONTAINER_NAME):latest
-
-image: $(DOCKERFILE)
-	@sudo docker build -f $(DOCKERFILE) -t $(CONTAINER_NAME) ../
+include ../docker.mk

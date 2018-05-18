@@ -30,12 +30,4 @@ run: download
 download:
 	aws s3 cp --recursive --exclude "*" --include "*.csv" s3://$(BUCKET) $(DATA)
 
-image: $(DOCKERFILE)
-	@sudo docker build -f $(DOCKERFILE) -t $(CONTAINER_NAME) ../
-
-image-run: image
-	@sudo docker run -it --rm $(CONTAINER_NAME)
-
-image-upload: image
-	docker tag $(CONTAINER_NAME):latest $(REGISTRY)/$(CONTAINER_NAME):latest
-	docker push $(REGISTRY)/$(CONTAINER_NAME):latest
+include ../docker.mk
