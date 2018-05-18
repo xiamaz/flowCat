@@ -65,7 +65,7 @@ group.files <- ReadDatasetJson(info.path, kInputPath, kTempPath)
 
 # set high cutoff to reduce runtime for large cohorts
 group.files <- lapply(group.files, function(group) {
-                        group <- sample(group, min(length(group), 30))
+                        group <- sample(group, min(length(group), kUpsamplingGroupSize))
                         # flatten list
                         group <- do.call(c, group)
                         return(group)
@@ -76,8 +76,10 @@ all.files <- do.call(c, group.files)
 # specify and create the output path containing plots and output data
 kRunNumber <- strftime(Sys.time(), "%Y%m%d_%H%M")
 kOutputPath <- file.path(parsed.options$output, sprintf("%s_%s", kRunName, kRunNumber))
+
 CreateOutputDirectory(kTextNote, kOutputPath, kTempPath)
 
+# create som csvs
 tube.matrix.1 <- CasesToMatrix(all.files, thread.num = kThreads, filters = list(tube_set = c(1)),
                                output.dir = kOutputPath, name = "tube1",
                                temp.dir = kTempPath, sample.size = kThresholdGroupSize)
