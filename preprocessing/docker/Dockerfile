@@ -8,6 +8,7 @@ ADD preprocessing/docker/install_base.R /tmp/
 RUN R -f "/tmp/install_base.R"
 
 RUN git clone https://github.com/xiamaz/flowProc.git /tmp/flowProc
+RUN cd /tmp/flowProc; git pull
 
 ADD preprocessing/docker/install_extra.R /tmp/
 RUN R -f "/tmp/install_extra.R"
