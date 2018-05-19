@@ -14,6 +14,7 @@ ADD preprocessing/docker/install_extra.R /tmp/
 RUN R -f "/tmp/install_extra.R"
 
 # adding user repositories
+ADD docker.mk /
 ADD preprocessing /app
 WORKDIR "/app/"
 
