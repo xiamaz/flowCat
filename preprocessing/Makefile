@@ -21,7 +21,12 @@ RUN = AWSTEST
 run:
 	@Rscript $(CREATE_SOM) -o $(OUTPUT) -i $(INPUT) \
 		-s $(SIZE) -g $(GROUP) -t $(TEMP) -p $(PROC) $(RUN)
+
 clean:
 	@rm -rf output/preprocess/$(NUM)_$(RUN)
+
+test:
+	@Rscript $(CREATE_SOM) -o $(OUTPUT) -i $(INPUT) \
+		-s 1 -g 10 -t $(TEMP) -p $(PROC) testrun
 
 include ../docker.mk

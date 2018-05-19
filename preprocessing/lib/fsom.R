@@ -99,19 +99,6 @@ SampleGroups <- function(groups.list, sample.size = 20) {
 }
 
 
-#' Randomly select samples from each group for SOM
-#'
-#' The consensus fsom is used for upsampling of single cases.
-#' Expected input form is a list of lists.
-#'
-#' @examples
-#' som <- CreateConsensusFsom(list(normal = normal.joined, cll = cll.joined))
-CreateConsensusFsom <- function(groups.list, sample.size = 20) {
-  entry.list <- SampleGroups(groups.list)
-  som <- FsomFromEntries(entry.list)
-  return(som)
-}
-
 CreateLapply <- function(thread.num) {
   if (thread.num > 1) {
     lfunc <- function(x, y) {
