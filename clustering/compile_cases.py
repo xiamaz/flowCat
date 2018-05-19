@@ -31,7 +31,7 @@ def get_case_data(path, n=5):
 
 def get_case(path, names):
     _, data = fcsparser.parse(os.path.join(INPATH, path), data_set=0, encoding="latin-1")
-    return data[names]
+    return data[list(names)]
 
 def load_test(cases, names):
     sel = random.sample([cc for c in cases.values() for cc in c], 1)[0]

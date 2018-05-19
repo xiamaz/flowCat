@@ -104,4 +104,5 @@ if __name__ == "__main__":
 
         testdata = load_test(cases, names)
         test = tf.convert_to_tensor(testdata)
-        som.predict(test)
+        res = som.predict(test)
+        print(res)
