@@ -3,7 +3,7 @@ BUCKET = mll-flowdata
 TUBE = 1
 
 test: cases
-	./test.py $<
+	python3 example.py input.lst
 
 cases: input.lst
 	cat $< | xargs -i aws s3 cp s3://$(BUCKET)/{} $@/

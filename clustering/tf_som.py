@@ -392,8 +392,6 @@ class SelfOrganizingMap:
         self._trained = True
         return global_step
 
-    def transform(self, data):
-
     @property
     def output_weights(self):
         """ :return: The weights of the trained SOM as a NumPy array, or `None` if the SOM hasn't been trained """
@@ -401,3 +399,18 @@ class SelfOrganizingMap:
             return np.array(self._sess.run(self._weights))
         else:
             return None
+
+    def predict(self, data):
+        with tf.name_scope('Prediction'):
+            # Distance between weights and the input vector
+            # Note we are reducing along 2nd axis so we end up with a tensor of [batch_size, num_neurons]
+            # corresponding to the distance between a particular input and each neuron in the map
+            # Also note we are getting the squared distance because there's no point calling sqrt or tf.norm
+            # if we're just doing a strict comparison
+            squared_distance = tf.reduce_sum(
+                tf.pow(tf.subtract(tf.expand_dims(self._weights, axis=0),
+                                   tf.expand_dims(data, axis=1)), 2), 2)
+
+            # Get the index of the minimum distance for each input item, shape will be [batch_size],
+            bmu_indices = tf.argmin(squared_distance, axis=1)
+        return bmu_indices

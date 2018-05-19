@@ -8,7 +8,7 @@ from sklearn.preprocessing import FunctionTransformer
 import logging
 from scipy.spatial import distance_matrix
 import fcsparser
-from compile_cases import get_case_data
+from compile_cases import get_case_data, load_test
 
 '''
 An example usage of the TensorFlow SOM. Loads a data set, trains a SOM, and displays the u-matrix.
@@ -64,13 +64,14 @@ if __name__ == "__main__":
             allow_soft_placement=True,
             log_device_placement=False))
 
-        data = get_case_data(sys.argv[1])
+        data, names, cases = get_case_data(sys.argv[1])
         num_inputs, dims = data.shape
         # log_transformer = FunctionTransformer(transform_non_linear)
         scaler = StandardScaler()
         trans_data = transform_non_linear(data)
         input_data = scaler.fit_transform(trans_data)
-        batch_size = 1024
+        # batch_size = 1024
+        batch_size = 2048
 
         # Build the TensorFlow dataset pipeline per the standard tutorial.
         dataset = tf.data.Dataset.from_tensor_slices(input_data.astype(np.float32))
@@ -94,10 +95,13 @@ if __name__ == "__main__":
         # If you want Tensorboard support just make a new SummaryWriter and pass it to this method
         som.train(num_inputs=num_inputs)
 
-        weights = som.output_weights
-        print(weights)
+        # weights = som.output_weights
 
-        umatrix = get_umatrix(weights, m, n)
-        fig = plt.figure()
-        plt.imshow(umatrix, origin='lower')
-        plt.show(block=True)
+        # umatrix = get_umatrix(weights, m, n)
+        # fig = plt.figure()
+        # plt.imshow(umatrix, origin='lower')
+        # plt.show(block=True)
+
+        testdata = load_test(cases, names)
+        test = tf.convert_to_tensor(testdata)
+        som.predict(test)
