@@ -54,6 +54,13 @@ def transform_non_linear(X):
     return X
 
 
+def transform_data(X):
+    # log_transformer = FunctionTransformer(transform_non_linear)
+    X = transform_non_linear(X)
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+    return X
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -66,10 +73,7 @@ if __name__ == "__main__":
 
         data, names, cases = get_case_data(sys.argv[1])
         num_inputs, dims = data.shape
-        # log_transformer = FunctionTransformer(transform_non_linear)
-        scaler = StandardScaler()
-        trans_data = transform_non_linear(data)
-        input_data = scaler.fit_transform(trans_data)
+        input_data = transform_data(data)
         # batch_size = 1024
         batch_size = 2048
 
@@ -103,6 +107,6 @@ if __name__ == "__main__":
         # plt.show(block=True)
 
         testdata = load_test(cases, names)
-        test = tf.convert_to_tensor(testdata)
-        res = som.predict(test)
-        print(res)
+        testdata = transform_data(testdata)
+        results = som.transform(testdata)
+        print(results)

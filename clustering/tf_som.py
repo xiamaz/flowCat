@@ -39,7 +39,7 @@ class SelfOrganizingMap:
     2-D rectangular grid planar Self-Organizing Map with Gaussian neighbourhood function
     """
 
-    def __init__(self, m, n, dim, max_epochs=100, initial_radius=None, batch_size=128, initial_learning_rate=0.1,
+    def __init__(self, m, n, dim, max_epochs=100, initial_radius=None, batch_size=2048, initial_learning_rate=0.1,
                  graph=None, std_coeff=0.5, model_name='Self-Organizing-Map', softmax_activity=False, gpus=0,
                  output_sensitivity=-1.0, input_tensor=None, session=None, checkpoint_dir=None, restore_path=None):
         """
@@ -401,6 +401,10 @@ class SelfOrganizingMap:
             return None
 
     def predict(self, data):
+        """Predict cluster center for each event in the given data.
+        :param data: Input data in tensorflow object.
+        :return: List of cluster centers for each event.
+        """
         with tf.name_scope('Prediction'):
             # Distance between weights and the input vector
             # Note we are reducing along 2nd axis so we end up with a tensor of [batch_size, num_neurons]
@@ -414,3 +418,14 @@ class SelfOrganizingMap:
             # Get the index of the minimum distance for each input item, shape will be [batch_size],
             bmu_indices = tf.argmin(squared_distance, axis=1)
         return bmu_indices
+
+    def transform(self, data):
+        """Transform data of individual events to histogram of events per cluster center.
+        :param data: Pandas dataframe or np.matrix
+        :return: Dataframe with one row containing cluster histograms.
+        """
+        tensor = tf.convert_to_tensor(data, dtype=tf.float32)
+        cluster_assignments = self.predict(tensor)
+        one_hot_assignments = tf.one_hot(cluster_assignments, self._m * self._n)
+        cluster_numbers = tf.reduce_sum(one_hot_assignments, 0)
+        return self._sess.run(cluster_numbers)
