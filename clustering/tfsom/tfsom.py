@@ -424,8 +424,9 @@ class SelfOrganizingMap:
         :param data: Pandas dataframe or np.matrix
         :return: Dataframe with one row containing cluster histograms.
         """
-        tensor = tf.convert_to_tensor(data, dtype=tf.float32)
-        cluster_assignments = self.predict(tensor)
-        one_hot_assignments = tf.one_hot(cluster_assignments, self._m * self._n)
-        cluster_numbers = tf.reduce_sum(one_hot_assignments, 0)
+        with self._graph.as_default():
+            tensor = tf.convert_to_tensor(data, dtype=tf.float32)
+            cluster_assignments = self.predict(tensor)
+            one_hot_assignments = tf.one_hot(cluster_assignments, self._m * self._n)
+            cluster_numbers = tf.reduce_sum(one_hot_assignments, 0)
         return self._sess.run(cluster_numbers)

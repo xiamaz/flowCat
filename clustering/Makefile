@@ -1,15 +1,11 @@
 BUCKET = mll-flowdata
 
-TUBE = 1
+CACHE = /data/flow
 
-test: cases
-	python3 example.py input.lst
+all: tube1.csv tube2.csv
 
-cases: input.lst
-	cat $< | xargs -i aws s3 cp s3://$(BUCKET)/{} $@/
-
-input.lst: case_info.json
-	./select_fcs.py $(TUBE)
+%.csv: case_info.json
+	python3 clustering.py $< $(CACHE)
 
 case_info.json:
 	aws s3 cp s3://$(BUCKET)/$@ $@
