@@ -12,7 +12,6 @@ output
 __pycache__
 *.png
 *.jpg
-*.txt
 *.pdf
 archive/*esults
 *.LMD

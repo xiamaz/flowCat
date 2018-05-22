@@ -1,0 +1,5 @@
+tensorflow
+git+https://github.com/xiamaz/fcsparser.git
+matplotlib
+scikit-learn
+scipy
