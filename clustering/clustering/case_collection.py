@@ -11,21 +11,18 @@ import pandas as pd
 
 import fcsparser
 
-INPATH = "cases"
-
-S3 = boto3.resource("s3")
-BUCKET = S3.Bucket("mll-flowdata")
-
 
 class CaseCollection:
 
-    def __init__(self, infopath, tmpdir="tmp"):
+    def __init__(self, infopath, bucketname, tmpdir="tmp"):
         with open(infopath) as ifile:
             self._data = json.load(ifile)
 
         self.tubes = self._unique_tubes()
         self.markers = self._majority_markers()
         self.tmpdir = tmpdir
+        self.s3 = boto3.resource("s3")
+        self.bucket = self.s3.Bucket(bucketname)
 
     def _unique_tubes(self):
         tubes = [
@@ -76,7 +73,7 @@ class CaseCollection:
 
         if not os.path.exists(destpath):
             os.makedirs(os.path.split(destpath)[0], exist_ok=True)
-            BUCKET.download_file(key, destpath)
+            self.bucket.download_file(key, destpath)
 
         _, data = fcsparser.parse(destpath, data_set=0, encoding="latin-1")
         try:
@@ -95,8 +92,25 @@ class CaseCollection:
             for cases in data.values()
             for case in random.sample(cases, min(num, len(cases)))
         ]
+
         train_fcs = [self._load_tube(s, tube) for s in selected]
         train_data = pd.concat([t for t in train_fcs if t is not None])
+
+        return train_data
+
+    def get_train_from_case_labels(self, labels, tube=1):
+        data = self._data
+
+        selected = [
+            case
+            for cases in data.values()
+            for case in cases
+            if case["id"] in labels
+        ]
+
+        train_fcs = [self._load_tube(s, tube) for s in selected]
+        train_data = pd.concat([t for t in train_fcs if t is not None])
+
         return train_data
 
     def get_all_data(self, num=None, groups=None, tube=1):
@@ -109,30 +123,3 @@ class CaseCollection:
                 fcsdata = self._load_tube(case, tube)
                 if fcsdata is not None:
                     yield case["id"], cohort, fcsdata
-
-
-def get_case_data(path, n=5):
-    inputs = {}
-    with open(path) as inputfile:
-        for f in inputfile:
-            cohort, filename = os.path.split(f.strip())
-            inputs.setdefault(cohort, []).append(filename)
-
-    selected = [os.path.join(INPATH, f) for v in inputs.values() for f in random.sample(v, n) ]
-
-    input_fcs = [fcsparser.parse(f, data_set=0, encoding="latin-1")
-                 for f in selected]
-
-    # get names present in all lmd files
-    names = reduce(lambda x, y: set(x) & set(y), [d.columns for _, d in input_fcs])
-    data = pd.concat([
-        f[list(names)] for _, f in input_fcs
-    ])
-    return data, names, inputs
-
-
-if __name__ == "__main__":
-    cases = CaseCollection("case_info.json")
-
-    for label, group, data in cases.get_all_data(10):
-        print(label, group)

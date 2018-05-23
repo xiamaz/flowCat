@@ -1,19 +1,13 @@
-import sys
 import pandas as pd
 import numpy as np
 import tensorflow as tf
-from tfsom.tfsom import SelfOrganizingMap
+
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import FunctionTransformer
-import logging
-import fcsparser
 
-from compile_cases import CaseCollection
-
-
-logging.basicConfig(level=logging.WARNING)
+from .tfsom.tfsom import SelfOrganizingMap
+from .case_collection import CaseCollection
 
 
 class FCSLogTransform(BaseEstimator, TransformerMixin):
@@ -46,7 +40,7 @@ class ClusteringTransform(BaseEstimator, TransformerMixin):
             num_inputs, dims = X.shape
 
             dataset = dataset.repeat()
-            dataset = dataset.batch(batch_size)
+            dataset = dataset.batch(self.batch_size)
             iterator = dataset.make_one_shot_iterator()
             next_element = iterator.get_next()
 
@@ -70,34 +64,12 @@ class ClusteringTransform(BaseEstimator, TransformerMixin):
         return result / np.sum(result)
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-
-    cases = CaseCollection(sys.argv[1], sys.argv[2])
-
-    batch_size = 2048
+def create_pipeline(m=10, n=10, batch_size=4096):
     pipe = Pipeline(
         steps=[
             ("log", FCSLogTransform()),
             ("scale", StandardScaler()),
-            ("clust", ClusteringTransform(10, 10, batch_size)),
+            ("clust", ClusteringTransform(m, n, batch_size)),
         ]
     )
-
-    for tube in cases.tubes:
-        data = cases.get_train_data(num=5, tube=tube)
-        pipe.fit(data)
-
-        results = []
-        labels = []
-        groups = []
-        for label, group, testdata in cases.get_all_data(num=300, tube=tube):
-            print("Upsampling {}".format(label))
-            results.append(pipe.transform(testdata))
-            labels.append(label)
-            groups.append(group)
-        df_all = pd.DataFrame(np.matrix(results))
-        df_all["label"] = labels
-        df_all["group"] = groups
-        outpath = "tube{}.csv".format(tube)
-        df_all.to_csv(outpath, sep=";")
+    return pipe

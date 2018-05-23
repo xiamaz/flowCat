@@ -1,11 +1,21 @@
+NAME = flow-clustering
+
 BUCKET = mll-flowdata
 
-CACHE = /data/flow
+TEMP = /data/flow
+OUTPUT = s3://mll-flow-classification/output
 
-all: tube1.csv tube2.csv
+CASEINFO = s3://mll-flowdata/case_info.json
 
-%.csv: case_info.json
-	python3 clustering.py $< $(CACHE)
+REFCASES = ./selected_hashed_ids.json
 
-case_info.json:
-	aws s3 cp s3://$(BUCKET)/$@ $@
+BIN = python3 -m clustering
+
+run:
+	$(BIN) --temp $(TEMP) --input $(CASEINFO) --output $(OUTPUT) --bucketname $(BUCKET)
+
+run-selected:
+	$(BIN) --temp $(TEMP) --input $(CASEINFO) --output $(OUTPUT)_selected --bucketname $(BUCKET) --refcases $(REFCASES)
+
+image:
+	docker build -t $(NAME) .
