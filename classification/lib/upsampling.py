@@ -140,6 +140,7 @@ class UpsamplingData:
     '''Data from upsampling in pandas dataframe form.'''
 
     def __init__(self, dataframe: pd.DataFrame):
+        print(dataframe)
         self._data = dataframe
 
     @classmethod
