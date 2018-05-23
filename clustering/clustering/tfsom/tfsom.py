@@ -400,7 +400,7 @@ class SelfOrganizingMap:
         else:
             return None
 
-    def predict(self, data):
+    def _predict(self, data):
         """Predict cluster center for each event in the given data.
         :param data: Input data in tensorflow object.
         :return: List of cluster centers for each event.
@@ -419,6 +419,16 @@ class SelfOrganizingMap:
             bmu_indices = tf.argmin(squared_distance, axis=1)
         return bmu_indices
 
+    def predict(self, data):
+        """Predict cluster assignments for each event.
+        :param data: Input data in the tensorflow object.
+        :return: Array with assignments for each row.
+        """
+        with self._graph.as_default():
+            tensor = tf.convert_to_tensor(data, dtype=tf.float32)
+            cluster_assignments = self._predict(tensor)
+        return self._sess.run(cluster_assignments)
+
     def transform(self, data):
         """Transform data of individual events to histogram of events per cluster center.
         :param data: Pandas dataframe or np.matrix
@@ -426,7 +436,7 @@ class SelfOrganizingMap:
         """
         with self._graph.as_default():
             tensor = tf.convert_to_tensor(data, dtype=tf.float32)
-            cluster_assignments = self.predict(tensor)
+            cluster_assignments = self._predict(tensor)
             one_hot_assignments = tf.one_hot(cluster_assignments, self._m * self._n)
             cluster_numbers = tf.reduce_sum(one_hot_assignments, 0)
         return self._sess.run(cluster_numbers)

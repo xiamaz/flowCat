@@ -29,6 +29,8 @@ class ClusteringTransform(BaseEstimator, TransformerMixin):
         self.m = m
         self.n = n
         self.batch_size = batch_size
+        self.graph = None
+        self.model = None
 
     def fit(self, X, *_):
         # Build the TensorFlow dataset pipeline per the standard tutorial.
@@ -50,24 +52,28 @@ class ClusteringTransform(BaseEstimator, TransformerMixin):
                     log_device_placement=False
                 )
             )
-            self._model = SelfOrganizingMap(
+            self.model = SelfOrganizingMap(
                 m=self.m, n=self.n, dim=dims, max_epochs=10, gpus=1,
                 session=self.session, graph=self.graph, input_tensor=next_element,
                 batch_size=self.batch_size, initial_learning_rate=0.05
             )
             init_op = tf.global_variables_initializer()
             self.session.run([init_op])
-            self._model.train(num_inputs=num_inputs)
+            self.model.train(num_inputs=num_inputs)
 
     def transform(self, X, *_):
-        result = self._model.transform(X)
+        result = self.model.transform(X)
         return result / np.sum(result)
+
+    def predict(self, X, *_):
+        result = self.model.predict(X)
+        return result
 
 
 def create_pipeline(m=10, n=10, batch_size=4096):
     pipe = Pipeline(
         steps=[
-            ("log", FCSLogTransform()),
+            # ("log", FCSLogTransform()),
             ("scale", StandardScaler()),
             ("clust", ClusteringTransform(m, n, batch_size)),
         ]
