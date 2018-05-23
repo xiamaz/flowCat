@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import sys
 import os
 import json
@@ -70,7 +69,6 @@ class CaseCollection:
             logging.warning(
                 "%s has %d entries for tube %d", case["id"], len(key), tube
             )
-        if not len(key):
             return None
 
         key = key[-1]
