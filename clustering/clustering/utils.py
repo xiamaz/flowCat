@@ -24,7 +24,7 @@ def upload_s3(dest, writefun, temp):
     tempdest = pathlib.PurePath(temp, filepath)
     os.makedirs(str(tempdest.parent), exist_ok=True)
     writefun(str(tempdest))
-    boto3.client("s3").upload_file(tempdest, s3url.netloc, filepath)
+    boto3.client("s3").upload_file(str(tempdest), s3url.netloc, filepath)
 
 def get_file_path(path, temp=None):
     """Resolve and download remote files to cache.
