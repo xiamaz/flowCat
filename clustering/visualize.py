@@ -12,13 +12,12 @@ from sklearn import cluster
 from sklearn.pipeline import Pipeline
 
 import fcsparser
-from FlowCytometryTools import graph
-from FlowCytometryTools.core import transforms
 
 from clustering.clustering import create_pipeline, FCSLogTransform
+from clustering.case_collection import CaseCollection
 
 
-PLOTDIR = "plots"
+PLOTDIR = "plots_test"
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -55,7 +54,7 @@ def print_data(data):
 def create_cluster_pipe():
     return Pipeline(steps=[
         # ("scale", StandardScaler()),
-        ("clust", cluster.DBSCAN(eps=200, min_samples=500)),
+        ("clust", cluster.DBSCAN(eps=30, min_samples=200, metric="manhattan")),
     ])
 
 
@@ -75,7 +74,33 @@ def plot_data(path, data, predictions, channels):
     fig.savefig(path)
 
 
-def process_fcs(filepath, label, plotdir, channels):
+def get_node_position(data, res, channels, position):
+    (c1, c2) = channels
+    (p1, p2) = position
+    x2 = 1023 if p1 == "+" else 0
+    y2 = 1023 if p2 == "+" else 0
+    closest = None
+    cdist = None
+    for i in np.unique(res):
+        if i == -1:
+            continue
+        means = data.loc[res == i, channels].mean(axis=0)
+        print(i, means)
+        dist = math.sqrt((x2-means[c1])**2+(y2-means[c2])**2)
+        print("Distance :", dist, "Old :", cdist)
+        if closest is None or cdist > dist:
+            closest = i
+            cdist = dist
+    print("Selected", closest)
+    sel_res = np.zeros(res.shape)
+
+    sel_res[res == closest] = 1
+    print(sel_res)
+    return sel_res
+
+def process_fcs(filepath, label, plotdir, channels, pos):
+    print("Processing", label)
+    os.makedirs(plotdir, exist_ok=True)
     view_channels = list(combinations(channels, 2))
 
     meta, data = fcsparser.parse(filepath, encoding="latin-1")
@@ -84,7 +109,9 @@ def process_fcs(filepath, label, plotdir, channels):
     pipe = create_cluster_pipe()
 
     res = pipe.fit_predict(data[channels].values)
-    plot_data(os.path.join(plotdir, label+"_kmeans"), data, res, view_channels)
+    sel_res = get_node_position(data, res, channels, pos)
+    plot_data(os.path.join(plotdir, label+"_kmeans"), data, sel_res, view_channels)
+    print("==========================")
 
     # pipe = create_pipeline()
     # pipe.fit(data[channels])
@@ -98,29 +125,24 @@ def process_fcs(filepath, label, plotdir, channels):
     # data["predictions"] = predictions
 
 
-    # os.makedirs(plotdir, exist_ok=True)
     # plot_data(os.path.join(plotdir, label), data, view_channels)
 
     # plot_data(os.path.join(plotdir, label+"_nodes"), df_weights, view_channels)
 
 
+# coll = CaseCollection("case_info.json", "mll-flowdata", tmpdir="tests/tube2")
 
-input_file = "data/18-000002-PB CLL 9F 01 N17 001.LMD"
+# for label, group, fcsdata in coll.get_all_data(num=1, tube=2):
+#     print(label, group)
 
-# sel_chans = ["SS INT LIN", "CD45-KrOr", "FS INT LIN", "CD19-APCA750"]
 sel_chans = ["CD45-KrOr", "SS INT LIN"]
+position = ["+", "-"]
 
-channels = [
-    ("SS INT LIN", "FS INT LIN"),
-    ("CD45-KrOr", "SS INT LIN"),
-    ("CD19-APCA750", "SS INT LIN"),
-]
-# channels = [
-#     ("CD45-KrOr"),
-#     ("SS INT LIN"),
-# ]
-
-process_fcs(input_file, "simple_test_ss_cd45", PLOTDIR, sel_chans)
+indir = "tests/tube1"
+for cohort in os.listdir(indir):
+    for i, filename in enumerate(os.listdir(os.path.join(indir, cohort))):
+        filepath = os.path.join(indir, cohort, filename)
+        process_fcs(filepath, "{}_{}".format(cohort, i), PLOTDIR, sel_chans, position)
 
 # data = FCSLogTransform().transform(data)
 # def logTransform(data):
