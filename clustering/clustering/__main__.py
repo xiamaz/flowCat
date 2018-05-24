@@ -56,7 +56,7 @@ for tube in tubes:
     results = []
     labels = []
     groups = []
-    for label, group, testdata in cases.get_all_data(num=2000, tube=tube):
+    for label, group, testdata in cases.get_all_data(num=300, tube=tube):
         print("Upsampling {}".format(label))
         results.append(pipe.transform(testdata))
         labels.append(label)

@@ -3,7 +3,7 @@ NAME = flow-clustering
 BUCKET = mll-flowdata
 
 TEMP = /data/flow
-OUTPUT = s3://mll-flow-classification/output
+OUTPUT = s3://mll-flow-classification/clustering/output
 
 CASEINFO = s3://mll-flowdata/case_info.json
 
