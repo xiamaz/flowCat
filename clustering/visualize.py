@@ -8,6 +8,8 @@ import pandas as pd
 import matplotlib
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+from sklearn import cluster
+from sklearn.pipeline import Pipeline
 
 import fcsparser
 from FlowCytometryTools import graph
@@ -50,49 +52,63 @@ def print_data(data):
     print(data)
 
 
-def plot_data(path, data, channels, predictions=None):
+def create_cluster_pipe():
+    return Pipeline(steps=[
+        # ("scale", StandardScaler()),
+        ("clust", cluster.DBSCAN(eps=200, min_samples=500)),
+    ])
+
+
+def plot_data(path, data, predictions, channels):
     fig = Figure(dpi=300, figsize=(10,10))
     FigureCanvas(fig)
     # autosize grid
     r = math.ceil(math.sqrt(len(channels) + 1))
     for i, (xchannel, ychannel) in enumerate(channels):
         ax = fig.add_subplot(r, r, i+1)
-        ax.scatter(data[xchannel], data[ychannel], s=1, c=data["predictions"], marker=".")
+        ax.scatter(data[xchannel], data[ychannel], s=1, c=predictions, marker=".")
         ax.set_xlabel(xchannel)
         ax.set_ylabel(ychannel)
-    cax = fig.add_subplot(r, r, len(channels)+1)
-    colorbar = matplotlib.colorbar.ColorbarBase(cax, orientation="horizontal")
+    # cax = fig.add_subplot(r, r, len(channels)+1)
+    # colorbar = matplotlib.colorbar.ColorbarBase(cax, orientation="horizontal")
     fig.tight_layout()
     fig.savefig(path)
 
 
 def process_fcs(filepath, label, plotdir, channels):
+    view_channels = list(combinations(channels, 2))
+
     meta, data = fcsparser.parse(filepath, encoding="latin-1")
     channel_info = print_meta(meta)
 
-    pipe = create_pipeline()
-    pipe.fit(data[channels])
+    pipe = create_cluster_pipe()
 
-    weights = pipe.named_steps["clust"].model.output_weights
-    df_weights = pd.DataFrame(weights)
-    df_weights.columns = sel_chans
-    df_weights["predictions"] = df_weights.index
+    res = pipe.fit_predict(data[channels].values)
+    plot_data(os.path.join(plotdir, label+"_kmeans"), data, res, view_channels)
 
-    predictions = pipe.predict(data[sel_chans])
-    data["predictions"] = predictions
+    # pipe = create_pipeline()
+    # pipe.fit(data[channels])
 
-    view_channels = list(combinations(channels, 2))
+    # weights = pipe.named_steps["clust"].model.output_weights
+    # df_weights = pd.DataFrame(weights)
+    # df_weights.columns = sel_chans
+    # df_weights["predictions"] = df_weights.index
 
-    os.makedirs(plotdir, exist_ok=True)
-    plot_data(os.path.join(plotdir, label), data, view_channels)
+    # predictions = pipe.predict(data[sel_chans])
+    # data["predictions"] = predictions
 
-    plot_data(os.path.join(plotdir, label+"_nodes"), df_weights, view_channels)
+
+    # os.makedirs(plotdir, exist_ok=True)
+    # plot_data(os.path.join(plotdir, label), data, view_channels)
+
+    # plot_data(os.path.join(plotdir, label+"_nodes"), df_weights, view_channels)
+
 
 
 input_file = "data/18-000002-PB CLL 9F 01 N17 001.LMD"
 
 # sel_chans = ["SS INT LIN", "CD45-KrOr", "FS INT LIN", "CD19-APCA750"]
-sel_chans = ["SS INT LIN", "CD45-KrOr"]
+sel_chans = ["CD45-KrOr", "SS INT LIN"]
 
 channels = [
     ("SS INT LIN", "FS INT LIN"),
