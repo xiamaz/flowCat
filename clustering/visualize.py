@@ -1,13 +1,22 @@
 import math
 import logging
+from itertools import combinations
+import os
 import re
 import numpy as np
 import pandas as pd
 import matplotlib
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+
 import fcsparser
+from FlowCytometryTools import graph
+from FlowCytometryTools.core import transforms
+
 from clustering.clustering import create_pipeline, FCSLogTransform
+
+
+PLOTDIR = "plots"
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -41,14 +50,14 @@ def print_data(data):
     print(data)
 
 
-def plot_data(path, data, channels):
-    fig = Figure()
+def plot_data(path, data, channels, predictions=None):
+    fig = Figure(dpi=300, figsize=(10,10))
     FigureCanvas(fig)
     # autosize grid
     r = math.ceil(math.sqrt(len(channels) + 1))
     for i, (xchannel, ychannel) in enumerate(channels):
         ax = fig.add_subplot(r, r, i+1)
-        ax.scatter(data[xchannel], data[ychannel], s=1, c=data["predictions"])
+        ax.scatter(data[xchannel], data[ychannel], s=1, c=data["predictions"], marker=".")
         ax.set_xlabel(xchannel)
         ax.set_ylabel(ychannel)
     cax = fig.add_subplot(r, r, len(channels)+1)
@@ -57,13 +66,45 @@ def plot_data(path, data, channels):
     fig.savefig(path)
 
 
+def process_fcs(filepath, label, plotdir, channels):
+    meta, data = fcsparser.parse(filepath, encoding="latin-1")
+    channel_info = print_meta(meta)
+
+    pipe = create_pipeline()
+    pipe.fit(data[channels])
+
+    weights = pipe.named_steps["clust"].model.output_weights
+    df_weights = pd.DataFrame(weights)
+    df_weights.columns = sel_chans
+    df_weights["predictions"] = df_weights.index
+
+    predictions = pipe.predict(data[sel_chans])
+    data["predictions"] = predictions
+
+    view_channels = list(combinations(channels, 2))
+
+    os.makedirs(plotdir, exist_ok=True)
+    plot_data(os.path.join(plotdir, label), data, view_channels)
+
+    plot_data(os.path.join(plotdir, label+"_nodes"), df_weights, view_channels)
+
+
 input_file = "data/18-000002-PB CLL 9F 01 N17 001.LMD"
 
-meta, data = fcsparser.parse(input_file, encoding="latin-1")
+# sel_chans = ["SS INT LIN", "CD45-KrOr", "FS INT LIN", "CD19-APCA750"]
+sel_chans = ["SS INT LIN", "CD45-KrOr"]
 
+channels = [
+    ("SS INT LIN", "FS INT LIN"),
+    ("CD45-KrOr", "SS INT LIN"),
+    ("CD19-APCA750", "SS INT LIN"),
+]
+# channels = [
+#     ("CD45-KrOr"),
+#     ("SS INT LIN"),
+# ]
 
-channel_info = print_meta(meta)
-print(channel_info)
+process_fcs(input_file, "simple_test_ss_cd45", PLOTDIR, sel_chans)
 
 # data = FCSLogTransform().transform(data)
 # def logTransform(data):
@@ -73,31 +114,8 @@ print(channel_info)
 #             data[col] = 10 ** (f["f1"] * data[col] / f["range"]) * f["f2"]
 #     print(transCols)
 #     print(data.min(axis=0), data.max(axis=0))
-# 
+#
 #     data[transCols] = np.log10(data[transCols])
 #     return data
 
 # data = logTransform(data)
-
-# sel_chans = ["SS INT LIN", "CD45-KrOr", "FS INT LIN"]
-sel_chans = ["SS INT LIN", "CD45-KrOr"]
-
-pipe = create_pipeline()
-pipe.fit(data[sel_chans])
-weights = pipe.named_steps["clust"].model.output_weights
-df_weights = pd.DataFrame(weights)
-df_weights.columns = sel_chans
-df_weights["predictions"] = df_weights.index
-print(df_weights)
-predictions = pipe.predict(data[sel_chans])
-data["predictions"] = predictions
-print(data)
-
-channels = [
-    ("SS INT LIN", "FS INT LIN"),
-    ("CD45-KrOr", "SS INT LIN"),
-    ("CD19-APCA750", "SS INT LIN"),
-]
-plot_data("testout2", data, channels)
-
-# plot_data("testnodes1", df_weights, channels)
