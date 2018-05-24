@@ -9,13 +9,16 @@ CASEINFO = s3://mll-flowdata/case_info.json
 
 REFCASES = ./selected_hashed_ids.json
 
+TUBES = "1;2"
+
 BIN = python3 -m clustering
+OPTS = --temp $(TEMP) --bucketname $(BUCKET) --tubes $(TUBES) --input $(CASEINFO)
 
 run:
-	$(BIN) --temp $(TEMP) --input $(CASEINFO) --output $(OUTPUT) --bucketname $(BUCKET)
+	$(BIN) $(OPTS) --output $(OUTPUT)
 
 run-selected:
-	$(BIN) --temp $(TEMP) --input $(CASEINFO) --output $(OUTPUT)_selected --bucketname $(BUCKET) --refcases $(REFCASES)
+	$(BIN) $(OPTS) --output $(OUTPUT)_selected --refcases $(REFCASES)
 
 image:
 	docker build -t $(NAME) .
