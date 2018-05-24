@@ -96,6 +96,12 @@ class SelfOrganizingMap:
         self._saver = None
         self._merged = None
         self._activity_merged = None
+
+        # prediction variables
+        self.__prediction_input = None
+        self.__prediction_output = None
+        self.__transform_output = None
+
         # This will be the collection of summaries for this subgraph. Add new summaries to it and pass it to merge()
         self._summary_list = list()
         self._input_tensor = input_tensor
@@ -400,43 +406,46 @@ class SelfOrganizingMap:
         else:
             return None
 
-    def _predict(self, data):
+    @property
+    def _prediction_input(self):
+        if self.__prediction_input is None:
+            with self._graph.as_default():
+                self.__prediction_input = tf.placeholder(tf.float32)
+        return self.__prediction_input
+
+    @property
+    def _prediction_output(self):
+        if self.__prediction_output is None:
+            with self._graph.as_default():
+                squared_distance = tf.reduce_sum(
+                    tf.pow(tf.subtract(tf.expand_dims(self._weights, axis=0),
+                                       tf.expand_dims(self._prediction_input, axis=1)), 2), 2)
+
+                # Get the index of the minimum distance for each input item, shape will be [batch_size],
+                self.__prediction_output = tf.argmin(squared_distance, axis=1)
+        return self.__prediction_output
+
+    @property
+    def _transform_output(self):
+        if self.__transform_output is None:
+            with self._graph.as_default():
+                one_hot_assignments = tf.one_hot(self._prediction_output, self._m * self._n)
+                self.__transform_output = tf.reduce_sum(one_hot_assignments, 0)
+        return self.__transform_output
+
+
+    def predict(self, data):
         """Predict cluster center for each event in the given data.
         :param data: Input data in tensorflow object.
         :return: List of cluster centers for each event.
         """
-        with tf.name_scope('Prediction'):
-            # Distance between weights and the input vector
-            # Note we are reducing along 2nd axis so we end up with a tensor of [batch_size, num_neurons]
-            # corresponding to the distance between a particular input and each neuron in the map
-            # Also note we are getting the squared distance because there's no point calling sqrt or tf.norm
-            # if we're just doing a strict comparison
-            squared_distance = tf.reduce_sum(
-                tf.pow(tf.subtract(tf.expand_dims(self._weights, axis=0),
-                                   tf.expand_dims(data, axis=1)), 2), 2)
-
-            # Get the index of the minimum distance for each input item, shape will be [batch_size],
-            bmu_indices = tf.argmin(squared_distance, axis=1)
-        return bmu_indices
-
-    def predict(self, data):
-        """Predict cluster assignments for each event.
-        :param data: Input data in the tensorflow object.
-        :return: Array with assignments for each row.
-        """
-        with self._graph.as_default():
-            tensor = tf.convert_to_tensor(data, dtype=tf.float32)
-            cluster_assignments = self._predict(tensor)
-        return self._sess.run(cluster_assignments)
+        return self._sess.run(
+            self._prediction_output, feed_dict={self._prediction_input: data}
+        )
 
     def transform(self, data):
         """Transform data of individual events to histogram of events per cluster center.
         :param data: Pandas dataframe or np.matrix
         :return: Dataframe with one row containing cluster histograms.
         """
-        with self._graph.as_default():
-            tensor = tf.convert_to_tensor(data, dtype=tf.float32)
-            cluster_assignments = self._predict(tensor)
-            one_hot_assignments = tf.one_hot(cluster_assignments, self._m * self._n)
-            cluster_numbers = tf.reduce_sum(one_hot_assignments, 0)
-        return self._sess.run(cluster_numbers)
+        return self._sess.run(self._transform_output, feed_dict={self._prediction_input: data})
