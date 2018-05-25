@@ -24,6 +24,23 @@ class FCSLogTransform(BaseEstimator, TransformerMixin):
         return self
 
 
+class ScatterFilter(BaseEstimator, TransformerMixin):
+
+    def __init__(self):
+        self._filters = [
+            ("SS INT LIN", 0),
+            ("FS INT LIN", 0),
+        ]
+
+    def transform(self, X, *_):
+        for column, threshold in self._filters:
+            X = X.loc[X[column] > threshold]
+        return X
+
+    def fit(self, *_):
+        return self
+
+
 class ClusteringTransform(BaseEstimator, TransformerMixin):
     def __init__(self, m, n, batch_size):
         self.m = m
