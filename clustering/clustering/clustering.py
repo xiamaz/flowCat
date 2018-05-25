@@ -29,15 +29,15 @@ class FCSLogTransform(BaseEstimator, TransformerMixin):
 
 class ScatterFilter(BaseEstimator, TransformerMixin):
 
-    def __init__(self):
-        self._filters = [
-            ("SS INT LIN", 0),
-            ("FS INT LIN", 0),
-        ]
+    def __init__(
+            self,
+            filters=[("SS INT LIN", 0), ("FS INT LIN",)],
+    ):
+        self._filters = filters
 
     def transform(self, X, *_):
         for column, threshold in self._filters:
-            X = X.loc[X[column] > threshold]
+            X = X[X[column] > threshold]
         return X
 
     def fit(self, *_):
