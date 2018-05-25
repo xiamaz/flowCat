@@ -1,9 +1,12 @@
+import math
+
 import pandas as pd
 import numpy as np
 import tensorflow as tf
 
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
+from sklearn import cluster
 from sklearn.preprocessing import StandardScaler
 
 from .tfsom.tfsom import SelfOrganizingMap
@@ -38,6 +41,50 @@ class ScatterFilter(BaseEstimator, TransformerMixin):
         return X
 
     def fit(self, *_):
+        return self
+
+
+class GatingFilter(BaseEstimator, TransformerMixin):
+
+    def __init__(self, channels, positions):
+        self._channels = channels
+        self._positions = positions
+        self._model = None
+
+    def _select_position(self, X, predictions):
+        (xchan, ychan) = self._channels
+        (xpos, ypos) = self._channels
+        xref = 1023 if xpos == "+" else 0
+        yref = 1023 if ypos == "-" else 0
+        closest = None
+        cdist = None
+        for cl_num in np.unique(predictions):
+            if cl_num == -1:
+                continue
+            means = X.loc[predictions == cl_num, self._channels].mean(
+                axis=0
+            )
+            dist = math.sqrt(
+                (xref-means[xchan])**2 + (yref-means[ychan])**2
+            )
+            if closest is None or cdist > dist:
+                closest, cdist = cl_num, dist
+
+        sel_res = np.zeros(predictions.shape)
+        sel_res[predictions == closest] = 1
+        return sel_res
+
+    def transform(self, X, *_):
+        predictions = self._model.fit_predict(X[self._channels].values)
+        selected = self._select_position(X, predictions)
+        return X[selected]
+
+    def fit(self, X, *_):
+        sample_num = X.shape[0]
+        min_samples = 300 * (sample_num / 50000)
+        self._model = cluster.DBSCAN(
+            eps=30, min_samples=min_samples, metric="manhattan"
+        )
         return self
 
 
