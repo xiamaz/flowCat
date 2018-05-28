@@ -24,6 +24,9 @@ parser = ArgumentParser(
 parser.add_argument("-o", "--output", help="Output file directory")
 parser.add_argument("--refcases", help="Json with list of reference cases.")
 parser.add_argument("--tubes", help="Selected tubes.")
+parser.add_argument(
+    "--num", help="Number of selected cases", default=5, type=int
+)
 parser.add_argument("-i", "--input", help="Input case json file.")
 parser.add_argument("-t", "--temp", help="Temp path for file caching.")
 parser.add_argument("--bucketname", help="S3 Bucket with data.")
@@ -41,16 +44,20 @@ if args.refcases:
         refcases = [
             case for cases in json.load(reffile).values() for case in cases
         ]
+    num = None
+else:
+    num = args.num
 
 outdir = "{}_{}".format(args.output, create_stamp())
 
 tubes = map(int, args.tubes.split(";")) if args.tubes else cases.tubes
 
 for tube in tubes:
-    if refcases:
-        data = cases.get_train_from_case_labels(refcases, tube=tube)
-    else:
-        data = cases.get_train_data(num=5, tube=tube)
+    data = cases.get_train_data(num=num, tube=tube, labels=refcases)
+
+    # concatenate all fcs files for refsom generation
+    data = pd.concat(data)
+
     pipe.fit(data)
 
     results = []

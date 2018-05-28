@@ -1,4 +1,5 @@
 import math
+import logging
 
 import pandas as pd
 import numpy as np
@@ -11,6 +12,10 @@ from sklearn.preprocessing import StandardScaler
 
 from .tfsom.tfsom import SelfOrganizingMap
 from .case_collection import CaseCollection
+from .plotting import plot_overview
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class FCSLogTransform(BaseEstimator, TransformerMixin):
@@ -31,7 +36,7 @@ class ScatterFilter(BaseEstimator, TransformerMixin):
 
     def __init__(
             self,
-            filters=[("SS INT LIN", 0), ("FS INT LIN",)],
+            filters=[("SS INT LIN", 0), ("FS INT LIN", 0)],
     ):
         self._filters = filters
 
@@ -46,42 +51,69 @@ class ScatterFilter(BaseEstimator, TransformerMixin):
 
 class GatingFilter(BaseEstimator, TransformerMixin):
 
-    def __init__(self, channels, positions):
+    def __init__(self, channels, positions, min_samples=None):
         self._channels = channels
         self._positions = positions
         self._model = None
+        self._min_samples = min_samples
 
     def _select_position(self, X, predictions):
         (xchan, ychan) = self._channels
-        (xpos, ypos) = self._channels
+        (xpos, ypos) = self._positions
         xref = 1023 if xpos == "+" else 0
-        yref = 1023 if ypos == "-" else 0
+        yref = 1023 if ypos == "+" else 0
+        print(xref, yref)
         closest = None
         cdist = None
         for cl_num in np.unique(predictions):
             if cl_num == -1:
                 continue
-            means = X.loc[predictions == cl_num, self._channels].mean(
-                axis=0
-            )
+            means = X.loc[predictions == cl_num, self._channels].mean(axis=0)
             dist = math.sqrt(
                 (xref-means[xchan])**2 + (yref-means[ychan])**2
             )
             if closest is None or cdist > dist:
                 closest, cdist = cl_num, dist
 
+        # merge clusters close to the closest cluster
+        merged = [closest]
+        for cl_num in np.unique(predictions):
+            # skip background and selected cluster
+            if cl_num == -1 or cl_num == closest:
+                continue
+            means = X.loc[predictions == cl_num, self._channels].mean(axis=0)
+            dist = math.sqrt(
+                (xref-means[xchan])**2 + (yref-means[ychan])**2
+            )
+            if abs(cdist - dist) < 250:
+                LOGGER.debug(
+                    "Merging %d because dist diff %d", cl_num, abs(cdist- dist)
+                )
+                merged.append(cl_num)
+
         sel_res = np.zeros(predictions.shape)
-        sel_res[predictions == closest] = 1
+        for cluster in merged:
+            sel_res[predictions == cluster] = 1
+
         return sel_res
 
     def transform(self, X, *_):
+        selected = self.predict(X)
+        return X[selected == 0]
+
+    def predict(self, X, *_):
         predictions = self._model.fit_predict(X[self._channels].values)
+        # select clusters based on channel position
         selected = self._select_position(X, predictions)
-        return X[selected]
+        # return 1/0 array based on inclusion in gate or not
+        return selected
 
     def fit(self, X, *_):
         sample_num = X.shape[0]
-        min_samples = 300 * (sample_num / 50000)
+        if self._min_samples:
+            min_samples = self._min_samples
+        else:
+            min_samples = 300 * (sample_num / 50000)
         self._model = cluster.DBSCAN(
             eps=30, min_samples=min_samples, metric="manhattan"
         )
@@ -124,6 +156,7 @@ class ClusteringTransform(BaseEstimator, TransformerMixin):
             init_op = tf.global_variables_initializer()
             self.session.run([init_op])
             self.model.train(num_inputs=num_inputs)
+        return self
 
     def transform(self, X, *_):
         result = self.model.transform(X)
@@ -134,11 +167,50 @@ class ClusteringTransform(BaseEstimator, TransformerMixin):
         return result
 
 
+class SOMGatingFilter(BaseEstimator, TransformerMixin):
+
+    def __init__(self, channels, positions, plotting=False):
+        self._pre = ClusteringTransform(10, 10, 2048)
+        self._clust = GatingFilter(channels, positions, min_samples=4)
+        self.som_weights = None
+        self._plotting = plotting
+        self.figures = []
+
+    def fit(self, X, *_):
+        self._pre.fit(X)
+        weights = self._pre.model.output_weights
+        self.som_weights = pd.DataFrame(weights, columns=X.columns)
+        self._clust.fit(self.som_weights)
+        return self
+
+    def predict(self, X, tube=1, *_):
+        event_to_node = self._pre.predict(X)
+
+        # get som nodes that are associated with clusters
+        som_to_clust = self._clust.predict(self.som_weights)
+        event_filter = np.vectorize(lambda x: som_to_clust[x])(event_to_node)
+        if self._plotting:
+            self.figures.append(
+                plot_overview(
+                    self.som_weights,
+                    tube=tube,
+                    coloring=som_to_clust,
+                    title="SOM Clustering result",
+                    s=8,
+                )
+            )
+        return event_filter
+
+    def transform(self, X, *_):
+        selection = self.predict(X, *_)
+        return X[selection == 1]
+
+
 def create_pipeline(m=10, n=10, batch_size=4096):
     pipe = Pipeline(
         steps=[
             # ("log", FCSLogTransform()),
-            ("scale", StandardScaler()),
+            # ("scale", StandardScaler()),
             ("clust", ClusteringTransform(m, n, batch_size)),
         ]
     )

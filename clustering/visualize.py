@@ -3,6 +3,7 @@ import logging
 from itertools import combinations
 import os
 import re
+import json
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -13,8 +14,11 @@ from sklearn.pipeline import Pipeline
 
 import fcsparser
 
-from clustering.clustering import create_pipeline, FCSLogTransform, ScatterFilter
+from clustering.clustering import (
+    create_pipeline, ScatterFilter, GatingFilter, SOMGatingFilter
+)
 from clustering.case_collection import CaseCollection
+from clustering.plotting import plot_overview
 
 
 PLOTDIR = "plots_test_som"
@@ -47,42 +51,86 @@ def print_meta(metadata):
     return channelinfo
 
 
-def print_data(data):
-    print(data)
-
-
-def create_cluster_pipe(min_samples=150):
+def create_cluster_pipe(min_samples=150, eps=30):
     return Pipeline(steps=[
         # ("scale", StandardScaler()),
-        ("clust", cluster.DBSCAN(eps=30, min_samples=min_samples, metric="euclidean")),
+        ("clust", cluster.DBSCAN(eps=eps, min_samples=min_samples, metric="euclidean")),
     ])
 
 
-def plot_data(path, data, predictions, channels, title=None):
-    fig = Figure(dpi=100, figsize=(8,4))
+def plot_data(path, data, predictions, channels, somweights, somfirst, somfirst_clusters, somfirst_predictions, title=None, seq=True):
+    fig = Figure(dpi=100, figsize=(12,12)) # width, height
     FigureCanvas(fig)
     # autosize grid
     r = math.ceil(math.sqrt(len(channels)))
     overview, bcell = channels
 
     xchannel, ychannel = overview
-    ax = fig.add_subplot(1, 2, 1)
+    ax = fig.add_subplot(3, 3, 1)
     ax.scatter(data[xchannel], data[ychannel], s=1, c=predictions, marker=".")
     ax.set_xlabel(xchannel)
     ax.set_ylabel(ychannel)
-
+    ax.set_title("DBSCAN cluster search")
 
     xchannel, ychannel = bcell
-    ax = fig.add_subplot(1, 2, 2)
-    # subdata = data[predictions == 1]
-    subdata = data
+    ax = fig.add_subplot(3, 3, 2)
+    if seq:
+        subdata = data[predictions == 1]
+    else:
+        subdata = data
     ax.scatter(subdata[xchannel], subdata[ychannel], s=1, marker=".")
     ax.set_xlabel(xchannel)
     ax.set_ylabel(ychannel)
+    ax.set_title("Gated CD19")
+
+    xchannel, ychannel = bcell
+    gated = True
+    ax = fig.add_subplot(3, 3, 5)
+    ax.scatter(somweights[gated][xchannel], somweights[gated][ychannel], s=1, marker=".")
+    ax.set_xlabel(xchannel)
+    ax.set_ylabel(ychannel)
+    ax.set_title("Gated CD19 SOM")
+
+    xchannel, ychannel = bcell
+    ax = fig.add_subplot(3, 3, 3)
+    ax.scatter(data[xchannel], data[ychannel], s=1, marker=".")
+    ax.set_xlabel(xchannel)
+    ax.set_ylabel(ychannel)
+    ax.set_title("Ungated CD19")
+
+    xchannel, ychannel = bcell
+    gated = False
+    ax = fig.add_subplot(3, 3, 6)
+    ax.scatter(somweights[gated][xchannel], somweights[gated][ychannel], s=1, marker=".")
+    ax.set_xlabel(xchannel)
+    ax.set_ylabel(ychannel)
+    ax.set_title("Ungated CD19 SOM")
+
+    xchannel, ychannel = overview
+    ax = fig.add_subplot(3, 3, 7)
+    ax.scatter(somfirst[xchannel], somfirst[ychannel], s=4, c=somfirst_clusters, marker=".")
+    ax.set_xlabel(xchannel)
+    ax.set_ylabel(ychannel)
+    ax.set_title("SOM first DBSCAN")
+
+    xchannel, ychannel = bcell
+    somgated = data[somfirst_predictions == 1]
+    ax = fig.add_subplot(3, 3, 8)
+    ax.scatter(somgated[xchannel], somgated[ychannel], s=4, marker=".")
+    ax.set_xlabel(xchannel)
+    ax.set_ylabel(ychannel)
+    ax.set_title("SOM first Gated CD19")
+
+    xchannel, ychannel = bcell
+    ax = fig.add_subplot(3, 3, 9)
+    ax.scatter(somfirst[xchannel], somfirst[ychannel], s=4, c=somfirst_clusters, marker=".")
+    ax.set_xlabel(xchannel)
+    ax.set_ylabel(ychannel)
+    ax.set_title("SOM first Ungated CD19")
 
     if title:
         fig.suptitle(title)
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
     fig.savefig(path)
 
 
@@ -140,116 +188,102 @@ def process_fcs(filepath, label, plotdir, channels, pos, title=None):
     data = scatter.transform(data)
     print(data.shape)
 
-    # sample_num = data.shape[0]
-    # min_samples = 300 * (sample_num / 50000)
-    # pipe = create_cluster_pipe(min_samples=min_samples)
-    # res = pipe.fit_predict(data[channels].values)
+    sample_num = data.shape[0]
+    min_samples = 300 * (sample_num / 50000)
+    pre_pipe = create_cluster_pipe(min_samples=min_samples)
+    res = pre_pipe.fit_predict(data[channels].values)
 
     sel_res = get_node_position(data, res, channels, pos)
 
-    view_channels = [
-        ("CD45-KrOr", "SS INT LIN"),
-        ("CD19-APCA750", "SS INT LIN"),
-    ]
-    plot_data(os.path.join(plotdir, label+"_kmeans"), data, sel_res, view_channels, title=title)
     sel_data = data[sel_res == 1]
-    print(sel_data.shape)
-    print("==========================")
-
-
-def process_fcs_som(filepath, label, plotdir, channels, pos, title=None):
-    os.makedirs(plotdir, exist_ok=True)
-    view_channels = list(combinations(channels, 2))
-
-    meta, data = fcsparser.parse(filepath, encoding="latin-1")
-    channel_info = print_meta(meta)
-
-
-    scatter = ScatterFilter(
-        [
-            ("SS INT LIN", 0),
-            ("FS INT LIN", 0),
-            ("CD45-KrOr", 0),
-            ("CD19-APCA750", 0),
-        ]
-    )
-    print(data.shape)
-    data = scatter.transform(data)
-    print(data.shape)
+    pipe = create_pipeline()
+    pipe.fit(sel_data)
+    weights = pipe.named_steps["clust"].model.output_weights
+    gated_df_weights = pd.DataFrame(weights)
+    gated_df_weights.columns = sel_data.columns
+    gated_df_weights["predictions"] = gated_df_weights.index
 
     pipe = create_pipeline()
     pipe.fit(data)
-
     weights = pipe.named_steps["clust"].model.output_weights
     df_weights = pd.DataFrame(weights)
     df_weights.columns = data.columns
     df_weights["predictions"] = df_weights.index
 
-    # predictions = pipe.predict(data)
-    # data["predictions"] = predictions
+    somweights = {
+        True: gated_df_weights,
+        False: df_weights,
+    }
 
-    # sample_num = data.shape[0]
-    # min_samples = 300 * (sample_num / 50000)
-    # pipe = create_cluster_pipe(min_samples=min_samples)
-    # res = pipe.fit_predict(data[channels].values)
+    # somfirst predictions
+    eps = 30
+    min_samples = 4
+    somfirst_pipe = create_cluster_pipe(min_samples=min_samples, eps=eps)
+    somfirst_result = somfirst_pipe.fit_predict(df_weights[channels].values)
+    som_node_predictions = get_node_position(df_weights, somfirst_result, channels, pos)
 
-    # sel_res = get_node_position(data, res, channels, pos)
+    data_predictions = pipe.predict(data)
+
+    somfirst_predictions = np.vectorize(lambda x: som_node_predictions[x])(data_predictions)
+    print(somfirst_predictions)
 
     view_channels = [
         ("CD45-KrOr", "SS INT LIN"),
         ("CD19-APCA750", "SS INT LIN"),
     ]
-    plot_data(os.path.join(plotdir, label+"_som"), df_weights, df_weights["predictions"], view_channels, title=title)
+    plot_data(os.path.join(plotdir, label+"_kmeans"), data, sel_res, view_channels, somweights, df_weights, somfirst_result, somfirst_predictions, title=title, seq=True)
+
     print("==========================")
 
 
-    # plot_data(os.path.join(plotdir, label), data, view_channels)
+def process_consensus(data, plotdir, channels, positions, tube):
+    os.makedirs(plotdir, exist_ok=True)
 
-    # plot_data(os.path.join(plotdir, label+"_nodes"), df_weights, view_channels)
+    pipe = Pipeline(steps=[
+        ("scatter", ScatterFilter()),
+        ("somgating", SOMGatingFilter(channels, positions, plotting=True)),
+    ])
 
+    for i, d in enumerate(data):
+        print(d.shape)
 
-# coll = CaseCollection("case_info.json", "mll-flowdata", tmpdir="tests/tube2")
+        plotpath = os.path.join(plotdir, "{}_raw".format(i))
+        fig = plot_overview(d, tube)
+        FigureCanvas(fig)
+        fig.savefig(plotpath)
 
-# for label, group, fcsdata in coll.get_all_data(num=1, tube=2):
-#     print(label, group)
+        t = pipe.fit_transform(d)
+        for i, fig in enumerate(pipe.named_steps["somgating"].figures):
+            plotpath = os.path.join(plotdir, "{}_somgating".format(i))
+            FigureCanvas(fig)
+            fig.savefig(plotpath)
 
-sel_chans = ["CD45-KrOr", "SS INT LIN"]
-position = ["+", "-"]
-
-indir = "tests"
-for cohort in os.listdir(indir):
-    for i, filename in enumerate(os.listdir(os.path.join(indir, cohort))):
-        filepath = os.path.join(indir, cohort, filename)
-        process_fcs_som(filepath, "{}_{}".format(cohort, i), PLOTDIR, sel_chans, position, title=filename)
+        plotpath = os.path.join(plotdir, "{}_transformed".format(i))
+        fig = plot_overview(t, tube)
+        FigureCanvas(fig)
+        fig.savefig(plotpath)
         break
-    break
 
+
+CHANNELS = ["CD45-KrOr", "SS INT LIN"]
+POSITIONS = ["+", "-"]
+TUBE = 1
+
+# PLOTDIR = "plots_test_seq"
 # indir = "tests"
 # for cohort in os.listdir(indir):
 #     for i, filename in enumerate(os.listdir(os.path.join(indir, cohort))):
 #         filepath = os.path.join(indir, cohort, filename)
 #         process_fcs(filepath, "{}_{}".format(cohort, i), PLOTDIR, sel_chans, position, title=filename)
+#         break
 
-# filepath = "tests/normalvar/65b28b75d6ef99db838c9c982637289f6600b901-2 CLL 9F 02 N07 001.LMD"
-# process_fcs(filepath, "low_dens","single_tests", sel_chans, position)
-# 
+indir = "tests_consensus_t1"
 
-# filepath = "tests/over90/0851aee4afc582ffdf2683a38f7a05071bdebd66-3 CLL 9F 02 N10 001.LMD"
-# process_fcs(filepath, "hi_dens_false","single_tests", sel_chans, position)
+with open("selected_hashed_ids.json") as selfile:
+    refcases = [c for cc in json.load(selfile).values() for c in cc]
 
-# filepath = "tests/normalvar/1b5ad3f1b9f9038e347223a61cf98470ec4318d8-3 CLL 9F 02 N11 001.LMD"
-# process_fcs(filepath, "split_pop","single_tests", sel_chans, position)
+collection = CaseCollection("case_info.json", "mll-flowdata", "tests_consensus")
 
-# data = FCSLogTransform().transform(data)
-# def logTransform(data):
-#     transCols = [c for c in data.columns if "LIN" not in c]
-#     for col, f in channel_info.items():
-#         if f["f1"]:
-#             data[col] = 10 ** (f["f1"] * data[col] / f["range"]) * f["f2"]
-#     print(transCols)
-#     print(data.min(axis=0), data.max(axis=0))
-#
-#     data[transCols] = np.log10(data[transCols])
-#     return data
+concat_files = collection.get_train_data(labels=refcases, num=None, groups=None, tube=TUBE)
 
-# data = logTransform(data)
+process_consensus(concat_files, "plots_consensus", CHANNELS, POSITIONS, TUBE)

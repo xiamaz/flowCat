@@ -51,12 +51,10 @@ class CaseCollection:
             for t, c in marker_ratios.items()
         }
 
-    def _limit_groups(self, groups):
-        if groups:
-            data = {g: self._data[g] for g in groups}
-        else:
-            data = self._data
-        return data
+    @staticmethod
+    def _limit_groups(data, groups):
+        filtered_data = {g: data[g] for g in groups}
+        return filtered_data
 
     def _load_tube(self, case, tube):
         key = [
@@ -82,40 +80,38 @@ class CaseCollection:
             selected = None
         return selected
 
-    def get_train_data(self, num=5, groups=None, tube=1):
+    def get_train_data(self, labels=None, num=5, groups=None, tube=1):
         # limit to groups
-        data = self._limit_groups(groups)
-
-        # randomly sample num cases from each group
-        selected = [
-            case
-            for cases in data.values()
-            for case in random.sample(cases, min(num, len(cases)))
-        ]
-
-        train_fcs = [self._load_tube(s, tube) for s in selected]
-        train_data = pd.concat([t for t in train_fcs if t is not None])
-
-        return train_data
-
-    def get_train_from_case_labels(self, labels, tube=1):
         data = self._data
 
-        selected = [
-            case
-            for cases in data.values()
-            for case in cases
-            if case["id"] in labels
+        if groups:
+            data = self._limit_groups(data, groups)
+
+        # randomly sample num cases from each group
+        if labels:
+            data = {
+                cohort: [case for case in cases if case["id"] in labels]
+                for cohort, cases in data.items()
+            }
+
+        if num:
+            data = {
+                cohort: list(random.sample(cases, min(num, len(cases))))
+                for cohort, cases in data.items()
+            }
+
+        train_fcs = [
+            self._load_tube(s, tube) for cc in data.values() for s in cc
         ]
-
-        train_fcs = [self._load_tube(s, tube) for s in selected]
-        train_data = pd.concat([t for t in train_fcs if t is not None])
-
-        return train_data
+        train_fcs = [f for f in train_fcs if not None]
+        return train_fcs
 
     def get_all_data(self, num=None, groups=None, tube=1):
         # limit to groups
-        data = self._limit_groups(groups)
+        data = self._data
+        if groups:
+            data = self._limit_groups(data, groups)
+
         for cohort, cases in data.items():
             if num:
                 cases = random.sample(cases, min(num, len(cases)))
