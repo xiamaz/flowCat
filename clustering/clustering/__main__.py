@@ -56,7 +56,7 @@ for tube in tubes:
     data = cases.get_train_data(num=num, tube=tube, labels=refcases)
 
     # concatenate all fcs files for refsom generation
-    data = pd.concat(data)
+    data = pd.concat([d for dd in data.values() for d in dd])
 
     pipe.fit(data)
 

@@ -125,10 +125,11 @@ class GatingFilter(BaseEstimator, TransformerMixin):
 
 
 class ClusteringTransform(BaseEstimator, TransformerMixin):
-    def __init__(self, m=10, n=10, batch_size=2048):
+    def __init__(self, m=10, n=10, batch_size=4096, test_batch_size=8192):
         self.m = m
         self.n = n
         self.batch_size = batch_size
+        self.test_batch_size = test_batch_size
         self.graph = None
         self.model = None
 
@@ -156,6 +157,7 @@ class ClusteringTransform(BaseEstimator, TransformerMixin):
                 m=self.m, n=self.n, dim=dims, max_epochs=10, gpus=1,
                 session=self.session, graph=self.graph,
                 input_tensor=next_element, batch_size=self.batch_size,
+                test_batch_size=self.test_batch_size,
                 initial_learning_rate=0.05
             )
             init_op = tf.global_variables_initializer()

@@ -249,47 +249,50 @@ def process_consensus(data, plotdir, channels, positions, tube):
         ("somgating", SOMGatingFilter(channels, positions)),
     ])
 
-    transformed = []
-    for cohort, dd in data.items():
-        for i, d in enumerate(dd):
-            print(d.shape)
+    # transformed = []
+    # for cohort, dd in data.items():
+    #     for i, d in enumerate(dd):
+    #         print(d.shape)
 
-            t = pipe.fit_transform(d)
-            transformed.append(t)
+    #         t = pipe.fit_transform(d)
+    #         transformed.append(t)
 
-            subplotdir = os.path.join(plotdir, "single_tube2")
-            os.makedirs(subplotdir, exist_ok=True)
+    #         subplotdir = os.path.join(plotdir, "single_tube2")
+    #         os.makedirs(subplotdir, exist_ok=True)
 
-            plotpath = os.path.join(subplotdir, "{}_{}_all".format(cohort, i))
-            fig = Figure()
-            gs = GridSpec(3, 1)
+    #         plotpath = os.path.join(subplotdir, "{}_{}_all".format(cohort, i))
+    #         fig = Figure()
+    #         gs = GridSpec(3, 1)
 
-            rows = 0
-            aw = 0
-            ah = 0
-            fig, (nw, nh) = plot_overview(d, tube, fig=fig, gs=gs, gspos=rows, title="raw ungated data")
-            rows += 1
-            aw = max(aw, nw)
-            ah += nh
-            somgating = pipe.named_steps["somgating"]
-            fig, (nw, nh) = plot_overview(
-                somgating.som_weights, tube, coloring=somgating.som_to_clust, s=8,
-                fig=fig, gs=gs, gspos=rows, title="clustering soms"
-            )
-            rows += 1
-            aw = max(aw, nw)
-            ah += nh
+    #         rows = 0
+    #         aw = 0
+    #         ah = 0
+    #         fig, (nw, nh) = plot_overview(d, tube, fig=fig, gs=gs, gspos=rows, title="raw ungated data")
+    #         rows += 1
+    #         aw = max(aw, nw)
+    #         ah += nh
+    #         somgating = pipe.named_steps["somgating"]
+    #         fig, (nw, nh) = plot_overview(
+    #             somgating.som_weights, tube, coloring=somgating.som_to_clust, s=8,
+    #             fig=fig, gs=gs, gspos=rows, title="clustering soms"
+    #         )
+    #         rows += 1
+    #         aw = max(aw, nw)
+    #         ah += nh
 
-            fig, (nw, nh) = plot_overview(t, tube, fig=fig, gs=gs, gspos=rows, title="som gated data")
-            rows += 1
-            aw = max(aw, nw)
-            ah += nh
-            fig.set_size_inches(aw, ah)
-            FigureCanvas(fig)
-            gs.tight_layout(fig)
-            # fig.tight_layout()
-            fig.savefig(plotpath, dpi=100)
-    trans_df = pd.concat(transformed)
+    #         fig, (nw, nh) = plot_overview(t, tube, fig=fig, gs=gs, gspos=rows, title="som gated data")
+    #         rows += 1
+    #         aw = max(aw, nw)
+    #         ah += nh
+    #         fig.set_size_inches(aw, ah)
+    #         FigureCanvas(fig)
+    #         gs.tight_layout(fig)
+    #         # fig.tight_layout()
+    #         fig.savefig(plotpath, dpi=100)
+    # trans_df = pd.concat(transformed)
+
+    data_df = pd.concat([d for dd in data.values() for d in dd])
+    trans_df = pipe.fit_transform(data_df)
     consensus_pipe = create_pipeline()
     consensus_pipe.fit(trans_df)
 
@@ -298,7 +301,7 @@ def process_consensus(data, plotdir, channels, positions, tube):
     consensus_plotpath = os.path.join(plotdir, "consensus_som")
     fig = Figure()
     gs = GridSpec(1, 1)
-    plot_overview(consensus_weights, tube, fig=fig, gs=gs, gspos=1, title="Consensus SOM results")
+    plot_overview(consensus_weights, tube, fig=fig, gs=gs, gspos=0, title="Consensus SOM results")
     fig.set_size_inches(12,8)
     FigureCanvas(fig)
     gs.tight_layout(fig)
@@ -324,4 +327,4 @@ collection = CaseCollection("case_info.json", "mll-flowdata", "tests_consensus")
 
 concat_files = collection.get_train_data(labels=refcases, num=None, groups=None, tube=TUBE)
 
-process_consensus(concat_files, "plots_consensus", CHANNELS, POSITIONS, TUBE)
+process_consensus(concat_files, "plots_consensus_all_together", CHANNELS, POSITIONS, TUBE)

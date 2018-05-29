@@ -42,7 +42,7 @@ class SelfOrganizingMap:
     2-D rectangular grid planar Self-Organizing Map with Gaussian neighbourhood function
     """
 
-    def __init__(self, m, n, dim, max_epochs=100, initial_radius=None, batch_size=2048, initial_learning_rate=0.1,
+    def __init__(self, m, n, dim, max_epochs=100, initial_radius=None, batch_size=2048, test_batch_size=4096, initial_learning_rate=0.1,
                  graph=None, std_coeff=0.5, model_name='Self-Organizing-Map', softmax_activity=False, gpus=0,
                  output_sensitivity=-1.0, input_tensor=None, session=None, checkpoint_dir=None, restore_path=None):
         """
@@ -72,6 +72,7 @@ class SelfOrganizingMap:
             self._initial_radius = float(initial_radius)
         self._max_epochs = abs(int(max_epochs))
         self._batch_size = abs(int(batch_size))
+        self._test_batch_size = abs(int(test_batch_size))
         self._std_coeff = abs(float(std_coeff))
         self._softmax_activity = bool(softmax_activity)
         self._model_name = str(model_name)
@@ -101,6 +102,7 @@ class SelfOrganizingMap:
         self._activity_merged = None
 
         # prediction variables
+        self.__invar = None
         self.__prediction_input = None
         self.__prediction_output = None
         self.__transform_output = None
@@ -410,10 +412,21 @@ class SelfOrganizingMap:
             return None
 
     @property
+    def _invar(self):
+        if self.__invar is None:
+            with self._graph.as_default():
+                self.__invar = tf.placeholder(tf.float32)
+        return self.__invar
+
+    @property
     def _prediction_input(self):
         if self.__prediction_input is None:
             with self._graph.as_default():
-                self.__prediction_input = tf.placeholder(tf.float32)
+                dataset = tf.data.Dataset.from_tensor_slices(self._invar)
+                # dataset = dataset.repeat()
+                dataset = dataset.batch(self._test_batch_size)
+                self.__prediction_input = dataset.make_initializable_iterator()
+
         return self.__prediction_input
 
     @property
@@ -422,7 +435,7 @@ class SelfOrganizingMap:
             with self._graph.as_default():
                 squared_distance = tf.reduce_sum(
                     tf.pow(tf.subtract(tf.expand_dims(self._weights, axis=0),
-                                       tf.expand_dims(self._prediction_input, axis=1)), 2), 2)
+                                       tf.expand_dims(self._prediction_input.get_next(), axis=1)), 2), 2)
 
                 # Get the index of the minimum distance for each input item, shape will be [batch_size],
                 self.__prediction_output = tf.argmin(squared_distance, axis=1)
@@ -442,13 +455,37 @@ class SelfOrganizingMap:
         :param data: Input data in tensorflow object.
         :return: List of cluster centers for each event.
         """
-        return self._sess.run(
-            self._prediction_output, feed_dict={self._prediction_input: data}
+        # initialize dataset
+        self._sess.run(
+            self._prediction_input.initializer, feed_dict={self._invar: data}
         )
+
+        results = []
+        while True:
+            try:
+                res = self._sess.run(
+                    self._prediction_output
+                )
+                results.append(res)
+            except tf.errors.OutOfRangeError:
+                break
+        return np.concatenate(results)
 
     def transform(self, data):
         """Transform data of individual events to histogram of events per cluster center.
         :param data: Pandas dataframe or np.matrix
         :return: Dataframe with one row containing cluster histograms.
         """
-        return self._sess.run(self._transform_output, feed_dict={self._prediction_input: data})
+        self._sess.run(
+            self._prediction_input.initializer, feed_dict={self._invar: data}
+        )
+        results = []
+        while True:
+            try:
+                res = self._sess.run(
+                    self._transform_output
+                )
+                results.append(res)
+            except tf.errors.OutOfRangeError:
+                break
+        return np.concatenate(results)
