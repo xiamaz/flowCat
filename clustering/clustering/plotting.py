@@ -19,7 +19,7 @@ def plot_overview(
             ("CD45-KrOr", "SS INT LIN"),
             ("CD19-APCA750", "SS INT LIN"),
             ("Kappa-FITC", "Lambda-PE"),
-            ("CD19-APCE750", "CD22-PacBlue"),
+            ("CD19-APCA750", "CD22-PacBlue"),
             ("CD19-APCA750", "CD11c-PC7"),
             ("CD25-PC5.5", "CD11c-PC7"),
         ],
