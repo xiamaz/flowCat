@@ -100,10 +100,13 @@ class CaseCollection:
                 for cohort, cases in data.items()
             }
 
-        train_fcs = [
-            self._load_tube(s, tube) for cc in data.values() for s in cc
-        ]
-        train_fcs = [f for f in train_fcs if not None]
+        train_fcs = {
+            cohort: [
+                f for f in
+                [self._load_tube(s, tube) for s in cc] if f is not None
+            ]
+            for cohort, cc in data.items()
+        }
         return train_fcs
 
     def get_all_data(self, num=None, groups=None, tube=1):

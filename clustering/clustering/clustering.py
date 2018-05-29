@@ -51,11 +51,15 @@ class ScatterFilter(BaseEstimator, TransformerMixin):
 
 class GatingFilter(BaseEstimator, TransformerMixin):
 
-    def __init__(self, channels, positions, min_samples=None):
+    def __init__(
+            self, channels, positions, min_samples=None, eps=30, merge_dist=200
+    ):
         self._channels = channels
         self._positions = positions
         self._model = None
         self._min_samples = min_samples
+        self._eps = eps
+        self._merge_dist = merge_dist
 
     def _select_position(self, X, predictions):
         (xchan, ychan) = self._channels
@@ -85,7 +89,7 @@ class GatingFilter(BaseEstimator, TransformerMixin):
             dist = math.sqrt(
                 (xref-means[xchan])**2 + (yref-means[ychan])**2
             )
-            if abs(cdist - dist) < 250:
+            if abs(cdist - dist) < self._merge_dist:
                 LOGGER.debug(
                     "Merging %d because dist diff %d", cl_num, abs(cdist- dist)
                 )
@@ -115,13 +119,13 @@ class GatingFilter(BaseEstimator, TransformerMixin):
         else:
             min_samples = 300 * (sample_num / 50000)
         self._model = cluster.DBSCAN(
-            eps=30, min_samples=min_samples, metric="manhattan"
+            eps=self._eps, min_samples=min_samples, metric="manhattan"
         )
         return self
 
 
 class ClusteringTransform(BaseEstimator, TransformerMixin):
-    def __init__(self, m, n, batch_size):
+    def __init__(self, m=10, n=10, batch_size=2048):
         self.m = m
         self.n = n
         self.batch_size = batch_size
@@ -150,8 +154,9 @@ class ClusteringTransform(BaseEstimator, TransformerMixin):
             )
             self.model = SelfOrganizingMap(
                 m=self.m, n=self.n, dim=dims, max_epochs=10, gpus=1,
-                session=self.session, graph=self.graph, input_tensor=next_element,
-                batch_size=self.batch_size, initial_learning_rate=0.05
+                session=self.session, graph=self.graph,
+                input_tensor=next_element, batch_size=self.batch_size,
+                initial_learning_rate=0.05
             )
             init_op = tf.global_variables_initializer()
             self.session.run([init_op])
@@ -171,7 +176,7 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
 
     def __init__(self, channels, positions):
         self._pre = ClusteringTransform(10, 10, 2048)
-        self._clust = GatingFilter(channels, positions, min_samples=4)
+        self._clust = GatingFilter(channels, positions, min_samples=4, eps=50)
         self.som_weights = None
         self.som_to_clust = None
 

@@ -249,43 +249,44 @@ def process_consensus(data, plotdir, channels, positions, tube):
         ("somgating", SOMGatingFilter(channels, positions)),
     ])
 
-    for i, d in enumerate(data):
-        print(d.shape)
+    for cohort, dd in data.items():
+        for i, d in enumerate(dd):
+            print(d.shape)
 
-        t = pipe.fit_transform(d)
+            t = pipe.fit_transform(d)
 
-        subplotdir = os.path.join(plotdir, "single")
-        os.makedirs(subplotdir, exist_ok=True)
+            subplotdir = os.path.join(plotdir, "single")
+            os.makedirs(subplotdir, exist_ok=True)
 
-        plotpath = os.path.join(subplotdir, "{}_all".format(i))
-        fig = Figure()
-        gs = GridSpec(3, 1)
+            plotpath = os.path.join(subplotdir, "{}_{}_all".format(cohort, i))
+            fig = Figure()
+            gs = GridSpec(3, 1)
 
-        rows = 0
-        aw = 0
-        ah = 0
-        fig, (nw, nh) = plot_overview(d, tube, fig=fig, gs=gs, gspos=rows, title="raw ungated data")
-        rows += 1
-        aw = max(aw, nw)
-        ah += nh
-        somgating = pipe.named_steps["somgating"]
-        fig, (nw, nh) = plot_overview(
-            somgating.som_weights, coloring=somgating.som_to_clust, s=8,
-            fig=fig, gs=gs, gspos=rows, title="clustering soms"
-        )
-        rows += 1
-        aw = max(aw, nw)
-        ah += nh
+            rows = 0
+            aw = 0
+            ah = 0
+            fig, (nw, nh) = plot_overview(d, tube, fig=fig, gs=gs, gspos=rows, title="raw ungated data")
+            rows += 1
+            aw = max(aw, nw)
+            ah += nh
+            somgating = pipe.named_steps["somgating"]
+            fig, (nw, nh) = plot_overview(
+                somgating.som_weights, coloring=somgating.som_to_clust, s=8,
+                fig=fig, gs=gs, gspos=rows, title="clustering soms"
+            )
+            rows += 1
+            aw = max(aw, nw)
+            ah += nh
 
-        fig, (nw, nh) = plot_overview(t, tube, fig=fig, gs=gs, gspos=rows, title="som gated data")
-        rows += 1
-        aw = max(aw, nw)
-        ah += nh
-        fig.set_size_inches(aw, ah)
-        FigureCanvas(fig)
-        gs.tight_layout(fig)
-        # fig.tight_layout()
-        fig.savefig(plotpath, dpi=100)
+            fig, (nw, nh) = plot_overview(t, tube, fig=fig, gs=gs, gspos=rows, title="som gated data")
+            rows += 1
+            aw = max(aw, nw)
+            ah += nh
+            fig.set_size_inches(aw, ah)
+            FigureCanvas(fig)
+            gs.tight_layout(fig)
+            # fig.tight_layout()
+            fig.savefig(plotpath, dpi=100)
 
 
 CHANNELS = ["CD45-KrOr", "SS INT LIN"]
