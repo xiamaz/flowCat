@@ -254,7 +254,10 @@ def process_consensus(data, plotdir, channels, positions, tube):
 
         t = pipe.fit_transform(d)
 
-        plotpath = os.path.join(plotdir, "single", "{}_all".format(i))
+        subplotdir = os.path.join(plotdir, "single")
+        os.makedirs(subplotdir, exist_ok=True)
+
+        plotpath = os.path.join(subplotdir, "{}_all".format(i))
         fig = Figure()
         gs = GridSpec(3, 1)
 
