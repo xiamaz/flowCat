@@ -9,6 +9,7 @@ import pandas as pd
 import matplotlib
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+from matplotlib.gridspec import GridSpec
 from sklearn import cluster
 from sklearn.pipeline import Pipeline
 
@@ -23,7 +24,11 @@ from clustering.plotting import plot_overview
 
 PLOTDIR = "plots_test_som"
 
-logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger("clustering")
+logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler()
+handler.setLevel(logging.DEBUG)
+logger.addHandler(handler)
 
 RE_CHANNEL = re.compile(r"\$P\d+S")
 
@@ -241,28 +246,43 @@ def process_consensus(data, plotdir, channels, positions, tube):
 
     pipe = Pipeline(steps=[
         ("scatter", ScatterFilter()),
-        ("somgating", SOMGatingFilter(channels, positions, plotting=True)),
+        ("somgating", SOMGatingFilter(channels, positions)),
     ])
 
     for i, d in enumerate(data):
         print(d.shape)
 
-        plotpath = os.path.join(plotdir, "{}_raw".format(i))
-        fig = plot_overview(d, tube)
-        FigureCanvas(fig)
-        fig.savefig(plotpath)
-
         t = pipe.fit_transform(d)
-        for i, fig in enumerate(pipe.named_steps["somgating"].figures):
-            plotpath = os.path.join(plotdir, "{}_somgating".format(i))
-            FigureCanvas(fig)
-            fig.savefig(plotpath)
 
-        plotpath = os.path.join(plotdir, "{}_transformed".format(i))
-        fig = plot_overview(t, tube)
+        plotpath = os.path.join(plotdir, "single", "{}_all".format(i))
+        fig = Figure()
+        gs = GridSpec(3, 1)
+
+        rows = 0
+        aw = 0
+        ah = 0
+        fig, (nw, nh) = plot_overview(d, tube, fig=fig, gs=gs, gspos=rows, title="raw ungated data")
+        rows += 1
+        aw = max(aw, nw)
+        ah += nh
+        somgating = pipe.named_steps["somgating"]
+        fig, (nw, nh) = plot_overview(
+            somgating.som_weights, coloring=somgating.som_to_clust, s=8,
+            fig=fig, gs=gs, gspos=rows, title="clustering soms"
+        )
+        rows += 1
+        aw = max(aw, nw)
+        ah += nh
+
+        fig, (nw, nh) = plot_overview(t, tube, fig=fig, gs=gs, gspos=rows, title="som gated data")
+        rows += 1
+        aw = max(aw, nw)
+        ah += nh
+        fig.set_size_inches(aw, ah)
         FigureCanvas(fig)
-        fig.savefig(plotpath)
-        break
+        gs.tight_layout(fig)
+        # fig.tight_layout()
+        fig.savefig(plotpath, dpi=100)
 
 
 CHANNELS = ["CD45-KrOr", "SS INT LIN"]
@@ -276,8 +296,6 @@ TUBE = 1
 #         filepath = os.path.join(indir, cohort, filename)
 #         process_fcs(filepath, "{}_{}".format(cohort, i), PLOTDIR, sel_chans, position, title=filename)
 #         break
-
-indir = "tests_consensus_t1"
 
 with open("selected_hashed_ids.json") as selfile:
     refcases = [c for cc in json.load(selfile).values() for c in cc]

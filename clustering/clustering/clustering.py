@@ -169,12 +169,11 @@ class ClusteringTransform(BaseEstimator, TransformerMixin):
 
 class SOMGatingFilter(BaseEstimator, TransformerMixin):
 
-    def __init__(self, channels, positions, plotting=False):
+    def __init__(self, channels, positions):
         self._pre = ClusteringTransform(10, 10, 2048)
         self._clust = GatingFilter(channels, positions, min_samples=4)
         self.som_weights = None
-        self._plotting = plotting
-        self.figures = []
+        self.som_to_clust = None
 
     def fit(self, X, *_):
         self._pre.fit(X)
@@ -189,16 +188,7 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
         # get som nodes that are associated with clusters
         som_to_clust = self._clust.predict(self.som_weights)
         event_filter = np.vectorize(lambda x: som_to_clust[x])(event_to_node)
-        if self._plotting:
-            self.figures.append(
-                plot_overview(
-                    self.som_weights,
-                    tube=tube,
-                    coloring=som_to_clust,
-                    title="SOM Clustering result",
-                    s=8,
-                )
-            )
+        self.som_to_clust = som_to_clust
         return event_filter
 
     def transform(self, X, *_):

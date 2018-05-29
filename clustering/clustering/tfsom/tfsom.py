@@ -34,6 +34,9 @@ https://codesachin.wordpress.com/2015/11/28/self-organizing-maps-with-googles-te
 """
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 class SelfOrganizingMap:
     """
     2-D rectangular grid planar Self-Organizing Map with Gaussian neighbourhood function
@@ -138,10 +141,10 @@ class SelfOrganizingMap:
             self._saver = tf.train.Saver()
 
         if self._restore_path is not None:
-            logging.info("Restoring variables from checkpoint file {}".format(self._restore_path))
+            LOGGER.info("Restoring variables from checkpoint file %s", self._restore_path)
             self._saver.restore(self._sess, Path(self._restore_path))
             self._trained = True
-            logging.info("Checkpoint loaded")
+            LOGGER.info("Checkpoint loaded")
 
     def _neuron_locations(self):
         """ Maps an absolute neuron index to a 2d vector for calculating the neighborhood function """
@@ -367,14 +370,14 @@ class SelfOrganizingMap:
         summary_mod = int(0.1 * total_batches)
         global_step = step_offset
 
-        logging.info("Training self-organizing Map")
+        LOGGER.info("Training self-organizing Map")
         for epoch in range(self._max_epochs):
-            logging.info("Epoch: {}/{}".format(epoch, self._max_epochs))
+            LOGGER.info("Epoch: %d/%d", epoch, self._max_epochs)
             for batch in range(batches_per_epoch):
                 current_batch = batch + (batches_per_epoch * epoch)
                 global_step = current_batch + step_offset
                 percent_complete = current_batch / total_batches
-                logging.debug("\tBatch {}/{} - {:.2%} complete".format(batch, batches_per_epoch, percent_complete))
+                LOGGER.debug("\tBatch %d/%d - %.2f%% complete", batch, batches_per_epoch, percent_complete * 100)
                 # Only do summaries when a SummaryWriter has been provided
                 if writer:
                     if current_batch > 0 and current_batch % summary_mod == 0:
