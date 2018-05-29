@@ -249,13 +249,15 @@ def process_consensus(data, plotdir, channels, positions, tube):
         ("somgating", SOMGatingFilter(channels, positions)),
     ])
 
+    transformed = []
     for cohort, dd in data.items():
         for i, d in enumerate(dd):
             print(d.shape)
 
             t = pipe.fit_transform(d)
+            transformed.append(t)
 
-            subplotdir = os.path.join(plotdir, "single")
+            subplotdir = os.path.join(plotdir, "single_tube2")
             os.makedirs(subplotdir, exist_ok=True)
 
             plotpath = os.path.join(subplotdir, "{}_{}_all".format(cohort, i))
@@ -271,7 +273,7 @@ def process_consensus(data, plotdir, channels, positions, tube):
             ah += nh
             somgating = pipe.named_steps["somgating"]
             fig, (nw, nh) = plot_overview(
-                somgating.som_weights, coloring=somgating.som_to_clust, s=8,
+                somgating.som_weights, tube, coloring=somgating.som_to_clust, s=8,
                 fig=fig, gs=gs, gspos=rows, title="clustering soms"
             )
             rows += 1
@@ -287,11 +289,25 @@ def process_consensus(data, plotdir, channels, positions, tube):
             gs.tight_layout(fig)
             # fig.tight_layout()
             fig.savefig(plotpath, dpi=100)
+    trans_df = pd.concat(transformed)
+    consensus_pipe = create_pipeline()
+    consensus_pipe.fit(trans_df)
+
+    consensus_weights = pd.DataFrame(consensus_pipe.named_steps["clust"].model.output_weights, columns=trans_df.columns)
+
+    consensus_plotpath = os.path.join(plotdir, "consensus_som")
+    fig = Figure()
+    gs = GridSpec(1, 1)
+    plot_overview(consensus_weights, tube, fig=fig, gs=gs, gspos=1, title="Consensus SOM results")
+    fig.set_size_inches(12,8)
+    FigureCanvas(fig)
+    gs.tight_layout(fig)
+    fig.savefig(consensus_plotpath, dpi=100)
 
 
 CHANNELS = ["CD45-KrOr", "SS INT LIN"]
 POSITIONS = ["+", "-"]
-TUBE = 1
+TUBE = 2
 
 # PLOTDIR = "plots_test_seq"
 # indir = "tests"
