@@ -12,6 +12,9 @@ import pandas as pd
 import fcsparser
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 class CaseCollection:
 
     def __init__(self, infopath, bucketname, tmpdir="tmp"):
@@ -61,7 +64,7 @@ class CaseCollection:
             path["path"] for path in case["destpaths"] if path["tube"] == tube
         ]
         if len(key) != 1:
-            logging.warning(
+            LOGGER.warning(
                 "%s has %d entries for tube %d", case["id"], len(key), tube
             )
             return None
