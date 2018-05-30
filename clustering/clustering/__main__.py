@@ -18,7 +18,7 @@ def create_stamp():
     return stamp.strftime("%Y%m%d_%H%M")
 
 rootlogger = logging.getLogger("clustering")
-rootlogger.setLevel(logging.DEBUG)
+rootlogger.setLevel(logging.INFO)
 formatter = logging.Formatter()
 handler = logging.StreamHandler()
 

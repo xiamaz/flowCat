@@ -14,7 +14,7 @@ REFCASES = selected_hashed_ids.json
 
 TUBES = "1;2"
 NUM = 5
-UPSAMPLING_NUM = 1
+UPSAMPLING_NUM = 100
 
 BIN = python3 -m clustering
 OPTS = --temp $(TEMP) --bucketname $(BUCKET) --tubes $(TUBES) --input $(CASEINFO) --num $(NUM) --upsampled $(UPSAMPLING_NUM)
