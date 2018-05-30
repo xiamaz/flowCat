@@ -259,7 +259,7 @@ class Classifier:
                         activation="relu"))
         model.add(Dense(units=y_matrix.shape[1],
                         activation="softmax"))
-        model.compile(loss='binary_crossentropy', optimizer='adadelta',
+        model.compile(loss='categorical_crossentropy', optimizer='adadelta',
                       metrics=['acc'])
         history = model.fit(
             x_matrix, y_matrix, epochs=200, batch_size=16,
