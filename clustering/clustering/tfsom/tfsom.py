@@ -33,7 +33,6 @@ Adapted from code by Sachin Joglekar
 https://codesachin.wordpress.com/2015/11/28/self-organizing-maps-with-googles-tensorflow/
 """
 
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -479,13 +478,13 @@ class SelfOrganizingMap:
         self._sess.run(
             self._prediction_input.initializer, feed_dict={self._invar: data}
         )
-        results = []
+        results = np.zeros(self._m * self._n)
         while True:
             try:
                 res = self._sess.run(
                     self._transform_output
                 )
-                results.append(res)
+                results += res
             except tf.errors.OutOfRangeError:
                 break
-        return np.concatenate(results)
+        return results

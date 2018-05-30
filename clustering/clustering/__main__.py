@@ -8,14 +8,25 @@ import pandas as pd
 import numpy as np
 
 from .case_collection import CaseCollection
-from .clustering import create_pipeline
+from .clustering import (
+    create_pipeline, create_pipeline_multistage, MarkerChannelFilter
+)
 from .utils import get_file_path, put_file_path
 
 def create_stamp():
     stamp = datetime.datetime.now()
     return stamp.strftime("%Y%m%d_%H%M")
 
-logging.basicConfig(level=logging.WARNING)
+rootlogger = logging.getLogger("clustering")
+rootlogger.setLevel(logging.DEBUG)
+formatter = logging.Formatter()
+handler = logging.StreamHandler()
+
+handler.setLevel(logging.DEBUG)
+handler.setFormatter(formatter)
+
+rootlogger.addHandler(handler)
+
 
 parser = ArgumentParser(
     prog="Clustering",
@@ -27,6 +38,10 @@ parser.add_argument("--tubes", help="Selected tubes.")
 parser.add_argument(
     "--num", help="Number of selected cases", default=5, type=int
 )
+parser.add_argument(
+    "--upsampled", help="Number of cases per cohort to be upsampled.",
+    default=300, type=int
+)
 parser.add_argument("-i", "--input", help="Input case json file.")
 parser.add_argument("-t", "--temp", help="Temp path for file caching.")
 parser.add_argument("--bucketname", help="S3 Bucket with data.")
@@ -36,8 +51,6 @@ infojson_path = get_file_path(args.input, args.temp)
 
 cases = CaseCollection(infojson_path, args.bucketname, args.temp)
 
-pipe = create_pipeline()
-
 refcases = []
 if args.refcases:
     with open(args.refcases) as reffile:
@@ -46,28 +59,42 @@ if args.refcases:
         ]
     num = None
 else:
-    num = args.num
+    num = args.num if args.num != -1 else None
 
 outdir = "{}_{}".format(args.output, create_stamp())
 
 tubes = map(int, args.tubes.split(";")) if args.tubes else cases.tubes
 
+pipe = create_pipeline_multistage()
+
+selected_markers = MarkerChannelFilter()
+
 for tube in tubes:
     data = cases.get_train_data(num=num, tube=tube, labels=refcases)
 
+    channel_data = selected_markers.fit_transform(
+        [d for dd in data.values() for d in dd]
+    )
+
     # concatenate all fcs files for refsom generation
-    data = pd.concat([d for dd in data.values() for d in dd])
+    data = pd.concat(channel_data)
 
     pipe.fit(data)
 
     results = []
     labels = []
     groups = []
-    for label, group, testdata in cases.get_all_data(num=300, tube=tube):
-        print("Upsampling {}".format(label))
-        results.append(pipe.transform(testdata))
-        labels.append(label)
-        groups.append(group)
+    for label, group, testdata in cases.get_all_data(num=args.upsampled, tube=tube):
+        channel_single_data = selected_markers.transform([testdata])
+        if channel_single_data:
+            print("Upsampling {}".format(label))
+            upsampled = pipe.transform(channel_single_data[0])
+            results.append(upsampled)
+            labels.append(label)
+            groups.append(group)
+        else:
+            print("Missing channels in {}".format(label))
+
     df_all = pd.DataFrame(np.matrix(results))
     df_all["label"] = labels
     df_all["group"] = groups
@@ -75,5 +102,6 @@ for tube in tubes:
     def writefun(dest):
         df_all.to_csv(dest, sep=";")
 
+    os.makedirs(outdir, exist_ok=True)
     outpath = os.path.join(outdir, "tube{}.csv".format(tube))
     put_file_path(outpath, writefun, args.temp)

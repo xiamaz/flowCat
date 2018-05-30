@@ -5,16 +5,19 @@ BUCKET = mll-flowdata
 BUCKET_URL = s3://$(BUCKET)
 
 TEMP = /data/flow
-OUTPUT = s3://mll-flow-classification/clustering/output
+# OUTPUT = s3://mll-flow-classification/clustering/output
+OUTPUT = output
 
 CASEINFO = $(BUCKET_URL)/case_info.json
 
 REFCASES = selected_hashed_ids.json
 
 TUBES = "1;2"
+NUM = 5
+UPSAMPLING_NUM = 1
 
 BIN = python3 -m clustering
-OPTS = --temp $(TEMP) --bucketname $(BUCKET) --tubes $(TUBES) --input $(CASEINFO)
+OPTS = --temp $(TEMP) --bucketname $(BUCKET) --tubes $(TUBES) --input $(CASEINFO) --num $(NUM) --upsampled $(UPSAMPLING_NUM)
 
 run:
 	$(BIN) $(OPTS) --output $(OUTPUT)

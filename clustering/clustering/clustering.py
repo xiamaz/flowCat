@@ -1,5 +1,6 @@
 import math
 import logging
+from collections import Counter
 
 import pandas as pd
 import numpy as np
@@ -66,7 +67,6 @@ class GatingFilter(BaseEstimator, TransformerMixin):
         (xpos, ypos) = self._positions
         xref = 1023 if xpos == "+" else 0
         yref = 1023 if ypos == "+" else 0
-        print(xref, yref)
         closest = None
         cdist = None
         for cl_num in np.unique(predictions):
@@ -176,20 +176,26 @@ class ClusteringTransform(BaseEstimator, TransformerMixin):
 
 class SOMGatingFilter(BaseEstimator, TransformerMixin):
 
-    def __init__(self, channels, positions):
+    def __init__(
+            self,
+            channels=["CD45-KrOr", "SS INT LIN"],
+            positions=["+", "-"],
+    ):
         self._pre = ClusteringTransform(10, 10, 2048)
         self._clust = GatingFilter(channels, positions, min_samples=4, eps=50)
         self.som_weights = None
         self.som_to_clust = None
 
     def fit(self, X, *_):
+        # always fit new when predicting data
+        return self
+
+    def predict(self, X, *_):
         self._pre.fit(X)
         weights = self._pre.model.output_weights
         self.som_weights = pd.DataFrame(weights, columns=X.columns)
         self._clust.fit(self.som_weights)
-        return self
 
-    def predict(self, X, tube=1, *_):
         event_to_node = self._pre.predict(X)
 
         # get som nodes that are associated with clusters
@@ -203,6 +209,39 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
         return X[selection == 1]
 
 
+class MarkerChannelFilter(BaseEstimator, TransformerMixin):
+    """Works on a list of FCS files."""
+
+    def __init__(self, threshold=0.8):
+        self._marker_frequencies = None
+        self._threshold = threshold
+        self._selected_markers = None
+
+    def _all_in_selected(self, x):
+        for marker in self._selected_markers:
+            if marker not in x.columns:
+                return False
+        return True
+
+    def fit(self, X, *_):
+        counter = Counter()
+        for fcsdf in X:
+            counter.update(fcsdf.columns)
+        frequencies = {n: c/len(X) for n, c in counter.items()}
+        self._marker_frequencies = frequencies
+
+        self._selected_markers = [
+            n for n, c in self._marker_frequencies.items()
+            if c >= self._threshold
+        ]
+        return self
+
+    def transform(self, X, *_):
+        transformed = [
+            f[self._selected_markers] for f in X if self._all_in_selected(f)
+        ]
+        return transformed
+
 def create_pipeline(m=10, n=10, batch_size=4096):
     pipe = Pipeline(
         steps=[
@@ -211,4 +250,17 @@ def create_pipeline(m=10, n=10, batch_size=4096):
             ("clust", ClusteringTransform(m, n, batch_size)),
         ]
     )
+    return pipe
+
+
+def create_pipeline_multistage(
+        channels=["CD45-KrOr", "SS INT LIN"],
+        positions=["+", "-"],
+        m=10, n=10
+):
+    pipe = Pipeline(steps=[
+        ("scatter", ScatterFilter()),
+        ("somgating", SOMGatingFilter(channels, positions)),
+        ("somcluster", ClusteringTransform(m=m, n=n)),
+    ])
     return pipe

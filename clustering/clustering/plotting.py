@@ -40,7 +40,7 @@ def plot_overview(
         )
 
         inner_grid = GridSpecFromSubplotSpec(
-            h, w, subplot_spec=overview_grid[1], hspace=0.4
+            h, w, subplot_spec=overview_grid[1], wspace=0.4
         )
     else:
         inner_grid = None

@@ -298,7 +298,7 @@ def process_consensus(data, plotdir, channels, positions, tube):
 
     consensus_weights = pd.DataFrame(consensus_pipe.named_steps["clust"].model.output_weights, columns=trans_df.columns)
 
-    consensus_plotpath = os.path.join(plotdir, "consensus_som")
+    consensus_plotpath = os.path.join(plotdir, "consensus_som_{}")
     fig = Figure()
     gs = GridSpec(1, 1)
     plot_overview(consensus_weights, tube, fig=fig, gs=gs, gspos=0, title="Consensus SOM results")
@@ -310,7 +310,7 @@ def process_consensus(data, plotdir, channels, positions, tube):
 
 CHANNELS = ["CD45-KrOr", "SS INT LIN"]
 POSITIONS = ["+", "-"]
-TUBE = 2
+TUBES = [1, 2]
 
 # PLOTDIR = "plots_test_seq"
 # indir = "tests"
@@ -325,6 +325,6 @@ with open("selected_hashed_ids.json") as selfile:
 
 collection = CaseCollection("case_info.json", "mll-flowdata", "tests_consensus")
 
-concat_files = collection.get_train_data(labels=refcases, num=None, groups=None, tube=TUBE)
-
-process_consensus(concat_files, "plots_consensus_all_together", CHANNELS, POSITIONS, TUBE)
+for TUBE in TUBES:
+    concat_files = collection.get_train_data(labels=refcases, num=None, groups=None, tube=TUBE)
+    process_consensus(concat_files, "plots_consensus_all_together", CHANNELS, POSITIONS, TUBE)
