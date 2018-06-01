@@ -36,6 +36,9 @@ parser.add_argument("-o", "--output", help="Output file directory")
 parser.add_argument("--refcases", help="Json with list of reference cases.")
 parser.add_argument("--tubes", help="Selected tubes.")
 parser.add_argument(
+    "--groups", help="Semicolon separated list of groups"
+)
+parser.add_argument(
     "--num", help="Number of selected cases", default=5, type=int
 )
 parser.add_argument(
@@ -49,7 +52,7 @@ args = parser.parse_args()
 
 infojson_path = get_file_path(args.input, args.temp)
 
-cases = CaseCollection(infojson_path, args.bucketname, args.temp)
+cases = CaseCollection(infojson_path, )
 
 refcases = []
 if args.refcases:
@@ -63,37 +66,53 @@ else:
 
 outdir = "{}_{}".format(args.output, create_stamp())
 
-tubes = map(int, args.tubes.split(";")) if args.tubes else cases.tubes
+tubes = list(map(int, args.tubes.split(";"))) if args.tubes else cases.tubes
 
-pipe = create_pipeline_multistage()
+pipe = create_pipeline()
 
-selected_markers = MarkerChannelFilter()
+# selected_markers = MarkerChannelFilter()
+
+train_view = cases.create_view(
+    labels=refcases, tubes=tubes, num=num,
+    bucketname=args.bucketname, tmpdir=args.temp
+)
+transform_view = cases.create_view(
+    num=args.upsampled, tubes=tubes,
+    bucketname=args.bucketname, tmpdir=args.temp
+)
 
 for tube in tubes:
-    data = cases.get_train_data(num=num, tube=tube, labels=refcases)
+    data = [data for _, _, data in train_view.yield_data(tube)]
 
-    channel_data = selected_markers.fit_transform(
-        [d for dd in data.values() for d in dd]
-    )
+    # channel_data = selected_markers.fit_transform(
+    #     [d for dd in data.values() for d in dd]
+    # )
 
     # concatenate all fcs files for refsom generation
-    data = pd.concat(channel_data)
+    # data = pd.concat(channel_data)
+    data = pd.concat(data)
 
     pipe.fit(data)
 
     results = []
     labels = []
     groups = []
-    for label, group, testdata in cases.get_all_data(num=args.upsampled, tube=tube):
-        channel_single_data = selected_markers.transform([testdata])
-        if channel_single_data:
-            print("Upsampling {}".format(label))
-            upsampled = pipe.transform(channel_single_data[0])
-            results.append(upsampled)
-            labels.append(label)
-            groups.append(group)
-        else:
-            print("Missing channels in {}".format(label))
+    for label, group, testdata in transform_view.yield_data(tube=tube):
+        # channel_single_data = selected_markers.transform([testdata])
+        # if channel_single_data:
+        #     print("Upsampling {}".format(label))
+        #     upsampled = pipe.transform(channel_single_data[0])
+        #     results.append(upsampled)
+        #     labels.append(label)
+        #     groups.append(group)
+        # else:
+        #     print("Missing channels in {}".format(label))
+
+        print("Upsampling {}".format(label))
+        upsampled = pipe.transform(testdata)
+        results.append(upsampled)
+        labels.append(label)
+        groups.append(group)
 
     df_all = pd.DataFrame(np.matrix(results))
     df_all["label"] = labels

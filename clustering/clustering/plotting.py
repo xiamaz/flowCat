@@ -2,6 +2,15 @@ from matplotlib.gridspec import GridSpecFromSubplotSpec
 from matplotlib.figure import Figure
 from matplotlib.artist import setp
 
+def plot_histogram(data, ax, title=None):
+    print(data)
+    pldata = data[list(range(0, 100))]
+    ax.plot(pldata.index, pldata)
+    ax.set_title = title
+    ax.set_xlabel = "Nodes"
+    ax.set_ylabel = "Event distribution"
+    return ax
+
 def plot_overview(
         data, tube=1, coloring=None, title=None, s=1,
         fig=None, gs=None, gspos=None

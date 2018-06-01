@@ -209,44 +209,10 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
         return X[selection == 1]
 
 
-class MarkerChannelFilter(BaseEstimator, TransformerMixin):
-    """Works on a list of FCS files."""
-
-    def __init__(self, threshold=0.8):
-        self._marker_frequencies = None
-        self._threshold = threshold
-        self._selected_markers = None
-
-    def _all_in_selected(self, x):
-        for marker in self._selected_markers:
-            if marker not in x.columns:
-                return False
-        return True
-
-    def fit(self, X, *_):
-        counter = Counter()
-        for fcsdf in X:
-            counter.update(fcsdf.columns)
-        frequencies = {n: c/len(X) for n, c in counter.items()}
-        self._marker_frequencies = frequencies
-
-        self._selected_markers = [
-            n for n, c in self._marker_frequencies.items()
-            if c >= self._threshold
-        ]
-        return self
-
-    def transform(self, X, *_):
-        transformed = [
-            f[self._selected_markers] for f in X if self._all_in_selected(f)
-        ]
-        return transformed
-
 def create_pipeline(m=10, n=10, batch_size=4096):
     pipe = Pipeline(
         steps=[
-            # ("log", FCSLogTransform()),
-            # ("scale", StandardScaler()),
+            ("scatter", ScatterFilter()),
             ("clust", ClusteringTransform(m, n, batch_size)),
         ]
     )

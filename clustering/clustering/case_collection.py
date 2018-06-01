@@ -11,53 +11,19 @@ import pandas as pd
 
 import fcsparser
 
+from .case_transforms import MarkerFilter, TubesFilter
+
 
 LOGGER = logging.getLogger(__name__)
 
 
-class CaseCollection:
-
-    def __init__(self, infopath, bucketname, tmpdir="tmp"):
-        with open(infopath) as ifile:
-            self._data = json.load(ifile)
-
-        self.tubes = self._unique_tubes()
-        self.markers = self._majority_markers()
-        self.tmpdir = tmpdir
+class CaseView:
+    def __init__(self, data, markers, bucketname="", tmpdir="tmp"):
+        self._data = data
         self.s3 = boto3.resource("s3")
         self.bucket = self.s3.Bucket(bucketname)
-
-    def _unique_tubes(self):
-        tubes = [
-            set([d["tube"] for d in c["destpaths"]])
-            for cas in self._data.values() for c in cas
-        ]
-        return reduce(lambda x, y: x | y, tubes)
-
-    def _majority_markers(self, threshold=0.9):
-        tube_markers = {}
-        for cases in self._data.values():
-            for case in cases:
-                for filepath in case["destpaths"]:
-                    tube_markers.setdefault(filepath["tube"], []).extend(
-                        filepath["markers"]
-                    )
-        marker_counts = {
-            t: collections.Counter(m) for t, m in tube_markers.items()
-        }
-        marker_ratios = {
-            t: {k: c[k]/len(self._data) for k in c}
-            for t, c in marker_counts.items()
-        }
-        return {
-            t: [v for v, r in c.items() if r >= threshold]
-            for t, c in marker_ratios.items()
-        }
-
-    @staticmethod
-    def _limit_groups(data, groups):
-        filtered_data = {g: data[g] for g in groups}
-        return filtered_data
+        self.tmpdir = tmpdir
+        self.markers = markers
 
     def _load_tube(self, case, tube):
         key = [
@@ -78,17 +44,54 @@ class CaseCollection:
 
         _, data = fcsparser.parse(destpath, data_set=0, encoding="latin-1")
         try:
-            selected = data[self.markers[tube]]
+            selected = data[self.markers.selected_markers[tube]]
         except KeyError:
             selected = None
         return selected
 
-    def get_train_data(self, labels=None, num=5, groups=None, tube=1):
-        # limit to groups
-        data = self._data
+    def yield_data(self, tube=1):
+        for cohort, cases in self._data.items():
+            for case in cases:
+                fcsdata = self._load_tube(case, tube)
+                if fcsdata is not None:
+                    yield case["id"], cohort, fcsdata
 
+
+class CaseCollection:
+
+    def __init__(self, infopath):
+        with open(infopath) as ifile:
+            self._data = json.load(ifile)
+
+        self.tubes = self._unique_tubes()
+        # majority markers per tube
+        self.markers = MarkerFilter(threshold=0.9)
+        self.markers.fit(self._data)
+        self._data = self.markers.transform(self._data)
+
+    def _unique_tubes(self):
+        tubes = [
+            set([d["tube"] for d in c["destpaths"]])
+            for cas in self._data.values() for c in cas
+        ]
+        return reduce(lambda x, y: x | y, tubes)
+
+    @staticmethod
+    def _limit_groups(data, groups):
+        filtered_data = {g: data[g] for g in groups}
+        return filtered_data
+
+    def create_view(
+            self, labels=None, num=None, groups=None, tubes=None, **kwargs
+    ):
+        """Filter view to specified criteria and return a new view object."""
+        data = self._data
         if groups:
             data = self._limit_groups(data, groups)
+
+        if tubes:
+            filterer = TubesFilter(tubes=tubes, duplicate_allowed=False)
+            data = filterer.transform(data)
 
         # randomly sample num cases from each group
         if labels:
@@ -99,29 +102,9 @@ class CaseCollection:
 
         if num:
             data = {
-                cohort: list(random.sample(cases, min(num, len(cases))))
+                cohort: random.sample(cases, min(num, len(cases)))
                 for cohort, cases in data.items()
             }
 
-        train_fcs = {
-            cohort: [
-                f for f in
-                [self._load_tube(s, tube) for s in cc] if f is not None
-            ]
-            for cohort, cc in data.items()
-        }
-        return train_fcs
 
-    def get_all_data(self, num=None, groups=None, tube=1):
-        # limit to groups
-        data = self._data
-        if groups:
-            data = self._limit_groups(data, groups)
-
-        for cohort, cases in data.items():
-            if num:
-                cases = random.sample(cases, min(num, len(cases)))
-            for case in cases:
-                fcsdata = self._load_tube(case, tube)
-                if fcsdata is not None:
-                    yield case["id"], cohort, fcsdata
+        return CaseView(data, self.markers, **kwargs)
