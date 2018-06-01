@@ -54,7 +54,7 @@ class CaseView:
             for case in cases:
                 fcsdata = self._load_tube(case, tube)
                 if fcsdata is not None:
-                    yield case["id"], cohort, fcsdata
+                    yield (case["id"], cohort, case["infiltration"]), fcsdata
 
 
 class CaseCollection:

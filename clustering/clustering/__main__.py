@@ -80,7 +80,7 @@ transform_view = cases.create_view(
 )
 
 for tube in tubes:
-    data = [data for _, _, data in train_view.yield_data(tube)]
+    data = [data for _, data in train_view.yield_data(tube)]
 
     data = pd.concat(data)
 
@@ -89,16 +89,19 @@ for tube in tubes:
     results = []
     labels = []
     groups = []
-    for label, group, testdata in transform_view.yield_data(tube=tube):
+    infiltration = []
+    for (label, group, infil), testdata in transform_view.yield_data(tube=tube):
         print("Upsampling {}".format(label))
         upsampled = pipe.transform(testdata)
         results.append(upsampled)
         labels.append(label)
         groups.append(group)
+        infiltration.append(infil)
 
     df_all = pd.DataFrame(np.matrix(results))
     df_all["label"] = labels
     df_all["group"] = groups
+    df_all["infiltration"] = infiltration
 
     def writefun(dest):
         df_all.to_csv(dest, sep=";")

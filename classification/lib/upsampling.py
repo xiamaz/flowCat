@@ -15,19 +15,29 @@ from lib.types import FilesDict, GroupSelection, SizeOption, MaybeList
 RE_TUBE = re.compile(r"tube(\d+)\.csv")
 
 
-def merge_on_label(left_df: pd.DataFrame, right_df: pd.DataFrame) \
+
+def merge_on_label(left_df: pd.DataFrame, right_df: pd.DataFrame, metacols) \
         -> pd.DataFrame:
     '''Merge two dataframes on label column and drop additional replicated
     columns such as group.'''
-    merged = left_df.merge(right_df, how="inner", on="label", suffixes=("",
-                                                                        "_y"))
-    merged.drop(["group_y"], inplace=True, axis=1)
+    # all columns that do not contain data
+    meta_label_cols = metacols + ["label"]
+
+    merged = left_df.merge(
+        right_df, how="inner", on="label", suffixes=("", "_y")
+    )
+    merged.drop([s+"_y" for s in metacols], inplace=True, axis=1)
+
     # continuous field naming
-    names = [m for m in list(merged) if m != "group" and m != "label"]
+    names = [
+        m for m in list(merged)
+        if m not in meta_label_cols
+    ]
     rename_dict = {m: str(i + 1) for i, m in enumerate(names)}
     merged.rename(columns=rename_dict, inplace=True)
+
     # reorder the columns
-    merged_names = list(rename_dict.values()) + ["group", "label"]
+    merged_names = list(rename_dict.values()) + meta_label_cols
     merged = merged[merged_names]
     return merged
 
@@ -121,10 +131,13 @@ class DataView:
         return binarizer, debinarizer, group_names
 
     @staticmethod
-    def split_x_y(dataframe: pd.DataFrame, binarizer: Callable) \
-            -> (np.matrix, np.matrix):
+    def split_x_y(
+            dataframe: pd.DataFrame, binarizer: Callable, metacols: [str]
+    ) -> (np.matrix, np.matrix):
         '''Split dataframe into matrices with group labels as sparse matrix'''
-        x_matrix = dataframe.drop(['group', 'label'], axis=1).as_matrix()
+        x_matrix = dataframe.drop(
+            ["group", "label", "infiltration"], axis=1
+        ).as_matrix()
         y_matrix = dataframe['group'].apply(binarizer).as_matrix()
         return x_matrix, y_matrix
 
@@ -160,7 +173,15 @@ class UpsamplingData:
         merged_tubes = [
             cls._merge_tubes([f[t] for t in tubes]) for f in files.values()
         ]
-        return cls(pd.concat(merged_tubes))
+        metacols = [
+            meta for _, meta in merged_tubes
+        ]
+        assert len(reduce(lambda x, y: set(x) ^ set(y), metacols)) != 0, \
+            "Different metacols in tubes."
+        merged_dfs = [
+            data for data, _ in merged_tubes
+        ]
+        return cls(pd.concat(merged_dfs))
 
     def get_data(self):
         '''Get unfiltered data as dataframe.'''
@@ -234,15 +255,23 @@ class UpsamplingData:
         return csv_data
 
     @staticmethod
-    def _merge_tubes(files: Tuple[str], selected_tubes=None) -> pd.DataFrame:
+    def _merge_tubes(files: Tuple[str]) -> pd.DataFrame:
         '''Merge results from different tubes joining on label.
         Labels only contained in some of the tubes will be excluded in the join
         operation.'''
         dataframes = [
             UpsamplingData._read_file(fp) for fp in files
         ]
-        merged = reduce(merge_on_label, dataframes)
-        return merged
+        non_number_cols = [
+            [c for c in df.columns if c.isnum()]
+            for df in dataframes
+        ]
+        not_both = reduce(lambda x, y: set(x) ^ set(y), non_number_cols)
+        assert len(not_both) != 0 , \
+            "Different non-number columns in entered dataframes."
+        metacols = non_number_cols[0]
+        merged = reduce(merge_on_label, dataframes, metacols)
+        return merged, metacols
 
     def __repr__(self) -> str:
         return repr(self._data)
