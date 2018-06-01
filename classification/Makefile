@@ -33,7 +33,7 @@ OPTIONS = -n "$(NOTE)" \
 .PHONY: all run clean image image-run image-upload
 
 
-run: download
+run:
 	# always use newest results
 	$(eval INPUT := $(INPUT)/$(shell ls $(INPUT) | grep "$(INPUT_TYPE)" | sort -r | head -n 1))
 	$(BIN) $(OPTIONS) $(NAME)
@@ -43,6 +43,6 @@ upload: # run
 	# aws s3 cp --recursive $(INDATA) s3://$(BUCKET)/clustering
 
 download:
-	# aws s3 cp --recursive --exclude "*" --include "*.csv" s3://$(BUCKET) $(DATA)
+	aws s3 cp --recursive --exclude "*" --include "*.csv" s3://$(BUCKET) $(DATA)
 
 include ../docker.mk
