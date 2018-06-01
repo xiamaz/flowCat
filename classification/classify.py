@@ -54,11 +54,12 @@ def handle_input(inputfunc):
 def preprocess_data(
         files: FilesDict,
         groups: list,
-        data_filters: list
+        data_filters: list,
+        tubes: list
 ) -> UpsamplingData:
     '''Apply grouping and other manipulation of the input data.'''
 
-    data = UpsamplingData.from_files(files)
+    data = UpsamplingData.from_files(files, tubes)
 
     cutoff = 0
     max_size = 0
@@ -146,13 +147,14 @@ def get_files(path: str, noninteractive: bool = False) -> FilesDict:
             return subpath
         return get_files(handle_input(inputfunc))
 
-    files = defaultdict(list)
+    files = defaultdict(dict)
     for filename in csv_files:
         match = RE_TUBE_NAME.match(filename)
         if match is None:
             continue
-        tube = match.group(1)
-        files[tube].append(os.path.join(path, filename))
+        tube = int(match.group(1))
+        seq = int(match[2]) if match[2] else 0
+        files[seq][tube] = os.path.join(path, filename)
     return files
 
 
@@ -190,6 +192,10 @@ def get_arguments() -> (FilesDict, str, str, str, dict):
     parser.add_argument(
         "-g", "--group",
         help="Groups included in analysis. Eg CLL;normal or g1:CLL,MBL;normal"
+    )
+    parser.add_argument(
+        "--tubes",
+        help="Selected tubes for processing",
     )
     parser.add_argument(
         "-f", "--filters",
@@ -235,6 +241,11 @@ def get_arguments() -> (FilesDict, str, str, str, dict):
 
     filters = args.filters.split(";") if args.filters else []
 
+    if args.tubes:
+        tubes = [int(s) for s in args.tubes.split(";")]
+    else:
+        tubes = []
+
     options = {
         "name": name,
         "method": method,
@@ -242,7 +253,8 @@ def get_arguments() -> (FilesDict, str, str, str, dict):
         "file_data": {
             "files": files,
             "groups": groups,
-            "data_filters": filters
+            "data_filters": filters,
+            "tubes": tubes,
         },
         "info_args": additional,
     }

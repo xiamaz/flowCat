@@ -251,18 +251,18 @@ class Classifier:
         x_matrix, y_matrix = DataView.split_x_y(training_data, binarizer)
 
         model = Sequential()
-        model.add(Dense(units=100,
-                        activation="relu",
+        model.add(Dense(units=50,
+                        activation="elu",
                         input_dim=x_matrix.shape[1],
                         kernel_initializer='uniform'))
-        model.add(Dense(units=50,
-                        activation="relu"))
+        model.add(Dense(units=10,
+                        activation="elu"))
         model.add(Dense(units=y_matrix.shape[1],
                         activation="softmax"))
         model.compile(loss='categorical_crossentropy', optimizer='adadelta',
                       metrics=['acc'])
         history = model.fit(
-            x_matrix, y_matrix, epochs=200, batch_size=16,
+            x_matrix, y_matrix, epochs=100, batch_size=32,
             validation_split=val_split
         )
         return model, history

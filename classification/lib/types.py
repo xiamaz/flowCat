@@ -2,8 +2,9 @@
 import typing
 
 # Information for upsampled tubes with multiple parts
-FilesDict = typing.Dict[str, typing.List[str]]
+FilesDict = typing.Dict[int, typing.Dict[int, str]]
 GroupSelection = list
 GroupName = str
 SizesDict = typing.Dict[GroupName, int]
 SizeOption = typing.Union[int, SizesDict]
+MaybeList = typing.Union[typing.List[int], None]

@@ -1,6 +1,7 @@
 '''
 CSV file operations needed for upsampling based classification
 '''
+import re
 import logging
 from functools import reduce
 from typing import Callable, Tuple
@@ -8,7 +9,10 @@ from typing import Callable, Tuple
 import pandas as pd
 import numpy as np
 
-from lib.types import FilesDict, GroupSelection, SizeOption
+from lib.types import FilesDict, GroupSelection, SizeOption, MaybeList
+
+
+RE_TUBE = re.compile(r"tube(\d+)\.csv")
 
 
 def merge_on_label(left_df: pd.DataFrame, right_df: pd.DataFrame) \
@@ -144,14 +148,18 @@ class UpsamplingData:
         self._data = dataframe
 
     @classmethod
-    def from_files(cls, files: FilesDict) -> "UpsamplingData":
+    def from_files(
+            cls, files: FilesDict, tubes: MaybeList = None
+    ) -> "UpsamplingData":
         '''Create upsampling data from structure containing multiple tubes
         for multiple files.
         The input structure contains a list of items to be joined by row,
         which are in turn joined on columns. (eg multiple tubes on the inner
         level split into multiple output files on the outer level)
         '''
-        merged_tubes = [cls._merge_tubes(f) for f in files.values()]
+        merged_tubes = [
+            cls._merge_tubes([f[t] for t in tubes]) for f in files.values()
+        ]
         return cls(pd.concat(merged_tubes))
 
     def get_data(self):
@@ -222,15 +230,17 @@ class UpsamplingData:
     def _read_file(filepath: str) -> pd.DataFrame:
         '''Read output from preprocessing in csv format.
         '''
-        csv_data = pd.read_table(filepath, sep=";")
+        csv_data = pd.read_table(filepath, sep=";", index_col=0)
         return csv_data
 
     @staticmethod
-    def _merge_tubes(files: Tuple[str]) -> pd.DataFrame:
+    def _merge_tubes(files: Tuple[str], selected_tubes=None) -> pd.DataFrame:
         '''Merge results from different tubes joining on label.
         Labels only contained in some of the tubes will be excluded in the join
         operation.'''
-        dataframes = [UpsamplingData._read_file(fp) for fp in files]
+        dataframes = [
+            UpsamplingData._read_file(fp) for fp in files
+        ]
         merged = reduce(merge_on_label, dataframes)
         return merged
 
