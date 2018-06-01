@@ -70,8 +70,6 @@ tubes = list(map(int, args.tubes.split(";"))) if args.tubes else cases.tubes
 
 pipe = create_pipeline()
 
-# selected_markers = MarkerChannelFilter()
-
 train_view = cases.create_view(
     labels=refcases, tubes=tubes, num=num,
     bucketname=args.bucketname, tmpdir=args.temp
@@ -84,12 +82,6 @@ transform_view = cases.create_view(
 for tube in tubes:
     data = [data for _, _, data in train_view.yield_data(tube)]
 
-    # channel_data = selected_markers.fit_transform(
-    #     [d for dd in data.values() for d in dd]
-    # )
-
-    # concatenate all fcs files for refsom generation
-    # data = pd.concat(channel_data)
     data = pd.concat(data)
 
     pipe.fit(data)
@@ -98,16 +90,6 @@ for tube in tubes:
     labels = []
     groups = []
     for label, group, testdata in transform_view.yield_data(tube=tube):
-        # channel_single_data = selected_markers.transform([testdata])
-        # if channel_single_data:
-        #     print("Upsampling {}".format(label))
-        #     upsampled = pipe.transform(channel_single_data[0])
-        #     results.append(upsampled)
-        #     labels.append(label)
-        #     groups.append(group)
-        # else:
-        #     print("Missing channels in {}".format(label))
-
         print("Upsampling {}".format(label))
         upsampled = pipe.transform(testdata)
         results.append(upsampled)
