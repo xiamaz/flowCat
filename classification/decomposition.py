@@ -43,5 +43,4 @@ for i, group in enumerate(levels):
     sc = ax.scatter(gdata[:, 0], gdata[:, 1], c=colors[i], label=group)
 ax.legend()
 plt.savefig("3dtube1_tsne_2d")
-plt.show()
 plt.close()
