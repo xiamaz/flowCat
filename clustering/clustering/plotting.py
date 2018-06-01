@@ -1,14 +1,22 @@
 from matplotlib.gridspec import GridSpecFromSubplotSpec
 from matplotlib.figure import Figure
 from matplotlib.artist import setp
+from matplotlib import ticker
 
 def plot_histogram(data, ax, title=None):
-    print(data)
-    pldata = data[list(range(0, 100))]
-    ax.plot(pldata.index, pldata)
-    ax.set_title = title
-    ax.set_xlabel = "Nodes"
-    ax.set_ylabel = "Event distribution"
+    (mean_data, std_data) = data
+    ax.plot(mean_data.index, mean_data, "k-")
+    ax.fill_between(
+        mean_data.index,
+        (mean_data-std_data).clip_lower(0),
+        (mean_data+std_data).clip_upper(1.0)
+    )
+    ax.set_ylim(0, 1.0)
+    ax.xaxis.set_major_locator(ticker.MultipleLocator(10))
+
+    ax.set_title(title)
+    ax.set_xlabel("Nodes")
+    ax.set_ylabel("Event distribution")
     return ax
 
 def plot_overview(

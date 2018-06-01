@@ -6,7 +6,7 @@ BUCKET_URL = s3://$(BUCKET)
 
 TEMP = /data/flow
 # OUTPUT = s3://mll-flow-classification/clustering/output
-OUTPUT = output
+OUTPUT = ../classification/output/clustering/avec_pregating
 
 CASEINFO = $(BUCKET_URL)/case_info.json
 
@@ -14,7 +14,7 @@ REFCASES = selected_hashed_ids.json
 
 TUBES = "1;2"
 NUM = 5
-UPSAMPLING_NUM = 100
+UPSAMPLING_NUM = 800
 
 BIN = python3 -m clustering
 OPTS = --temp $(TEMP) --bucketname $(BUCKET) --tubes $(TUBES) --input $(CASEINFO) --num $(NUM) --upsampled $(UPSAMPLING_NUM)

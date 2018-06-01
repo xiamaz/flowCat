@@ -9,7 +9,7 @@ import numpy as np
 
 from .case_collection import CaseCollection
 from .clustering import (
-    create_pipeline, create_pipeline_multistage, MarkerChannelFilter
+    create_pipeline, create_pipeline_multistage
 )
 from .utils import get_file_path, put_file_path
 
@@ -68,7 +68,7 @@ outdir = "{}_{}".format(args.output, create_stamp())
 
 tubes = list(map(int, args.tubes.split(";"))) if args.tubes else cases.tubes
 
-pipe = create_pipeline()
+pipe = create_pipeline_multistage()
 
 train_view = cases.create_view(
     labels=refcases, tubes=tubes, num=num,
