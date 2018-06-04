@@ -9,7 +9,7 @@ import numpy as np
 
 from .case_collection import CaseCollection
 from .clustering import (
-    create_pipeline, create_pipeline_multistage
+    create_pipeline, create_pipeline_multistage, create_pipeline_double_som
 )
 from .utils import get_file_path, put_file_path
 
@@ -47,6 +47,9 @@ parser.add_argument(
 )
 parser.add_argument("-i", "--input", help="Input case json file.")
 parser.add_argument("-t", "--temp", help="Temp path for file caching.")
+parser.add_argument(
+    "--pipeline", help="Select pipeline type.", default="normal"
+)
 parser.add_argument("--bucketname", help="S3 Bucket with data.")
 args = parser.parse_args()
 
@@ -68,7 +71,13 @@ outdir = "{}_{}".format(args.output, create_stamp())
 
 tubes = list(map(int, args.tubes.split(";"))) if args.tubes else cases.tubes
 
-pipe = create_pipeline_multistage()
+pipeline_dict = {
+    "normal": create_pipeline,
+    "multi": create_pipeline_multistage,
+    "double": create_pipeline_double_som,
+}
+
+pipe = pipeline_dict[args.pipeline]()
 
 train_view = cases.create_view(
     labels=refcases, tubes=tubes, num=num,
