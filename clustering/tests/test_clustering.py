@@ -1,7 +1,7 @@
 """Test different clustering functions on correctness."""
 import pandas as pd
 from clustering.clustering import (
-    create_pipeline, create_pipeline_double_som, create_pipeline_multistage
+    create_pipeline, create_pipeline_multistage
 )
 from .test_case_collection import BaseView
 
@@ -21,7 +21,6 @@ class ClusteringTest(BaseView):
     def test_pipeline(self):
         pipelines = [
             ("normal", create_pipeline),
-            ("double_som", create_pipeline_double_som),
             ("multistage", create_pipeline_multistage)
         ]
         for name, pipefunc in pipelines:
@@ -31,4 +30,6 @@ class ClusteringTest(BaseView):
                 results = [
                     pipe.transform(d) for _, d in self.small_view.yield_data(1)
                 ]
-                print(results)
+                for result in results:
+                    print(result)
+                    self.assertEqual(result.shape, (100,))

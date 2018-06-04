@@ -1,0 +1,6 @@
+METHOD = normal
+PREMETHOD = presom
+TUBES = "1"
+NUM = 1
+UPSAMPLING_NUM = 2
+GROUPS = "CLL;MBL;CLLPL;LPL;Marginal"

@@ -1,0 +1,6 @@
+METHOD = normal
+PREMETHOD = normal
+TUBES = "1;2"
+NUM = 5
+UPSAMPLING_NUM = 800
+GROUPS = 

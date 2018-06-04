@@ -182,19 +182,21 @@ class SOMNodes(BaseEstimator, TransformerMixin):
     def __init__(self, m=10, n=10, batch_size=1024):
         self._model = ClusteringTransform(m, n, batch_size=batch_size)
 
-    def fit(self, X, *_):
+    def fit(self, *args, **kwargs):
         return self
-
 
     def predict(self, X, *_):
         return self._model.predict(X, *_)
 
-    def transform(self, X, *_):
-        self._model.fit(X)
-        weights = pd.DataFrame(
-            self._model.model.output_weights, columns=X.columns
-        )
-        return weights
+    def transform(self, X, som=True, *_):
+        if som:
+            self._model.fit(X)
+            weights = pd.DataFrame(
+                self._model.model.output_weights, columns=X.columns
+            )
+            return weights
+
+        return X
 
 
 class SOMGatingFilter(BaseEstimator, TransformerMixin):
@@ -229,12 +231,16 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
 
     def transform(self, X, *_):
         selection = self.predict(X, *_)
-        return X[selection == 1, X.columns != self._channels]
+        if isinstance(X, pd.DataFrame):
+            result = X.loc[selection == 1, ~X.columns.isin(self._channels)]
+        else:
+            result = X[selection == 1, ~X.columns.isin(self._channels)]
+        return result
+
 
 def create_pipeline(m=10, n=10, batch_size=4096):
     pipe = Pipeline(
         steps=[
-            ("scatter", ScatterFilter()),
             ("clust", ClusteringTransform(m, n, batch_size)),
         ]
     )
@@ -247,21 +253,41 @@ def create_pipeline_multistage(
         m=10, n=10
 ):
     pipe = Pipeline(steps=[
-        ("scatter", ScatterFilter()),
         ("somgating", SOMGatingFilter(channels, positions)),
         ("somcluster", ClusteringTransform(m=m, n=n)),
     ])
     return pipe
 
-def create_pipeline_double_som(
-        first = (10, 10),
-        second = (10, 10)
+
+class MultiSOM(BaseEstimator, TransformerMixin):
+
+    def __init__(
+            self,
+            first=(20, 20, 512),
+            second=(10, 10, 16),
+    ):
+        self._first = first
+        self._second = second
+
+    def fit(self, X, *_):
+        return self
+
+    def transform(self, X, *_):
+        return X
+
+
+def create_presom_each(
+        first=(20, 20, 512)
 ):
-    pipe = Pipeline(
-        steps=[
-            ("scatter", ScatterFilter()),
-            ("somnodes", SOMNodes(*first)),
-            ("somcluster", ClusteringTransform(*second))
-        ]
-    )
+    pipe = Pipeline(steps=[
+        ("scatter", ScatterFilter()),
+        ("nodes", SOMNodes(*first)),
+    ])
+    return pipe
+
+def create_pre(
+):
+    pipe = Pipeline(steps=[
+        ("scatter", ScatterFilter()),
+    ])
     return pipe

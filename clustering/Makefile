@@ -12,12 +12,13 @@ CASEINFO = $(BUCKET_URL)/case_info.json
 
 REFCASES = selected_hashed_ids.json
 
-TUBES = "1;2"
-NUM = 5
-UPSAMPLING_NUM = 800
+# CUSTOM config options, offloaded in config
+EXP = experiments/template.mk
+
+include $(EXP)
 
 BIN = python3 -m clustering
-OPTS = --temp $(TEMP) --bucketname $(BUCKET) --tubes $(TUBES) --input $(CASEINFO) --num $(NUM) --upsampled $(UPSAMPLING_NUM)
+OPTS = --temp $(TEMP) --bucketname $(BUCKET) --tubes $(TUBES) --input $(CASEINFO) --num $(NUM) --upsampled $(UPSAMPLING_NUM) --pipeline $(METHOD) --groups $(GROUPS) --pre $(PREMETHOD)
 
 .PHONY: run run-selected tests image
 

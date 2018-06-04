@@ -57,10 +57,15 @@ class CaseView:
 
     def yield_data(self, tube=1):
         for cohort, cases in self._data.items():
-            for case in cases:
+            for i, case in enumerate(cases):
                 fcsdata = self._load_tube(case, tube)
                 if fcsdata is not None:
-                    yield (case["id"], cohort, case["infiltration"]), fcsdata
+                    LOGGER.info("Getting %s %d", cohort, i)
+                    yield (
+                        ("label", case["id"]),
+                        ("group", cohort),
+                        ("infiltration", case["infiltration"]),
+                    ), fcsdata
 
 
 class CaseCollection:
