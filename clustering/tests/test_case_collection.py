@@ -17,6 +17,7 @@ class BaseCollection(unittest.TestCase):
     """Create basic assortment of utilities for testing."""
 
     case_json_path = resolve_path("data/case_info.json")
+    tmppath = resolve_path("data/fcs")
 
     def setUp(self):
         self.collection = CaseCollection(self.case_json_path)
@@ -96,9 +97,8 @@ class BaseView(BaseCollection):
     """Basic operations on views."""
     def setUp(self):
         super().setUp()
-        tmppath = resolve_path("data/fcs")
         self.view = self.collection.create_view(
-            bucketname="mll-flowdata", tmpdir=tmppath
+            bucketname="mll-flowdata", tmpdir=self.tmppath
         )
 
 

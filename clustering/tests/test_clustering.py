@@ -8,8 +8,15 @@ from .test_case_collection import BaseView
 
 class ClusteringTest(BaseView):
 
+    def setUp(self):
+        super().setUp()
+        self.small_view = self.collection.create_view(
+            num=1, groups=["CLL", "normal"],
+            tmpdir=self.tmppath
+        )
+
     def _yield_batch(self, tube):
-        return pd.concat([d for _, d in self.view.yield_data(tube)])
+        return pd.concat([d for _, d in self.small_view.yield_data(tube)])
 
     def test_pipeline(self):
         pipelines = [
@@ -22,6 +29,6 @@ class ClusteringTest(BaseView):
                 pipe = pipefunc()
                 pipe.fit(self._yield_batch(1))
                 results = [
-                    pipe.transform(d) for _, d in self.view.yield_data(1)
+                    pipe.transform(d) for _, d in self.small_view.yield_data(1)
                 ]
                 print(results)
