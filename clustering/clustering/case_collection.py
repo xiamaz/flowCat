@@ -20,8 +20,11 @@ LOGGER = logging.getLogger(__name__)
 class CaseView:
     def __init__(self, data, markers, bucketname="", tmpdir="tmp"):
         self._data = data
-        self.s3 = boto3.resource("s3")
-        self.bucket = self.s3.Bucket(bucketname)
+        self.s3 = None
+        self.bucket = None
+        if bucketname:
+            self.s3 = boto3.resource("s3")
+            self.bucket = self.s3.Bucket(bucketname)
         self.tmpdir = tmpdir
         self.markers = markers
 
@@ -39,8 +42,11 @@ class CaseView:
         destpath = os.path.join(self.tmpdir, key)
 
         if not os.path.exists(destpath):
-            os.makedirs(os.path.split(destpath)[0], exist_ok=True)
-            self.bucket.download_file(key, destpath)
+            if self.bucket:
+                os.makedirs(os.path.split(destpath)[0], exist_ok=True)
+                self.bucket.download_file(key, destpath)
+            else:
+                raise RuntimeError("File %s does not exist", destpath)
 
         _, data = fcsparser.parse(destpath, data_set=0, encoding="latin-1")
         try:
@@ -63,7 +69,7 @@ class CaseCollection:
         with open(infopath) as ifile:
             self._data = json.load(ifile)
 
-        self.tubes = self._unique_tubes()
+        self.tubes = list(self._unique_tubes())
         # majority markers per tube
         self.markers = MarkerFilter(threshold=0.9)
         self.markers.fit(self._data)

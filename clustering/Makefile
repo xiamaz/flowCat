@@ -19,11 +19,16 @@ UPSAMPLING_NUM = 800
 BIN = python3 -m clustering
 OPTS = --temp $(TEMP) --bucketname $(BUCKET) --tubes $(TUBES) --input $(CASEINFO) --num $(NUM) --upsampled $(UPSAMPLING_NUM)
 
+.PHONY: run run-selected tests image
+
 run:
 	$(BIN) $(OPTS) --output $(OUTPUT)
 
 run-selected: $(REFCASES)
 	$(BIN) $(OPTS) --output $(OUTPUT)_selected --refcases $(REFCASES)
+
+tests:
+	python3 -m unittest discover
 
 $(REFCASES):
 	aws s3 cp $(BUCKET_URL)/$(REFCASES) .

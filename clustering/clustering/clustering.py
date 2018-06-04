@@ -166,12 +166,35 @@ class ClusteringTransform(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X, *_):
+        """Return relative distribution of all events in the created SOM."""
         result = self.model.transform(X)
         return result / np.sum(result)
 
     def predict(self, X, *_):
+        """Map all events to their respective nodes as a list of
+        event-length."""
         result = self.model.predict(X)
         return result
+
+
+class SOMNodes(BaseEstimator, TransformerMixin):
+
+    def __init__(self, m=10, n=10, batch_size=1024):
+        self._model = ClusteringTransform(m, n, batch_size=batch_size)
+
+    def fit(self, X, *_):
+        return self
+
+
+    def predict(self, X, *_):
+        return self._model.predict(X, *_)
+
+    def transform(self, X, *_):
+        self._model.fit(X)
+        weights = pd.DataFrame(
+            self._model.model.output_weights, columns=X.columns
+        )
+        return weights
 
 
 class SOMGatingFilter(BaseEstimator, TransformerMixin):
@@ -181,19 +204,19 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
             channels=["CD45-KrOr", "SS INT LIN"],
             positions=["+", "-"],
     ):
-        self._pre = ClusteringTransform(10, 10, 2048)
+        # self._pre = ClusteringTransform(10, 10, 2048)
+        self._pre = SOMNodes(10, 10, 2048)
         self._clust = GatingFilter(channels, positions, min_samples=4, eps=50)
         self.som_weights = None
         self.som_to_clust = None
+        self._channels = channels
 
     def fit(self, X, *_):
         # always fit new when predicting data
         return self
 
     def predict(self, X, *_):
-        self._pre.fit(X)
-        weights = self._pre.model.output_weights
-        self.som_weights = pd.DataFrame(weights, columns=X.columns)
+        self.som_weights = self._pre.transform(X)
         self._clust.fit(self.som_weights)
 
         event_to_node = self._pre.predict(X)
@@ -206,8 +229,7 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
 
     def transform(self, X, *_):
         selection = self.predict(X, *_)
-        return X[selection == 1]
-
+        return X[selection == 1, X.columns != self._channels]
 
 def create_pipeline(m=10, n=10, batch_size=4096):
     pipe = Pipeline(
@@ -229,4 +251,17 @@ def create_pipeline_multistage(
         ("somgating", SOMGatingFilter(channels, positions)),
         ("somcluster", ClusteringTransform(m=m, n=n)),
     ])
+    return pipe
+
+def create_pipeline_double_som(
+        first = (10, 10),
+        second = (10, 10)
+):
+    pipe = Pipeline(
+        steps=[
+            ("scatter", ScatterFilter()),
+            ("somnodes", SOMNodes(*first)),
+            ("somcluster", ClusteringTransform(*second))
+        ]
+    )
     return pipe
