@@ -1,20 +1,15 @@
-CONTAINER_NAME = flow-classification
-REGISTRY = 463789428463.dkr.ecr.eu-central-1.amazonaws.com
-DOCKERFILE = docker/Dockerfile
-
 # Basic settings
 BUCKET = mll-flow-classification
 
 DATA = output
 # input settings
 INPUT = $(DATA)/clustering
-INPUT_TYPE = output_selected
 
 # output data options
 OUTPUT = $(DATA)/classification
 
 # use a specific experiment setup
-EXP = experiments/elu_tube12_large_only.mk
+EXP = experiments/template.mk
 include $(EXP)
 
 # set to name of included experiment
@@ -30,8 +25,7 @@ OPTIONS = -n "$(NOTE)" \
 		  -m $(METHOD) \
 		  --tubes "$(TUBES)"
 
-.PHONY: all run clean image image-run image-upload
-
+.PHONY: all run clean
 
 run:
 	# always use newest results
@@ -44,5 +38,3 @@ upload: # run
 
 download:
 	aws s3 cp --recursive --exclude "*" --include "*.csv" s3://$(BUCKET) $(DATA)
-
-include ../docker.mk

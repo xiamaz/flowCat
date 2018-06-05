@@ -1,15 +1,15 @@
 # GENERAL notes
 #   Additional information that will be saved in the output directory
-NOTE = Process only tube 1
+NOTE = Double SOM generation
 
 # INPUT data source
-INPUT_TYPE = output_selected
+INPUT_TYPE = bigseq_selected
 
 # PROCESSING options
 # Names of groups to be included
 #   different groups can be merged by assigning multiple comma separated groups
 #   to a single custom label, such as example:normal,CLL
-GROUPS = LMg:LPL,Marginal;MtCp:Mantel,CLLPL;CM:CLL,MBL;normal
+GROUPS = CLL;MBL;CLLPL;LPL;Marginal;normal
 
 # Validation method to be used. Both holdout and kfold are possible here.
 METHOD = kfold:5
@@ -18,4 +18,4 @@ METHOD = kfold:5
 FILTERS =
 # Tube numbers to be used, if multiple are given, the data in the separate tubes
 # will be joined on label
-TUBES = 1
+TUBES = 1;2

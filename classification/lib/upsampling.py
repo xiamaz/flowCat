@@ -20,25 +20,25 @@ def merge_on_label(left_df: pd.DataFrame, right_df: pd.DataFrame, metacols) \
         -> pd.DataFrame:
     '''Merge two dataframes on label column and drop additional replicated
     columns such as group.'''
-    # all columns that do not contain data
-    meta_label_cols = metacols + ["label"]
-
     merged = left_df.merge(
         right_df, how="inner", on="label", suffixes=("", "_y")
     )
-    merged.drop([s+"_y" for s in metacols], inplace=True, axis=1)
+    merged.drop([
+        s+"_y" for s in metacols if s != "label"
+    ], inplace=True, axis=1)
 
     # continuous field naming
     names = [
         m for m in list(merged)
-        if m not in meta_label_cols
+        if m not in metacols
     ]
     rename_dict = {m: str(i + 1) for i, m in enumerate(names)}
     merged.rename(columns=rename_dict, inplace=True)
 
     # reorder the columns
-    merged_names = list(rename_dict.values()) + meta_label_cols
+    merged_names = list(rename_dict.values()) + metacols
     merged = merged[merged_names]
+    print(merged)
     return merged
 
 
@@ -132,11 +132,12 @@ class DataView:
 
     @staticmethod
     def split_x_y(
-            dataframe: pd.DataFrame, binarizer: Callable, metacols: [str]
+            dataframe: pd.DataFrame,
+            binarizer: Callable,
     ) -> (np.matrix, np.matrix):
         '''Split dataframe into matrices with group labels as sparse matrix'''
         x_matrix = dataframe.drop(
-            ["group", "label", "infiltration"], axis=1
+            [c for c in dataframe.columns if not c.isdigit()], axis=1
         ).as_matrix()
         y_matrix = dataframe['group'].apply(binarizer).as_matrix()
         return x_matrix, y_matrix
@@ -157,7 +158,6 @@ class UpsamplingData:
     '''Data from upsampling in pandas dataframe form.'''
 
     def __init__(self, dataframe: pd.DataFrame):
-        print(dataframe)
         self._data = dataframe
 
     @classmethod
@@ -173,6 +173,7 @@ class UpsamplingData:
         merged_tubes = [
             cls._merge_tubes([f[t] for t in tubes]) for f in files.values()
         ]
+        print(merged_tubes)
         metacols = [
             meta for _, meta in merged_tubes
         ]
@@ -263,14 +264,16 @@ class UpsamplingData:
             UpsamplingData._read_file(fp) for fp in files
         ]
         non_number_cols = [
-            [c for c in df.columns if c.isnum()]
+            [c for c in df.columns if not c.isdigit()]
             for df in dataframes
         ]
         not_both = reduce(lambda x, y: set(x) ^ set(y), non_number_cols)
-        assert len(not_both) != 0 , \
+        assert len(not_both) == 0 , \
             "Different non-number columns in entered dataframes."
         metacols = non_number_cols[0]
-        merged = reduce(merge_on_label, dataframes, metacols)
+        merged = reduce(
+            lambda x, y: merge_on_label(x, y, metacols), dataframes
+        )
         return merged, metacols
 
     def __repr__(self) -> str:
