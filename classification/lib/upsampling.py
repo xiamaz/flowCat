@@ -38,7 +38,6 @@ def merge_on_label(left_df: pd.DataFrame, right_df: pd.DataFrame, metacols) \
     # reorder the columns
     merged_names = list(rename_dict.values()) + metacols
     merged = merged[merged_names]
-    print(merged)
     return merged
 
 
