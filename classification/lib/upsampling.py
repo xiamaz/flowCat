@@ -41,31 +41,6 @@ def merge_on_label(left_df: pd.DataFrame, right_df: pd.DataFrame, metacols) \
     return merged
 
 
-def create_binarizer(names):
-    '''Create and parse binary label descriptions
-    '''
-    def binarizer(factor):
-        '''Create binary array from labels.
-        '''
-        value = names.index(factor)
-        # bin_array = np.zeros(len(names))
-        bin_list = [0] * len(names)
-        # bin_array[value] = 1
-        bin_list[value] = 1
-        return pd.Series(bin_list)
-
-    def debinarizer(bin_array, matrix=True):
-        '''Get label from binary array or position number.
-        '''
-        if matrix:
-            val = np.argmax(bin_array)
-        else:
-            val = bin_array
-        return names[val]
-
-    return binarizer, debinarizer
-
-
 class DataView:
     '''Contains upsampling data with possiblity to apply filters, keeping
     state.
@@ -73,8 +48,7 @@ class DataView:
 
     def __init__(self, data: pd.DataFrame):
         self._data = data
-        self._groups, (self.binarizer, self.debinarizer), self.group_names = \
-            self.split_groups(self._data)
+        self._groups, self.group_names = self.split_groups(self._data)
 
     def get_test_train_split(self, ratio: float = None, abs_num: int = None) \
             -> (pd.DataFrame, pd.DataFrame):
@@ -122,24 +96,15 @@ class DataView:
         return df_splits
 
     @staticmethod
-    def binarizers(col_data: pd.Series) -> (Callable, Callable):
-        '''Create binarizer and debinarizer from factors in a pandas series.
-        '''
-        group_names = sorted(list(col_data.unique()))
-        binarizer, debinarizer = create_binarizer(group_names)
-        return binarizer, debinarizer, group_names
-
-    @staticmethod
-    def split_x_y(
+    def split_data_labels(
             dataframe: pd.DataFrame,
-            binarizer: Callable,
-    ) -> (np.matrix, np.matrix):
+    ) -> (pd.DataFrame, pd.DataFrame):
         '''Split dataframe into matrices with group labels as sparse matrix'''
-        x_matrix = dataframe.drop(
+        data = dataframe.drop(
             [c for c in dataframe.columns if not c.isdigit()], axis=1
-        ).as_matrix()
-        y_matrix = dataframe['group'].apply(binarizer).as_matrix()
-        return x_matrix, y_matrix
+        )
+        labels = dataframe['group']
+        return data, labels
 
     @staticmethod
     def split_groups(data):
@@ -147,10 +112,8 @@ class DataView:
         name lists for easier processing.
         '''
         groups = list(data.groupby("group"))
-        # create closures for label creation
-        binarizer, debinarizer, group_names = DataView.binarizers(
-            data['group'])
-        return groups, (binarizer, debinarizer), group_names
+        group_names = [n for n, _ in groups]
+        return groups, group_names
 
 
 class UpsamplingData:
@@ -172,7 +135,6 @@ class UpsamplingData:
         merged_tubes = [
             cls._merge_tubes([f[t] for t in tubes]) for f in files.values()
         ]
-        print(merged_tubes)
         metacols = [
             meta for _, meta in merged_tubes
         ]

@@ -11,7 +11,7 @@ from argparse import ArgumentParser
 from collections import defaultdict
 
 from lib.upsampling import UpsamplingData
-from lib.classification import Classifier
+from lib.classification import Classifier, NeuralNet, Tree
 from lib.types import FilesDict
 from lib.plotting import plot_combined
 from lib.stamper import create_stamp
@@ -112,15 +112,15 @@ def evaluate(
             if method_name == "holdout":
                 if method_info.startswith("a"):
                     abs_num = int(method_info.strip("a"))
-                    clas.holdout_validation(abs_num=abs_num)
+                    clas.holdout_validation(Tree, abs_num=abs_num)
                 elif method_info.startswith("r"):
                     ratio = float(method_info.strip("r"))
-                    clas.holdout_validation(ratio=ratio)
+                    clas.holdout_validation(Tree, ratio=ratio)
             elif method_name == "kfold":
-                clas.k_fold_validation(int(method_info))
+                clas.k_fold_validation(Tree, int(method_info))
 
         clas.dump_experiment_info(**info_args)
-        results.append((i, clas.get_results()))
+        results.append((i, clas.past_experiments))
 
     plot_combined(results, output_path)
 

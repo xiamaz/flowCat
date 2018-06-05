@@ -11,6 +11,7 @@ from collections import defaultdict
 import pandas as pd
 import numpy as np
 import sklearn.metrics as skm
+from sklearn.tree import DecisionTreeClassifier
 from keras.models import Sequential
 from keras.layers import Dense
 
@@ -19,8 +20,47 @@ from lib.stamper import create_stamp
 from lib import plotting
 
 
+def create_binarizers(names, create_matrix=True):
+    '''Create and parse binary label descriptions
+    '''
+    def binarizer(factor):
+        '''Create binary array from labels.
+        '''
+        value = names.index(factor)
+
+        if create_matrix:
+            bin_list = [0] * len(names)
+            bin_list[value] = 1
+            value = pd.Series(bin_list)
+
+        return value
+
+
+    def debinarizer(bin_array, matrix=True):
+        '''Get label from binary array or position number.
+        '''
+        if matrix:
+            val = np.argmax(bin_array)
+        else:
+            val = bin_array
+        return names[val]
+
+    return binarizer, debinarizer
+
+def create_binarizer_from_data(
+        col_data: pd.Series, matrix=True
+) -> (Callable, Callable):
+    '''Create binarizer and debinarizer from factors in a pandas series.
+    '''
+    group_names = sorted(list(col_data.unique()))
+    binarizer, debinarizer = create_binarizers(
+        group_names, create_matrix=matrix
+    )
+    return binarizer, debinarizer
+
+
 def avg_dicts(dicts: [dict]) -> dict:
-    '''Average a list of dicts.'''
+    """Average a dict"""
     avg_dict = defaultdict(float)
     for item in dicts:
         for key, value in item.items():
@@ -29,13 +69,106 @@ def avg_dicts(dicts: [dict]) -> dict:
     return avg_dict
 
 
+class Tree:
+    """A normal tree."""
+    def __init__(self):
+        self.model = None
+        self.binarizer = None
+        self.debinarizer = None
+        self.history = None
+
+    def fit(self, X, *_):
+        xdata, ydata = DataView.split_data_labels(X)
+        x_matrix = xdata.values
+        self.binarizer, self.debinarizer = create_binarizer_from_data(
+            ydata, matrix=False
+        )
+        y_matrix = ydata.apply(self.binarizer).values
+
+        self.model = DecisionTreeClassifier()
+        self.model.fit(x_matrix, y_matrix)
+        return self
+
+    def predict(self, X, *_):
+        xdata, ydata = DataView.split_data_labels(X)
+        x_matrix = xdata.values
+        y_matrix = ydata.apply(self.binarizer).values
+
+        y_pred = self.model.predict(x_matrix)
+        result = [self.debinarizer(x, matrix=False) for x in y_pred]
+        return result
+
+
+class NeuralNet:
+    """Basic keras neural net."""
+    def __init__(
+            self, val_split: float = 0.0
+    ):
+        self.model = None
+        self.binarizer = None
+        self.debinarizer = None
+        self.val_split = val_split
+        self.history = None
+
+    @staticmethod
+    def create_sequential(
+            xshape: int, yshape: int,
+            binarizer: Callable,
+    ) -> Sequential:
+        '''Create a sequential neural network with specified hidden layers.
+        The input and output dimensions are inferred from the given
+        data and labels. (Labels are converted to binary matrix, which is
+        why the binarizer is necessary)
+        '''
+        model = Sequential()
+        model.add(Dense(units=10,
+                        activation="elu",
+                        input_dim=xshape,
+                        kernel_initializer='uniform'))
+        # model.add(Dense(units=10,
+        #                 activation="elu"))
+        model.add(Dense(units=yshape,
+                        activation="softmax"))
+        model.compile(loss='categorical_crossentropy', optimizer='adadelta',
+                      metrics=['acc'])
+        return model
+
+    def fit(self, X, *_):
+        xdata, ydata = DataView.split_data_labels(X)
+        x_matrix = xdata.values
+        self.binarizer, self.debinarizer = create_binarizer_from_data(ydata)
+        y_matrix = ydata.apply(self.binarizer).values
+
+        self.model = self.create_sequential(
+            x_matrix.shape[1], y_matrix.shape[1], self.binarizer
+        )
+        self.history = self.model.fit(
+            x_matrix, y_matrix, epochs=100, batch_size=32,
+            validation_split=self.val_split
+        )
+        return self
+
+    def predict(self, X, *_):
+        xdata, ydata = DataView.split_data_labels(X)
+        x_matrix = xdata.values
+        y_matrix = ydata.apply(self.binarizer).values
+        y_pred = self.model.predict_classes(
+            x_matrix, batch_size=128
+        )
+        result = [self.debinarizer(x, matrix=False) for x in y_pred]
+        return result
+
+
+
 class Classifier:
     '''Basic sequential dense classifier.'''
 
-    def __init__(self,
-                 data: DataView,
-                 output_path: str = "output/classification",
-                 name: str = "expname"):
+    def __init__(
+            self,
+            data: DataView,
+            output_path: str = "output/classification",
+            name: str = "expname",
+    ):
         # concatenate experiment name with a current timestamp
         self.name = name
 
@@ -46,10 +179,6 @@ class Classifier:
 
         # log past experiment information in a dict
         self.past_experiments = []
-
-    def get_results(self) -> dict:
-        '''Get results from previously run experiments.'''
-        return self.past_experiments
 
     def dump_experiment_info(
             self,
@@ -72,6 +201,7 @@ class Classifier:
 
     def k_fold_validation(
             self,
+            modelfunc: Callable,
             k_num: int = 5,
             **kwargs
     ) -> None:
@@ -87,6 +217,7 @@ class Classifier:
         ]
 
         experiment_info = self.validation(
+            modelfunc,
             train_test_sets,
             name_tag=name_tag,
             **kwargs
@@ -97,10 +228,11 @@ class Classifier:
 
     def holdout_validation(
             self,
+            modelfunc: Callable,
             ratio: float = 0.8,
             abs_num: int = None,
             save_weights: bool = True,
-            val_split: float = 0.2
+            val_split: float = 0.2,
     ) -> None:
         '''Simple holdout validation. If given abs_num, then each test cohort
         will contain the absolute number of cases.'''
@@ -114,6 +246,7 @@ class Classifier:
         train_test_sets = [(train, test)]
 
         experiment_info = self.validation(
+            modelfunc,
             train_test_sets, name_tag=name_tag,
             save_weights=save_weights,
             save_individual_results=True,
@@ -126,38 +259,36 @@ class Classifier:
 
     def validation(
             self,
+            modelfunc: Callable,
             train_test_sets: list,
             name_tag: str,
             save_weights: bool = False,
             save_individual_results: bool = False,
             plot_history: bool = False,
-            val_split: float = 0.0
+            val_split: float = 0.0,
     ) -> dict:
         '''Build models and create statistics for a list of train, test sets.
         '''
         eval_results = []
         for i, (train, test) in enumerate(train_test_sets):
-            model, history = self.create_sequential_model(
-                train, self._data.binarizer,
-                val_split=val_split
-            )
+            model = modelfunc()
+            model.fit(train)
+
             if save_weights:
                 weight_file = os.path.join(
                     self.output_path, "weights_{}_{}.hdf5".format(name_tag, i)
                 )
-                model.save_weights(weight_file)
+                model.model.save_weights(weight_file)
 
             if plot_history:
                 plot_path = os.path.join(
                     self.output_path,
                     "training_history_{}_{}.png".format(name_tag, i)
                 )
-                plotting.plot_history(history, plot_path)
-            training_stats = self.get_training_stats(history)
+                plotting.plot_history(model.history, plot_path)
+            training_stats = self.get_training_stats(model.history)
 
-            confusion, stat, mism = self.evaluate_model(
-                model, test, self._data.binarizer, self._data.debinarizer
-            )
+            confusion, stat, mism = self.evaluate_model(model, test)
             # add results for later batched interpretation
             eval_results.append((confusion, stat, mism, training_stats))
             # output individual results, if wanted
@@ -237,73 +368,43 @@ class Classifier:
             with open(mism_file, "w") as mismatch_output:
                 mismatch_output.writelines(mismatch_lines)
 
-    @staticmethod
-    def create_sequential_model(
-            training_data: "DataFrame",
-            binarizer: Callable,
-            val_split: float = 0.0
-    ) -> Sequential:
-        '''Create a sequential neural network with specified hidden layers.
-        The input and output dimensions are inferred from the given
-        data and labels. (Labels are converted to binary matrix, which is
-        why the binarizer is necessary)
-        '''
-        x_matrix, y_matrix = DataView.split_x_y(training_data, binarizer)
-
-        model = Sequential()
-        model.add(Dense(units=50,
-                        activation="elu",
-                        input_dim=x_matrix.shape[1],
-                        kernel_initializer='uniform'))
-        model.add(Dense(units=10,
-                        activation="elu"))
-        model.add(Dense(units=y_matrix.shape[1],
-                        activation="softmax"))
-        model.compile(loss='categorical_crossentropy', optimizer='adadelta',
-                      metrics=['acc'])
-        history = model.fit(
-            x_matrix, y_matrix, epochs=100, batch_size=32,
-            validation_split=val_split
-        )
-        return model, history
 
     @staticmethod
     def evaluate_model(
             model: Sequential,
             test_data: "DataFrame",
-            binarizer: Callable,
-            debinarizer: Callable
     ) -> (np.matrix, dict, List[dict]):
         '''Evaluate model against test data and return a number of metrics.
         '''
-        x_matrix, y_matrix = DataView.split_x_y(test_data, binarizer)
-        loss_and_metrics = model.evaluate(x_matrix, y_matrix, batch_size=128)
-        print(loss_and_metrics)
-        # y_pred = model.predict(x_matrix, batch_size=128)
-        y_pred = model.predict_classes(x_matrix, batch_size=128)
-        # convert y matrix to prediction class numbers to compare to y_pred
-        ly_test = [np.argmax(x) for x in y_matrix]
+        predictions = model.predict(test_data)
+        _, truth = DataView.split_data_labels(test_data)
         # create confusion matrix with predicted and actual labels
-        confusion = skm.confusion_matrix(ly_test, y_pred)
+        confusion = skm.confusion_matrix(truth, predictions)
 
-        # print label and mismatch kind in detail
-        mismatches = Classifier.get_mismatches(
-            ly_test, y_pred, test_data, debinarizer)
+        mismatches = Classifier.get_mismatches(truth, predictions, test_data)
 
         stats = {
-            'accuracy': skm.accuracy_score(ly_test, y_pred),
-            'precision': skm.precision_score(ly_test, y_pred,
-                                             average="weighted"),
-            'recall': skm.recall_score(ly_test, y_pred, average="weighted"),
-            'f1': skm.f1_score(ly_test, y_pred, average="weighted")
+            'accuracy': skm.accuracy_score(
+                truth, predictions
+            ),
+            'precision': skm.precision_score(
+                truth, predictions, average="weighted"
+            ),
+            'recall': skm.recall_score(
+                truth, predictions, average="weighted"
+            ),
+            'f1': skm.f1_score(
+                truth, predictions, average="weighted"
+            ),
         }
         return confusion, stats, mismatches
 
     @staticmethod
-    def get_mismatches(true_labels: [int],
-                       pred_labels: [int],
-                       test_data: pd.DataFrame,
-                       debinarizer: Callable) -> [dict]:
+    def get_mismatches(
+            true_labels: [int],
+            pred_labels: [int],
+            test_data: pd.DataFrame
+    ) -> [dict]:
         '''Get dict of mismatched patients from classficiation result.
         '''
         mismatches = {}
@@ -312,8 +413,8 @@ class Classifier:
                 continue
             label = test_data.iloc[i, :]["label"]
             mismatches[label] = {
-                "true": debinarizer(y_vals[0], matrix=False),
-                "predicted": debinarizer(y_vals[1], matrix=False)
+                "true": y_vals[0],
+                "predicted": y_vals[1],
             }
         return mismatches
 
@@ -322,6 +423,8 @@ class Classifier:
         '''Get training stats from the training history.
         Currently only get get the last reported loss and accuracy.
         '''
-        loss = history.history["loss"]
-        acc = history.history["acc"]
-        return {"loss": loss[-1], "acc": acc[-1]}
+        if history:
+            loss = history.history["loss"]
+            acc = history.history["acc"]
+            return {"loss": loss[-1], "acc": acc[-1]}
+        return {}
