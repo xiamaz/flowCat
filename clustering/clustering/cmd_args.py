@@ -22,13 +22,21 @@ def create_parser():
     parser.add_argument("-i", "--input", help="Input case json file.")
     parser.add_argument("-t", "--temp", help="Temp path for file caching.")
     parser.add_argument(
-        "--plot", help="Plotting directory", default="plots"
+        "--plotdir", help="Plotting directory", default="plots"
+    )
+    parser.add_argument(
+        "--plot", help="Enable plotting", action="store_true"
     )
     parser.add_argument(
         "--pipeline", help="Select pipeline type.", default="normal"
     )
     parser.add_argument(
-        "--pre", help="Preprocessing for each case.", default="normal"
+        "--prefit", help="Preprocessing for each case in fitting.",
+        default="normal"
+    )
+    parser.add_argument(
+        "--pretrans", help="Preprocessing for each case in transform.",
+        default="normal"
     )
     parser.add_argument("--bucketname", help="S3 Bucket with data.")
     return parser

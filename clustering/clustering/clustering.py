@@ -181,6 +181,7 @@ class SOMNodes(BaseEstimator, TransformerMixin):
 
     def __init__(self, m=10, n=10, batch_size=1024):
         self._model = ClusteringTransform(m, n, batch_size=batch_size)
+        self.history = []
 
     def fit(self, *args, **kwargs):
         return self
@@ -188,15 +189,16 @@ class SOMNodes(BaseEstimator, TransformerMixin):
     def predict(self, X, *_):
         return self._model.predict(X, *_)
 
-    def transform(self, X, som=True, *_):
-        if som:
-            self._model.fit(X)
-            weights = pd.DataFrame(
-                self._model.model.output_weights, columns=X.columns
-            )
-            return weights
-
-        return X
+    def transform(self, X, *_):
+        self._model.fit(X)
+        weights = pd.DataFrame(
+            self._model.model.output_weights, columns=X.columns
+        )
+        self.history.append({
+            "data": weights,
+            "mod": weights.index,
+        })
+        return weights
 
 
 class SOMGatingFilter(BaseEstimator, TransformerMixin):
@@ -209,32 +211,36 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
         # self._pre = ClusteringTransform(10, 10, 2048)
         self._pre = SOMNodes(10, 10, 2048)
         self._clust = GatingFilter(channels, positions, min_samples=4, eps=50)
-        self.som_weights = None
-        self.som_to_clust = None
+
         self._channels = channels
+
+        self.history = []
 
     def fit(self, X, *_):
         # always fit new when predicting data
         return self
 
     def predict(self, X, *_):
-        self.som_weights = self._pre.transform(X)
-        self._clust.fit(self.som_weights)
+        new_weights = self._pre.transform(X)
+        self._clust.fit(new_weights)
 
         event_to_node = self._pre.predict(X)
 
         # get som nodes that are associated with clusters
-        som_to_clust = self._clust.predict(self.som_weights)
+        som_to_clust = self._clust.predict(new_weights)
         event_filter = np.vectorize(lambda x: som_to_clust[x])(event_to_node)
-        self.som_to_clust = som_to_clust
+
+        # add to record lists for later plotting usage
+        self.history.append({
+            "data": new_weights,
+            "mod": som_to_clust,
+        })
+
         return event_filter
 
     def transform(self, X, *_):
         selection = self.predict(X, *_)
-        if isinstance(X, pd.DataFrame):
-            result = X.loc[selection == 1, ~X.columns.isin(self._channels)]
-        else:
-            result = X[selection == 1, ~X.columns.isin(self._channels)]
+        result = X.loc[selection == 1, ~X.columns.isin(self._channels)]
         return result
 
 
@@ -281,7 +287,7 @@ def create_presom_each(
 ):
     pipe = Pipeline(steps=[
         ("scatter", ScatterFilter()),
-        ("nodes", SOMNodes(*first)),
+        ("out", SOMNodes(*first)),
     ])
     return pipe
 
@@ -289,5 +295,27 @@ def create_pre(
 ):
     pipe = Pipeline(steps=[
         ("scatter", ScatterFilter()),
+    ])
+    return pipe
+
+def create_pregate_nodes(
+        channels=["CD45-KrOr", "SS INT LIN"],
+        positions=["+", "-"],
+        first=(20, 20, 512)
+):
+    pipe = Pipeline(steps=[
+        ("scatter", ScatterFilter()),
+        ("out", SOMGatingFilter(channels, positions)),
+        ("nodes", SOMNodes(*first))
+    ])
+    return pipe
+
+def create_pregate(
+        channels=["CD45-KrOr", "SS INT LIN"],
+        positions=["+", "-"],
+):
+    pipe = Pipeline(steps=[
+        ("scatter", ScatterFilter()),
+        ("out", SOMGatingFilter(channels, positions)),
     ])
     return pipe

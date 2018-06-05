@@ -32,11 +32,6 @@ class CaseView:
         key = [
             path["path"] for path in case["destpaths"] if path["tube"] == tube
         ]
-        if len(key) != 1:
-            LOGGER.warning(
-                "%s has %d entries for tube %d", case["id"], len(key), tube
-            )
-            return None
 
         key = key[-1]
         destpath = os.path.join(self.tmpdir, key)
@@ -49,23 +44,19 @@ class CaseView:
                 raise RuntimeError("File %s does not exist", destpath)
 
         _, data = fcsparser.parse(destpath, data_set=0, encoding="latin-1")
-        try:
-            selected = data[self.markers.selected_markers[tube]]
-        except KeyError:
-            selected = None
+        selected = data[self.markers.selected_markers[tube]]
         return selected
 
     def yield_data(self, tube=1):
         for cohort, cases in self._data.items():
             for i, case in enumerate(cases):
                 fcsdata = self._load_tube(case, tube)
-                if fcsdata is not None:
-                    LOGGER.info("Getting %s %d", cohort, i)
-                    yield (
-                        ("label", case["id"]),
-                        ("group", cohort),
-                        ("infiltration", case["infiltration"]),
-                    ), fcsdata
+                LOGGER.info("Getting %s %d", cohort, i)
+                yield (
+                    ("label", case["id"]),
+                    ("group", cohort),
+                    ("infiltration", case["infiltration"]),
+                ), fcsdata
 
 
 class CaseCollection:
@@ -79,6 +70,8 @@ class CaseCollection:
         self.markers = MarkerFilter(threshold=0.9)
         self.markers.fit(self._data)
         self._data = self.markers.transform(self._data)
+
+        self.groups = list(self._data.keys())
 
     def _unique_tubes(self):
         tubes = [
@@ -100,9 +93,9 @@ class CaseCollection:
         if groups:
             data = self._limit_groups(data, groups)
 
-        if tubes:
-            filterer = TubesFilter(tubes=tubes, duplicate_allowed=False)
-            data = filterer.transform(data)
+        tubes = tubes if tubes else self.tubes
+        filterer = TubesFilter(tubes=tubes, duplicate_allowed=False)
+        data = filterer.transform(data)
 
         # randomly sample num cases from each group
         if labels:

@@ -1,6 +1,0 @@
-METHOD = normal
-PREMETHOD = presom
-TUBES = "1;2"
-NUM = 5
-UPSAMPLING_NUM = 500
-GROUPS = "CLL;MBL;CLLPL;LPL;Marginal"
