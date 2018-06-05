@@ -4,16 +4,14 @@ CSV file operations needed for upsampling based classification
 import re
 import logging
 from functools import reduce
-from typing import Callable, Tuple
+from typing import Tuple
 
 import pandas as pd
-import numpy as np
 
 from lib.types import FilesDict, GroupSelection, SizeOption, MaybeList
 
 
 RE_TUBE = re.compile(r"tube(\d+)\.csv")
-
 
 
 def merge_on_label(left_df: pd.DataFrame, right_df: pd.DataFrame, metacols) \
@@ -138,7 +136,7 @@ class UpsamplingData:
         metacols = [
             meta for _, meta in merged_tubes
         ]
-        assert len(reduce(lambda x, y: set(x) ^ set(y), metacols)) != 0, \
+        assert (reduce(lambda x, y: set(x) ^ set(y), metacols)), \
             "Different metacols in tubes."
         merged_dfs = [
             data for data, _ in merged_tubes
@@ -154,6 +152,7 @@ class UpsamplingData:
         return self._group_sizes(self._data)
 
     def get_group_names(self):
+        """Get cohort names."""
         return self._data["group"].unique()
 
     def filter_data(
@@ -229,7 +228,7 @@ class UpsamplingData:
             for df in dataframes
         ]
         not_both = reduce(lambda x, y: set(x) ^ set(y), non_number_cols)
-        assert len(not_both) == 0 , \
+        assert not not_both, \
             "Different non-number columns in entered dataframes."
         metacols = non_number_cols[0]
         merged = reduce(
