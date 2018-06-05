@@ -13,11 +13,13 @@ def resolve_s3(path, temp):
         )
     s3url = urlparse(path)
     s3file = s3url.path.lstrip("/")
+    os.makedirs(temp, exist_ok=True)
     dest = pathlib.PurePath(temp, s3file)
     boto3.client("s3").download_file(
         s3url.netloc, s3file, str(dest)
     )
-    return dest
+    print(os.listdir(temp))
+    return str(dest)
 
 def upload_s3(dest, writefun, temp):
     s3url = urlparse(dest)

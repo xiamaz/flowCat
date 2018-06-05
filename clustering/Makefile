@@ -4,7 +4,7 @@ BUCKET = mll-flowdata
 
 BUCKET_URL = s3://$(BUCKET)
 
-TEMP = /data/flow
+TEMP = tmp
 
 CASEINFO = $(BUCKET_URL)/case_info.json
 

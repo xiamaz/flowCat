@@ -1,5 +1,5 @@
 boto3
-tensorflow
+# tensorflow
 git+https://github.com/xiamaz/fcsparser.git
 matplotlib
 scikit-learn
