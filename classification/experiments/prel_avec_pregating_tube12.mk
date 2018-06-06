@@ -2,6 +2,9 @@
 #   Additional information that will be saved in the output directory
 NOTE = Process joined tube 1 and tube 2 with pregating, but only small normal cohort, why we exclude normal
 
+# INPUT data source
+INPUT_TYPE = output_selected
+
 # PROCESSING options
 # Names of groups to be included
 #   different groups can be merged by assigning multiple comma separated groups

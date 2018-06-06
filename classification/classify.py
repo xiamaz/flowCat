@@ -104,6 +104,8 @@ def evaluate(
 
     output_path = os.path.join(output, name)
 
+    modelfunc = NeuralNet
+
     for i, view in preprocess_data(**file_data):
         subname = "{}_{}".format(name, i)
         clas = Classifier(view, name=subname, output_path=output_path)
@@ -112,12 +114,12 @@ def evaluate(
             if method_name == "holdout":
                 if method_info.startswith("a"):
                     abs_num = int(method_info.strip("a"))
-                    clas.holdout_validation(Tree, abs_num=abs_num)
+                    clas.holdout_validation(modelfunc, abs_num=abs_num)
                 elif method_info.startswith("r"):
                     ratio = float(method_info.strip("r"))
-                    clas.holdout_validation(Tree, ratio=ratio)
+                    clas.holdout_validation(modelfunc, ratio=ratio)
             elif method_name == "kfold":
-                clas.k_fold_validation(Tree, int(method_info))
+                clas.k_fold_validation(modelfunc, int(method_info))
 
         clas.dump_experiment_info(**info_args)
         results.append((i, clas.past_experiments))
