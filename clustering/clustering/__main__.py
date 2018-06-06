@@ -65,10 +65,14 @@ pre_dict = {
     "": None,
 }
 
+if args.refnormal:
+    train_groups = [g for g in groups if g != "normal"]
+else:
+    train_groups = groups
+
 # create data views for input
 train_view = cases.create_view(
-    labels=refcases, tubes=tubes, num=num,
-    groups=[g for g in groups if g != "normal"],
+    labels=refcases, tubes=tubes, num=num, groups=train_groups,
     bucketname=args.bucketname, tmpdir=args.temp
 )
 transform_view = cases.create_view(

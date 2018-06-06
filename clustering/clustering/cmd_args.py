@@ -13,6 +13,10 @@ def create_parser():
         "--groups", help="Semicolon separated list of groups"
     )
     parser.add_argument(
+        "--refnormal", help="Exclude normal cohort in consensus generation.",
+        action="store_true"
+    )
+    parser.add_argument(
         "--num", help="Number of selected cases", default=5, type=int
     )
     parser.add_argument(

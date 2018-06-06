@@ -24,11 +24,10 @@ BIN = python3 -m clustering
 USROPTS = \
 	   --tubes $(TUBES) \
 	   --num $(NUM) \
-	   --upsampled $(UPSAMPLING_NUM) \
 	   --pipeline $(METHOD) \
 	   --prefit $(PREMETHOD) \
 	   --pretrans $(TRANSMETHOD) \
-	   $(PLOT)
+	   $(GROUPS) $(UPSAMPLING_NUM) $(REFNORMAL) $(PLOT)
 
 OPTS = \
 	   --temp $(TEMP) \
@@ -60,6 +59,6 @@ image:
 run-image: image
 	docker run --runtime nvidia --mount type=bind,source=/data,target=/data $(NAME) EXP=experiments/miniseq.mk
 
-ecr:
+ecr: image
 	docker tag clustering:latest 463789428463.dkr.ecr.eu-central-1.amazonaws.com/clustering:latest
 	docker push 463789428463.dkr.ecr.eu-central-1.amazonaws.com/clustering:latest
