@@ -1,10 +1,10 @@
-NAME = flow-clustering
+NAME = clustering
 
 BUCKET = mll-flowdata
 
 BUCKET_URL = s3://$(BUCKET)
 
-TEMP = tmp
+TEMP = /data/tmp
 
 CASEINFO = $(BUCKET_URL)/case_info.json
 
@@ -26,7 +26,6 @@ USROPTS = \
 	   --num $(NUM) \
 	   --upsampled $(UPSAMPLING_NUM) \
 	   --pipeline $(METHOD) \
-	   --groups $(GROUPS) \
 	   --prefit $(PREMETHOD) \
 	   --pretrans $(TRANSMETHOD) \
 	   $(PLOT)
@@ -38,8 +37,8 @@ OPTS = \
 	   --plotdir $(PLOTDIR) \
 	   $(USROPTS)
 
-# OUTPUT = s3://mll-flow-classification/clustering/output
-OUTPUT = ../classification/output/clustering/$(OUTNAME)
+OUTPUT = s3://mll-flow-classification/clustering/$(OUTNAME)
+# OUTPUT = ../classification/output/clustering/$(OUTNAME)
 
 .PHONY: run run-selected tests image
 
@@ -57,3 +56,10 @@ $(REFCASES):
 
 image:
 	docker build -t $(NAME) .
+
+run-image: image
+	docker run --runtime nvidia --mount type=bind,source=/data,target=/data $(NAME) EXP=experiments/miniseq.mk
+
+ecr:
+	docker tag clustering:latest 463789428463.dkr.ecr.eu-central-1.amazonaws.com/clustering:latest
+	docker push 463789428463.dkr.ecr.eu-central-1.amazonaws.com/clustering:latest

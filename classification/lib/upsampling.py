@@ -228,7 +228,7 @@ class UpsamplingData:
             for df in dataframes
         ]
         not_both = reduce(lambda x, y: set(x) ^ set(y), non_number_cols)
-        assert not not_both, \
+        assert not not_both or len(dataframes) == 1, \
             "Different non-number columns in entered dataframes."
         metacols = non_number_cols[0]
         merged = reduce(

@@ -11,7 +11,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import seaborn
-# necessary for headless usage
+from scipy.cluster import hierarchy
 
 
 def plot_confusion_matrix(confusion_matrix: "numpy.matrix", classes: [str],
@@ -53,6 +53,14 @@ def plot_confusion_matrix(confusion_matrix: "numpy.matrix", classes: [str],
     plt.xlabel('Predicted label')
     plt.tight_layout()
     plt.savefig(filename, dpi=300)
+
+    plt.close("all")
+    plt.figure()
+    Y = hierarchy.distance.pdist(confusion_matrix, metric='euclidean')
+    Z = hierarchy.linkage(Y, method='single')
+    ax = hierarchy.dendrogram(Z, show_contracted=True, labels=classes)
+    plt.tight_layout()
+    plt.savefig("testdendro", dpi=300)
 
 
 def plot_history(history: "History", path: str):
@@ -114,6 +122,10 @@ def plot_single(results: list, path: str, name: str) -> None:
 
 def plot_change(data, path, xlabel="Size change"):
     '''Plot change in data according to specified target.'''
+
+    # do not try to plot empty data
+    if data.empty:
+        return
 
     output = os.path.join(path, "stat_combined.png")
     plt.close('all')
