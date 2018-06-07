@@ -21,7 +21,7 @@ def create_parser():
     )
     parser.add_argument(
         "--upsampled", help="Number of cases per cohort to be upsampled.",
-        default=300, type=int
+        default=-1, type=int
     )
     parser.add_argument("-i", "--input", help="Input case json file.")
     parser.add_argument("-t", "--temp", help="Temp path for file caching.")

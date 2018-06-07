@@ -45,6 +45,8 @@ if args.refcases:
 else:
     num = args.num if args.num != -1 else None
 
+upsampled_num = args.upsampled if args.upsampled > 0 else None
+
 outdir = "{}_{}".format(args.output, create_stamp())
 
 tubes = list(map(int, args.tubes.split(";"))) if args.tubes else cases.tubes
@@ -76,7 +78,7 @@ train_view = cases.create_view(
     bucketname=args.bucketname, tmpdir=args.temp
 )
 transform_view = cases.create_view(
-    num=args.upsampled, tubes=tubes, groups=groups,
+    num=upsampled_num, tubes=tubes, groups=groups,
     bucketname=args.bucketname, tmpdir=args.temp
 )
 

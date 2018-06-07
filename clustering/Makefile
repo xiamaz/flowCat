@@ -24,10 +24,12 @@ BIN = python3 -m clustering
 USROPTS = \
 	   --tubes $(TUBES) \
 	   --num $(NUM) \
+	   --upsampled $(UPSAMPLING_NUM)
 	   --pipeline $(METHOD) \
 	   --prefit $(PREMETHOD) \
 	   --pretrans $(TRANSMETHOD) \
-	   $(GROUPS) $(UPSAMPLING_NUM) $(REFNORMAL) $(PLOT)
+	   --groups $(GROUPS) \
+	   $(FLAGS)
 
 OPTS = \
 	   --temp $(TEMP) \
