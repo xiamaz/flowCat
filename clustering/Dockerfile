@@ -6,4 +6,4 @@ RUN apt-get update && apt-get install -y git awscli && pip install -r /tmp/requi
 COPY . /app
 
 WORKDIR /app
-ENTRYPOINT ["make", "run"]
+ENTRYPOINT ["make"]
