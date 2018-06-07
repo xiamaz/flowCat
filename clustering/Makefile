@@ -13,7 +13,9 @@ REFCASES = selected_hashed_ids.json
 PLOTDIR = plots
 
 # CUSTOM config options, offloaded in config
-EXP = experiments/template.mk
+TEMPLATE = experiments/template.mk
+
+include $(TEMPLATE)
 
 include $(EXP)
 
@@ -24,7 +26,7 @@ BIN = python3 -m clustering
 USROPTS = \
 	   --tubes $(TUBES) \
 	   --num $(NUM) \
-	   --upsampled $(UPSAMPLING_NUM)
+	   --upsampled $(UPSAMPLING_NUM) \
 	   --pipeline $(METHOD) \
 	   --prefit $(PREMETHOD) \
 	   --pretrans $(TRANSMETHOD) \

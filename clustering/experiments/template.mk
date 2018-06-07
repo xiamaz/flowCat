@@ -19,6 +19,6 @@ GROUPS = ""
 
 # additional flags
 # possible flags:
-# 	--plot = enable plotting data
-# 	--refnormal = enable exclusion of normal cohort in reference generation
+# --plot = enable plotting data
+# --refnormal = enable exclusion of normal cohort in reference generation
 FLAGS = 
