@@ -56,14 +56,14 @@ groups = list(map(lambda x: x.strip(), args.groups.split(";"))) \
 
 pipeline_dict = {
     "normal": create_pipeline,
-    "multi": create_pipeline_multistage,
+    "gated": create_pipeline_multistage,
 }
 
 pre_dict = {
     "normal": create_pre,
-    "presom": create_presom_each,
-    "pregate": create_pregate,
-    "pregatesom": create_pregate_nodes,
+    "som": create_presom_each,
+    "gated": create_pregate,
+    "gatedsom": create_pregate_nodes,
     "": None,
 }
 

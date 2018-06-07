@@ -1,0 +1,7 @@
+Initial comparison of normal operation and using reference cases
+
+normal - all normal operation, with all cohorts used
+normal_exc - without normal cohort in refsom
+
+indiv_pregating - use individiual pregating with all cohorts used
+indiv_pregating_exc - without normal cohort in refsom

@@ -18,12 +18,13 @@ TEMPLATE = experiments/template.mk
 include $(TEMPLATE)
 
 EXP_NAME ?= test.mk
+TAG_NAME ?= default
 
 EXP = experiments/$(EXP_NAME)
 
 include $(EXP)
 
-OUTNAME := $(basename $(notdir $(lastword $(MAKEFILE_LIST))))
+OUTNAME := $(TAG_NAME)_$(basename $(notdir $(lastword $(MAKEFILE_LIST))))
 
 BIN = python3 -m clustering
 
