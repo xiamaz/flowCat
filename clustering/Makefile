@@ -17,6 +17,10 @@ TEMPLATE = experiments/template.mk
 
 include $(TEMPLATE)
 
+EXP_NAME ?= test.mk
+
+EXP = experiments/$(EXP_NAME)
+
 include $(EXP)
 
 OUTNAME := $(basename $(notdir $(lastword $(MAKEFILE_LIST))))
