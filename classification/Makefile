@@ -9,7 +9,10 @@ INPUT = $(DATA)/clustering
 OUTPUT = $(DATA)/classification
 
 # use a specific experiment setup
-EXP = experiments/template.mk
+TEMPLATE = experiments/template.mk
+include $(TEMPLATE)
+
+EXP ?= experiments/test.mk
 include $(EXP)
 
 # set to name of included experiment

@@ -2,11 +2,13 @@
 #   Additional information that will be saved in the output directory
 NOTE = Process joined tube 1 and tube 2 without pregating
 
+INPUT_TYPE = sans_pregating_selected
+
 # PROCESSING options
 # Names of groups to be included
 #   different groups can be merged by assigning multiple comma separated groups
 #   to a single custom label, such as example:normal,CLL
-GROUPS = LMg:LPL,Marginal;MtCp:Mantel,CLLPL;CM:CLL,MBL
+GROUPS = LMg:LPL,Marginal;MtCp:Mantel,CLLPL;CM:CLL,MBL;FL;normal
 
 # Validation method to be used. Both holdout and kfold are possible here.
 METHOD = kfold:5

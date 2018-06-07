@@ -271,6 +271,7 @@ class Classifier:
         '''Build models and create statistics for a list of train, test sets.
         '''
         eval_results = []
+        result_dfs = []
         for i, (train, test) in enumerate(train_test_sets):
             model = modelfunc()
             model.fit(train)
@@ -289,7 +290,13 @@ class Classifier:
                 plotting.plot_history(model.history, plot_path)
             training_stats = self.get_training_stats(model.history)
 
-            confusion, stat, mism = self.evaluate_model(model, test)
+            predictions = model.predict(test)
+            test["prediction"] = predictions
+
+            print(test.columns)
+            result_dfs.append(test)
+
+            confusion, stat, mism = self.evaluate_model(predictions, test)
             # add results for later batched interpretation
             eval_results.append((confusion, stat, mism, training_stats))
             # output individual results, if wanted
@@ -297,6 +304,9 @@ class Classifier:
                 self.generate_output(
                     confusion, mism, name_tag="_{}_{}".format(name_tag, i)
                 )
+
+        result_df = pd.concat(result_dfs)
+        result_df.to_csv(os.path.join(self.output_path, name_tag+".csv"))
 
         avg_confusion = sum([t[0] for t in eval_results])
         avg_stats = avg_dicts([t[1] for t in eval_results])
@@ -372,12 +382,11 @@ class Classifier:
 
     @staticmethod
     def evaluate_model(
-            model: Sequential,
+            predictions: "DataFrame",
             test_data: "DataFrame",
     ) -> (np.matrix, dict, List[dict]):
         '''Evaluate model against test data and return a number of metrics.
         '''
-        predictions = model.predict(test_data)
         _, truth = DataView.split_data_labels(test_data)
         # create confusion matrix with predicted and actual labels
         confusion = skm.confusion_matrix(truth, predictions)
