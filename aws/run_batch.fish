@@ -26,3 +26,21 @@ function batchsub
 		echo "$jobname already submitted"
 	end
 end
+
+set RUNTYPES "run" "run-selected"
+
+function submit_jobs
+	set TAG $argv[1]
+	set RAND $argv[2]
+	set EXPERIMENTS $argv[3..-1]
+	for experiment in $EXPERIMENTS
+		set expfile $TAG/$experiment.mk
+		for run in $RUNTYPES
+			for i in (seq 1 $RAND)
+				set expname $TAG"_"$experiment"_"$run"_"$i
+				echo "Creating $run $expname with $expfile"
+				batchsub $expname $run $expfile $TAG
+			end
+		end
+	end
+end
