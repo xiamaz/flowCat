@@ -1,0 +1,3 @@
+PREMETHOD = normal
+TRANSMETHOD = gated
+UPSAMPLING_NUM = "-1"

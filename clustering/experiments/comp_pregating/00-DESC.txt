@@ -1,0 +1,5 @@
+More experiments on pregating and SOM node usage for comparison of extended methods
+
+pregated_combined - Pregating for consensus-SOM will be done on all cases at the same time
+som - input into consensus som is som nodes instead of raw data
+somgated - input into consensus som is som nodes after pregating
