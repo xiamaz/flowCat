@@ -130,9 +130,9 @@ class UpsamplingData:
         which are in turn joined on columns. (eg multiple tubes on the inner
         level split into multiple output files on the outer level)
         '''
-        merged_tubes = [
-            cls._merge_tubes(f, tubes) for f in files
-        ]
+        merged_tubes = {
+            name: cls._merge_tubes(f, tubes) for name, f in files.items()
+        }
         return cls(merged_tubes)
 
     @property
@@ -143,27 +143,23 @@ class UpsamplingData:
         '''Get number of rows per group.'''
         return [self._group_sizes(d) for d in self.datas]
 
-    def get_group_names(self):
-        """Get cohort names."""
-        return [d["group"].unique() for d in self.datas]
-
     def filter_data(
             self, groups: GroupSelection, cutoff: SizeOption, max_size: SizeOption
     ) -> DataView:
         '''Filter data based on criteria and return a data view.'''
-        for data in self.datas:
+        for name, data in self.datas.items():
             if groups:
                 data = self._select_groups(data, groups)
             if cutoff or max_size:
                 if not isinstance(cutoff, dict):
-                    cutoff = {g: cutoff for g in self.get_group_names()}
+                    cutoff = {g: cutoff for g in data["group"].unique()}
                 if not isinstance(max_size, dict):
-                    max_size = {g: max_size for g in self.get_group_names()}
+                    max_size = {g: max_size for g in data["group"].unique()}
 
                 data = self._limit_size_per_group(
                     data, lower=cutoff, upper=max_size
                 )
-            yield DataView(data)
+            yield name, DataView(data)
 
     @staticmethod
     def _select_groups(data: pd.DataFrame, groups: GroupSelection):
@@ -231,13 +227,3 @@ class UpsamplingData:
 
     def __repr__(self) -> str:
         return repr(self._datas)
-
-
-def main():
-    '''Tests based on using the joined upsampling tests.
-    '''
-    UpsamplingData.from_files([("../joined/cll_normal.csv")])
-
-
-if __name__ == '__main__':
-    main()

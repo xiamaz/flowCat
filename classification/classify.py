@@ -42,15 +42,16 @@ def preprocess_data(
         sizes = [max_size]
 
     for size in sizes:
-        if iter_group:
-            size = {
-                g: size if g == iter_group else max_size
-                for g in data.get_group_names()
-            }
-        for view in data.filter_data(
+        for name, view in data.filter_data(
                 groups=args.groups, cutoff=cutoff, max_size=size
         ):
-            yield size, view
+            if iter_group:
+                size = {
+                    g: size if g == iter_group else max_size
+                    for g in view.group_names()
+                }
+            vname = "{}_{}".format(name, size)
+            yield vname, view
 
 
 def evaluate(

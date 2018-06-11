@@ -3,6 +3,7 @@ Learning visualization functions
 '''
 import os
 
+from functools import reduce
 import itertools
 import numpy as np
 import pandas
@@ -166,6 +167,16 @@ def plot_combined(results: list, path: str) -> None:
             )
             for r in result
         ]
+
+    confusions = [np.array(r["confusion"]) for _, res in results for r in res]
+    groups = [r["groups"] for _, res in results for r in res]
+
+    plot_confusion_matrix(
+        confusion_matrix=reduce(lambda x, y: x+y, confusions),
+        classes=groups[0],
+        normalize=True,
+        filename=os.path.join(output_path, "avg_confusion.png")
+    )
 
     avg_stats = pandas.DataFrame(avg_stats)
 

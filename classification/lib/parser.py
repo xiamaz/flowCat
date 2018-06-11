@@ -8,18 +8,18 @@ from argparse import ArgumentParser
 RE_TUBE_NAME = re.compile(r"tube(\d+)\.csv$")
 
 
-FilesDict = typing.List[typing.Dict[str, typing.List[str]]]
+FilesDict = typing.Dict[str, typing.Dict[str, str]]
 def get_files(path: str, folder_match: str) -> FilesDict:
     '''Get upsampling files information.'''
     dirs = os.listdir(path)
     sel_dirs = [
-        os.path.join(path, d) for d in dirs if re.search(folder_match, d)
+        d for d in dirs if re.search(folder_match, d)
     ]
-    all_files = []
+    all_files = {}
     for csvdir in sel_dirs:
         csv_files = [
-            os.path.join(csvdir, f)
-            for f in os.listdir(csvdir) if f.endswith(".csv")
+            os.path.join(path, csvdir, f)
+            for f in os.listdir(os.path.join(path, csvdir)) if f.endswith(".csv")
         ]
         files = defaultdict(dict)
         for filename in csv_files:
@@ -28,7 +28,7 @@ def get_files(path: str, folder_match: str) -> FilesDict:
                 continue
             tube = int(match.group(1))
             files[tube] = filename
-        all_files.append(files)
+        all_files[csvdir] = files
     return all_files
 
 

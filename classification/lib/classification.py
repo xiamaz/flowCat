@@ -293,7 +293,6 @@ class Classifier:
             predictions = model.predict(test)
             test["prediction"] = predictions
 
-            print(test.columns)
             result_dfs.append(test)
 
             confusion, stat, mism = self.evaluate_model(predictions, test)
@@ -320,6 +319,8 @@ class Classifier:
 
         experiment_info = {
             "setting": name_tag,
+            "confusion": avg_confusion.tolist(),
+            "groups": self._data.group_names,
             "splits": [
                 dict(
                     zip(
