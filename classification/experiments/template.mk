@@ -2,9 +2,6 @@
 #   Additional information that will be saved in the output directory
 NOTE = Process only tube 1
 
-# INPUT data source
-INPUT_TYPE = output_selected
-
 # PROCESSING options
 # Names of groups to be included
 #   different groups can be merged by assigning multiple comma separated groups
@@ -22,3 +19,7 @@ FILTERS =
 # Tube numbers to be used, if multiple are given, the data in the separate tubes
 # will be joined on label
 TUBES = 1;2
+
+
+# pattern to be used to get directories to be processed
+PATTERN = test

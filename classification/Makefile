@@ -24,6 +24,7 @@ OPTIONS = -n "$(NOTE)" \
 		  -g "$(GROUPS)" \
 		  -f "$(FILTERS)" \
 		  -i $(INPUT) \
+		  --pattern $(PATTERN) \
 		  -o $(OUTPUT) \
 		  -m $(METHOD) \
 		  --tubes "$(TUBES)"
@@ -32,12 +33,14 @@ OPTIONS = -n "$(NOTE)" \
 
 run:
 	# always use newest results
-	$(eval INPUT := $(INPUT)/$(shell ls $(INPUT) | grep "$(INPUT_TYPE)" | sort -r | head -n 1))
 	$(BIN) $(OPTIONS) $(NAME)
 
 upload: # run
 	aws s3 cp --recursive $(OUTPUT) s3://$(BUCKET)/classification
 	# aws s3 cp --recursive $(INDATA) s3://$(BUCKET)/clustering
+
+sync: # synchronize output folder containg all results
+	aws s3 sync s3://$(BUCKET) output
 
 download:
 	aws s3 cp --recursive --exclude "*" --include "*.csv" s3://$(BUCKET) $(DATA)

@@ -117,8 +117,8 @@ class DataView:
 class UpsamplingData:
     '''Data from upsampling in pandas dataframe form.'''
 
-    def __init__(self, dataframe: pd.DataFrame):
-        self._data = dataframe
+    def __init__(self, dataframe: [pd.DataFrame]):
+        self._datas = dataframe
 
     @classmethod
     def from_files(
@@ -131,47 +131,39 @@ class UpsamplingData:
         level split into multiple output files on the outer level)
         '''
         merged_tubes = [
-            cls._merge_tubes([f[t] for t in tubes]) for f in files.values()
+            cls._merge_tubes(f, tubes) for f in files
         ]
-        metacols = [
-            meta for _, meta in merged_tubes
-        ]
-        assert (reduce(lambda x, y: set(x) ^ set(y), metacols)), \
-            "Different metacols in tubes."
-        merged_dfs = [
-            data for data, _ in merged_tubes
-        ]
-        return cls(pd.concat(merged_dfs))
+        return cls(merged_tubes)
 
-    def get_data(self):
-        '''Get unfiltered data as dataframe.'''
-        return self._data
+    @property
+    def datas(self):
+        return self._datas
 
     def get_group_sizes(self):
         '''Get number of rows per group.'''
-        return self._group_sizes(self._data)
+        return [self._group_sizes(d) for d in self.datas]
 
     def get_group_names(self):
         """Get cohort names."""
-        return self._data["group"].unique()
+        return [d["group"].unique() for d in self.datas]
 
     def filter_data(
             self, groups: GroupSelection, cutoff: SizeOption, max_size: SizeOption
     ) -> DataView:
         '''Filter data based on criteria and return a data view.'''
-        data = self._data
-        if groups:
-            data = self._select_groups(data, groups)
-        if cutoff or max_size:
-            if not isinstance(cutoff, dict):
-                cutoff = {g: cutoff for g in self.get_group_names()}
-            if not isinstance(max_size, dict):
-                max_size = {g: max_size for g in self.get_group_names()}
+        for data in self.datas:
+            if groups:
+                data = self._select_groups(data, groups)
+            if cutoff or max_size:
+                if not isinstance(cutoff, dict):
+                    cutoff = {g: cutoff for g in self.get_group_names()}
+                if not isinstance(max_size, dict):
+                    max_size = {g: max_size for g in self.get_group_names()}
 
-            data = self._limit_size_per_group(
-                data, lower=cutoff, upper=max_size
-            )
-        return DataView(data)
+                data = self._limit_size_per_group(
+                    data, lower=cutoff, upper=max_size
+                )
+            yield DataView(data)
 
     @staticmethod
     def _select_groups(data: pd.DataFrame, groups: GroupSelection):
@@ -216,12 +208,13 @@ class UpsamplingData:
         return csv_data
 
     @staticmethod
-    def _merge_tubes(files: Tuple[str]) -> pd.DataFrame:
+    def _merge_tubes(files: {str: str}, tubes) -> pd.DataFrame:
         '''Merge results from different tubes joining on label.
         Labels only contained in some of the tubes will be excluded in the join
         operation.'''
         dataframes = [
-            UpsamplingData._read_file(fp) for fp in files
+            UpsamplingData._read_file(fp) for t, fp in files.items()
+            if t in tubes or not tubes
         ]
         non_number_cols = [
             [c for c in df.columns if not c.isdigit()]
@@ -234,10 +227,10 @@ class UpsamplingData:
         merged = reduce(
             lambda x, y: merge_on_label(x, y, metacols), dataframes
         )
-        return merged, metacols
+        return merged
 
     def __repr__(self) -> str:
-        return repr(self._data)
+        return repr(self._datas)
 
 
 def main():
