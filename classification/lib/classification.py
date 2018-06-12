@@ -57,7 +57,7 @@ def create_binarizer_from_data(
     binarizer, debinarizer = create_binarizers(
         group_names, create_matrix=matrix
     )
-    return binarizer, debinarizer
+    return binarizer, debinarizer, group_names
 
 
 def avg_dicts(dicts: [dict]) -> dict:
@@ -110,6 +110,7 @@ class NeuralNet:
         self.debinarizer = None
         self.val_split = val_split
         self.history = None
+        self.groups = None
 
     @staticmethod
     def create_sequential(
@@ -137,7 +138,8 @@ class NeuralNet:
     def fit(self, X, *_):
         xdata, ydata = DataView.split_data_labels(X)
         x_matrix = xdata.values
-        self.binarizer, self.debinarizer = create_binarizer_from_data(ydata)
+        self.binarizer, self.debinarizer, self.groups = \
+            create_binarizer_from_data(ydata)
         y_matrix = ydata.apply(self.binarizer).values
 
         self.model = self.create_sequential(
@@ -149,15 +151,23 @@ class NeuralNet:
         )
         return self
 
-    def predict(self, X, *_):
+    def predict_classes(self, X, *_):
         xdata, ydata = DataView.split_data_labels(X)
         x_matrix = xdata.values
-        y_matrix = ydata.apply(self.binarizer).values
         y_pred = self.model.predict_classes(
             x_matrix, batch_size=128
         )
         result = [self.debinarizer(x, matrix=False) for x in y_pred]
         return result
+
+    def predict(self, X, *_):
+        xdata, ydata = DataView.split_data_labels(X)
+        x_matrix = xdata.values
+        y_pred = self.model.predict(
+            x_matrix, batch_size=128
+        )
+        y_pred_df = pd.DataFrame(y_pred, columns=self.groups, index=X["label"])
+        return y_pred_df
 
 
 
@@ -272,6 +282,7 @@ class Classifier:
         '''
         eval_results = []
         result_dfs = []
+        prediction_dfs = []
         for i, (train, test) in enumerate(train_test_sets):
             model = modelfunc()
             model.fit(train)
@@ -290,10 +301,15 @@ class Classifier:
                 plotting.plot_history(model.history, plot_path)
             training_stats = self.get_training_stats(model.history)
 
-            predictions = model.predict(test)
+            predictions = model.predict_classes(test)
             test["prediction"] = predictions
 
             result_dfs.append(test)
+
+            pred = model.predict(test)
+            pred["group"] = test["group"].values
+            pred["infiltration"] = test["infiltration"].values
+            prediction_dfs.append(pred)
 
             confusion, stat, mism = self.evaluate_model(predictions, test)
             # add results for later batched interpretation
@@ -305,7 +321,14 @@ class Classifier:
                 )
 
         result_df = pd.concat(result_dfs)
+        prediction_df = pd.concat(prediction_dfs)
+
         result_df.to_csv(os.path.join(self.output_path, name_tag+".csv"))
+        prediction_df.to_csv(
+            os.path.join(
+                self.output_path, name_tag+"_predictions"+".csv"
+            )
+        )
 
         avg_confusion = sum([t[0] for t in eval_results])
         avg_stats = avg_dicts([t[1] for t in eval_results])

@@ -201,6 +201,10 @@ class UpsamplingData:
         '''Read output from preprocessing in csv format.
         '''
         csv_data = pd.read_table(filepath, sep=";", index_col=0)
+        csv_data["infiltration"] = csv_data["infiltration"].apply(
+            lambda x: str(x).replace(",", ".")
+        )
+        csv_data["infiltration"] = csv_data["infiltration"].astype("float32")
         return csv_data
 
     @staticmethod

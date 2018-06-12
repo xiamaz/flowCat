@@ -3,10 +3,11 @@ Learning visualization functions
 '''
 import os
 
-from functools import reduce
 import itertools
+from functools import reduce
+
 import numpy as np
-import pandas
+import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -66,7 +67,7 @@ def plot_confusion_matrix(confusion_matrix: "numpy.matrix", classes: [str],
 
 def plot_history(history: "History", path: str):
     '''Plot training history as graph.'''
-    df_data = pandas.DataFrame(history.history)
+    df_data = pd.DataFrame(history.history)
     df_data["i"] = df_data.index
 
     axes = df_data.plot(x="i")
@@ -96,7 +97,7 @@ def plot_splits(splits, path):
         for exptype, info in s.items()
         for j, (name, size) in enumerate(info["groups"].items())
     ]
-    df_data = pandas.DataFrame(df_data)
+    df_data = pd.DataFrame(df_data)
 
     grouped = seaborn.factorplot(
         x="type", hue="group", y="size", data=df_data, col="i",
@@ -171,6 +172,14 @@ def plot_combined(results: list, path: str) -> None:
     confusions = [np.array(r["confusion"]) for _, res in results for r in res]
     groups = [r["groups"] for _, res in results for r in res]
 
+    avg_results = [r["avg_result"] for _, res in results for r in res]
+    stat_df = pd.DataFrame.from_dict(avg_results)
+    avg_means = stat_df.describe()
+
+    avg_means.to_json(
+        os.path.join(output_path, "avg_stats.json"), orient="records"
+    )
+
     plot_confusion_matrix(
         confusion_matrix=reduce(lambda x, y: x+y, confusions),
         classes=groups[0],
@@ -178,6 +187,6 @@ def plot_combined(results: list, path: str) -> None:
         filename=os.path.join(output_path, "avg_confusion.png")
     )
 
-    avg_stats = pandas.DataFrame(avg_stats)
+    avg_stats = pd.DataFrame(avg_stats)
 
     plot_change(avg_stats, output_path)
