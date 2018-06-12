@@ -1,4 +1,4 @@
 METHOD=normal
 PREMETHOD = som
-TRANSMETHOD = normal
+TRANSMETHOD = som
 UPSAMPLING_NUM = "-1"

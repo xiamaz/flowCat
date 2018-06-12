@@ -1,3 +1,4 @@
-PREMETHOD = gated
+METHOD=gated
+PREMETHOD = som
 TRANSMETHOD = normal
 UPSAMPLING_NUM = "-1"

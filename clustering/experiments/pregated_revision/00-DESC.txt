@@ -1,7 +1,0 @@
-Fixing pregating results because of _gated_ being used in transformation stage.
-
-This double application of gating made no sense, but at least gives another
-combination to test for.
-
-indiv_pregating - use individiual pregating with all cohorts used
-indiv_pregating_exc - without normal cohort in refsom
