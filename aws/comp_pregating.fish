@@ -7,6 +7,6 @@ set TAG "comp_pregating"
 
 set RAND 5
 
-set EXPERIMENTS "pregated_combined" "somgated" "som"
+set EXPERIMENTS "pregated_combined" "somgated" "som" "always_som" "som_combined"
 
 submit_jobs $TAG $RAND $EXPERIMENTS
