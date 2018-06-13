@@ -176,8 +176,8 @@ def plot_combined(results: list, path: str) -> None:
     stat_df = pd.DataFrame.from_dict(avg_results)
     avg_means = stat_df.describe()
 
-    avg_means.to_json(
-        os.path.join(output_path, "avg_stats.json"), orient="records"
+    avg_means.to_csv(
+        os.path.join(output_path, "avg_stats.csv")
     )
 
     plot_confusion_matrix(

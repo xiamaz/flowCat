@@ -7,8 +7,10 @@ function run_folder
 		set template $argv[2]
 	end
 	for exp in $argv[1]/*
-		echo "Using $exp with $template"
-		make run EXP=$exp TEMPLATE=$template
+		if not [ (basename $exp) = (basename $template) ]
+			echo "Using $exp with $template"
+			make run EXP=$exp TEMPLATE=$template
+		end
 	end
 end
 
