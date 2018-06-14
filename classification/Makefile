@@ -16,7 +16,7 @@ EXP ?= experiments/test.mk
 include $(EXP)
 
 # set to name of included experiment
-NAME := $(TAG)$(basename $(notdir $(lastword $(MAKEFILE_LIST))))
+NAME := $(TAG)$(basename $(notdir $(lastword $(MAKEFILE_LIST))))_dedup
 
 BIN = python3 classify.py
 
