@@ -87,7 +87,8 @@ class DataView:
             for i in range(k_num):
                 start = block_size * i
                 end = block_size * (i+1) if i+1 < k_num else group.shape[0]
-                df_group.append(shuffled.iloc[start:end, :])
+                group_slice = shuffled.iloc[start:end, :]
+                df_group.append(group_slice)
             df_list.append(df_group)
         df_splits = [pd.concat(dfs) for dfs in zip(*df_list)]
         df_splits = [df.sample(frac=1) for df in df_splits]
@@ -205,6 +206,8 @@ class UpsamplingData:
             lambda x: str(x).replace(",", ".")
         )
         csv_data["infiltration"] = csv_data["infiltration"].astype("float32")
+
+        csv_data.drop_duplicates(subset="label", keep=False, inplace=True)
         return csv_data
 
     @staticmethod
