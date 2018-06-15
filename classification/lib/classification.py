@@ -70,6 +70,21 @@ def avg_dicts(dicts: [dict]) -> dict:
     return avg_dict
 
 
+def create_t2(predictions: pd.DataFrame) -> pd.DataFrame:
+    print(predictions)
+    arglist = predictions.apply(np.argsort, axis=1)
+    vals = predictions.columns.to_series()[arglist.values[:, ::-1][:, :2]]
+    return pd.DataFrame(vals, index=predictions.index)
+
+
+def t2_accuracy_score(truth: list, t2pred: pd.DataFrame):
+    t1 = t2pred.iloc[:, 0].values == truth.values
+    t2 = t2pred.iloc[:, 1].values == truth.values
+    tall = t1 | t2
+    # quick and dirty accuracy calculation
+    return sum(tall) / len(truth)
+
+
 class Tree:
     """A normal tree."""
     def __init__(self):
@@ -307,11 +322,17 @@ class Classifier:
             result_dfs.append(test)
 
             pred = model.predict(test)
+
+            t2pred = create_t2(pred)
+
             pred["group"] = test["group"].values
             pred["infiltration"] = test["infiltration"].values
             prediction_dfs.append(pred)
 
-            confusion, stat, mism = self.evaluate_model(predictions, test)
+
+            confusion, stat, mism = self.evaluate_model(
+                predictions, test, t2pred
+            )
             # add results for later batched interpretation
             eval_results.append((confusion, stat, mism, training_stats))
             # output individual results, if wanted
@@ -408,6 +429,7 @@ class Classifier:
     def evaluate_model(
             predictions: "DataFrame",
             test_data: "DataFrame",
+            t2pred: "DataFrame",
     ) -> (np.matrix, dict, List[dict]):
         '''Evaluate model against test data and return a number of metrics.
         '''
@@ -420,6 +442,9 @@ class Classifier:
         stats = {
             'accuracy': skm.accuracy_score(
                 truth, predictions
+            ),
+            't2accuracy': t2_accuracy_score(
+                truth, t2pred
             ),
             'precision': skm.precision_score(
                 truth, predictions, average="weighted"
