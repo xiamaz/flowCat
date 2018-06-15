@@ -1,0 +1,12 @@
+*.png
+*.json
+*.csv
+
+output/**/*
+output
+
+env/**/*
+env
+
+test/**/*
+test

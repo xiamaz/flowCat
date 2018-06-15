@@ -29,19 +29,19 @@ OPTIONS = -n "$(NOTE)" \
 		  -m $(METHOD) \
 		  --tubes "$(TUBES)"
 
-.PHONY: all run clean
+.PHONY: all run sync download upload
 
-run:
+run: download
 	# always use newest results
 	$(BIN) $(OPTIONS) $(NAME)
-
-upload: # run
-	aws s3 cp --recursive $(OUTPUT) s3://$(BUCKET)/classification
-	# aws s3 cp --recursive $(INDATA) s3://$(BUCKET)/clustering
 
 sync: # synchronize output folder containg all results
 	aws s3 sync s3://$(BUCKET) output
 	aws s3 sync output s3://$(BUCKET)
 
 download:
-	aws s3 cp --recursive --exclude "*" --include "*.csv" s3://$(BUCKET) $(DATA)
+	mkdir -p $(INPUT)
+	aws s3 cp --recursive --exclude "*" --include "*$(PATTERN)*.csv" s3://$(BUCKET)/clustering $(INPUT)
+
+upload: # run
+	aws s3 cp --recursive $(OUTPUT) s3://$(BUCKET)/classification
