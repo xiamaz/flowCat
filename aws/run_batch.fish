@@ -21,7 +21,13 @@ end
 function batchsub
 	set jobname $argv[1]
 	if not contains $jobname (batchjobs)
-		aws batch submit-job --job-definition $DEFINITION --job-queue $QUEUE --job-name $jobname --parameters target=$argv[2] --container-overrides environment="[{name=EXP_NAME,value=$argv[3]},{name=TAG_NAME,value=$argv[4]}]"
+		if [ (count $argv) -ge 3 ]
+			aws batch submit-job --job-definition $DEFINITION --job-queue $QUEUE --job-name $jobname --parameters target=$argv[2] --container-overrides environment="[{name=EXP_NAME,value=$argv[3]},{name=TAG_NAME,value=$argv[4]}]"
+		else if [ (count $argv) -eq 2 ]
+			aws batch submit-job --job-definition $DEFINITION --job-queue $QUEUE --job-name $jobname --container-overrides command=$argv[2]
+		else
+			aws batch submit-job --job-definition $DEFINITION --job-queue $QUEUE --job-name $jobname
+		end
 	else
 		echo "$jobname already submitted"
 	end

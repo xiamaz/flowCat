@@ -11,6 +11,7 @@ function run_folder
 		if not [ (basename $exp) = (basename $template) ]
 			echo "Using $exp with $template"
 			make run EXP=$exp TEMPLATE=$template
+			make upload
 		end
 	end
 end
