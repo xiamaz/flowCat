@@ -41,7 +41,7 @@ sync: # synchronize output folder containg all results
 
 download:
 	mkdir -p $(INPUT)
-	aws s3 cp --recursive --exclude "*" --include "*$(PATTERN)*.csv" s3://$(BUCKET)/clustering $(INPUT)
+	aws s3 sync --exclude "*" --include "*$(PATTERN)*.csv" s3://$(BUCKET)/clustering $(INPUT)
 
 upload: # run
-	aws s3 cp --recursive $(OUTPUT) s3://$(BUCKET)/classification
+	aws s3 sync $(OUTPUT) s3://$(BUCKET)/classification
