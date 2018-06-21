@@ -9,6 +9,8 @@ RE_TUBE_NAME = re.compile(r"tube(\d+)\.csv$")
 
 
 FilesDict = typing.Dict[str, typing.Dict[str, str]]
+
+
 def get_files(path: str, folder_match: str) -> FilesDict:
     '''Get upsampling files information.'''
     dirs = os.listdir(path)
@@ -19,9 +21,10 @@ def get_files(path: str, folder_match: str) -> FilesDict:
     for csvdir in sel_dirs:
         csv_files = [
             os.path.join(path, csvdir, f)
-            for f in os.listdir(os.path.join(path, csvdir)) if f.endswith(".csv")
+            for f in os.listdir(os.path.join(path, csvdir))
+            if f.endswith(".csv")
         ]
-        files = defaultdict(dict)
+        files: dict = defaultdict(dict)
         for filename in csv_files:
             match = RE_TUBE_NAME.search(filename)
             if match is None:
@@ -61,7 +64,7 @@ class CmdArgs:
         )
         parser.add_argument(
             "-g", "--group",
-            help="Groups included in analysis. Eg CLL;normal or g1:CLL,MBL;normal"
+            help="Groups included in analysis. Eg g1:CLL,MBL;normal"
         )
         parser.add_argument(
             "--pattern",

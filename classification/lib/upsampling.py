@@ -4,11 +4,15 @@ CSV file operations needed for upsampling based classification
 import re
 import logging
 from functools import reduce
-from typing import Tuple
+import typing
 
 import pandas as pd
 
-from lib.types import FilesDict, GroupSelection, SizeOption, MaybeList
+SizesDict = typing.Dict[str, int]
+FilesDict = typing.Dict[int, typing.Dict[int, str]]
+GroupSelection = typing.List[str]
+SizeOption = typing.Union[int, SizesDict]
+MaybeList = typing.Union[typing.List[int], None]
 
 
 RE_TUBE = re.compile(r"tube(\d+)\.csv")

@@ -36,7 +36,6 @@ def create_binarizers(names, create_matrix=True):
 
         return value
 
-
     def debinarizer(bin_array, matrix=True):
         '''Get label from binary array or position number.
         '''
@@ -47,6 +46,7 @@ def create_binarizers(names, create_matrix=True):
         return names[val]
 
     return binarizer, debinarizer
+
 
 def create_binarizer_from_data(
         col_data: pd.Series, matrix=True
@@ -92,13 +92,13 @@ class Tree:
         self.binarizer = None
         self.debinarizer = None
         self.history = None
+        self.groups = None
 
     def fit(self, X, *_):
         xdata, ydata = DataView.split_data_labels(X)
         x_matrix = xdata.values
-        self.binarizer, self.debinarizer = create_binarizer_from_data(
-            ydata, matrix=False
-        )
+        self.binarizer, self.debinarizer, self.groups = \
+            create_binarizer_from_data(ydata, matrix=False)
         y_matrix = ydata.apply(self.binarizer).values
 
         self.model = DecisionTreeClassifier()
@@ -106,9 +106,8 @@ class Tree:
         return self
 
     def predict(self, X, *_):
-        xdata, ydata = DataView.split_data_labels(X)
+        xdata, _ = DataView.split_data_labels(X)
         x_matrix = xdata.values
-        y_matrix = ydata.apply(self.binarizer).values
 
         y_pred = self.model.predict(x_matrix)
         result = [self.debinarizer(x, matrix=False) for x in y_pred]
@@ -183,7 +182,6 @@ class NeuralNet:
         )
         y_pred_df = pd.DataFrame(y_pred, columns=self.groups, index=X["label"])
         return y_pred_df
-
 
 
 class Classifier:
@@ -329,7 +327,6 @@ class Classifier:
             pred["infiltration"] = test["infiltration"].values
             prediction_dfs.append(pred)
 
-
             confusion, stat, mism = self.evaluate_model(
                 predictions, test, t2pred
             )
@@ -424,12 +421,11 @@ class Classifier:
             with open(mism_file, "w") as mismatch_output:
                 mismatch_output.writelines(mismatch_lines)
 
-
     @staticmethod
     def evaluate_model(
-            predictions: "DataFrame",
-            test_data: "DataFrame",
-            t2pred: "DataFrame",
+            predictions: pd.DataFrame,
+            test_data: pd.DataFrame,
+            t2pred: pd.DataFrame,
     ) -> (np.matrix, dict, List[dict]):
         '''Evaluate model against test data and return a number of metrics.
         '''
