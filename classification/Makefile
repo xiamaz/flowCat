@@ -29,7 +29,7 @@ OPTIONS = -n "$(NOTE)" \
 		  -m $(METHOD) \
 		  --tubes "$(TUBES)"
 
-.PHONY: all run sync download upload
+.PHONY: run sync download upload
 
 run: download
 	# always use newest results
@@ -43,5 +43,5 @@ download:
 	mkdir -p $(INPUT)
 	aws s3 sync --exclude "*" --include "*$(PATTERN)*.csv" s3://$(BUCKET)/clustering $(INPUT)
 
-upload: # run
+upload: run
 	aws s3 sync $(OUTPUT) s3://$(BUCKET)/classification

@@ -1,5 +1,5 @@
 # minimal bioconductor image for deploying flowSOM
-FROM python:3.6
+FROM registry.hub.docker.com/library/python:3.6
 
 RUN pip install awscli && apt-get update && apt-get install -y git fish
 
