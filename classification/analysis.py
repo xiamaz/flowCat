@@ -1,4 +1,4 @@
-# flake8: noqa
+#fflake8: noqa
 import os
 import re
 import glob
@@ -7,6 +7,7 @@ from functools import reduce
 
 import numpy as np
 import pandas as pd
+import altair as alt
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib import cm
@@ -68,54 +69,69 @@ def predict(row: pd.Series, threshold=0):
     return pred if row[pred] >= threshold else "uncertain"
 
 
-def top2(data: pd.DataFrame) -> pd.Series:
-    """Get the top 2 classifications for each group."""
-    results = {}
-    for name, group in data.groupby("group"):
-        gpreds = df_prediction_cols(group)
-        preds = group.apply(lambda r: name in prediction_ranks(r)[:2], axis=1)
-        acc = sum(preds) / group.shape[0]
-        results[name] = [acc]
-    return pd.DataFrame.from_dict(results, orient="index", columns=["correct"])
-
-
-def top2_sans_normal(data: pd.DataFrame) -> pd.Series:
+def top2(data: pd.DataFrame, normal_t1=True) -> pd.Series:
     """Get the top 2 classifications, while leaving normal as top 1."""
     results = {}
-    for name, group in data.groupby("group"):
-        gpreds = df_prediction_cols(group)
-        if name != "normal":
-            preds = gpreds.apply(
-                lambda r: name in prediction_ranks(r)[:2], axis=1
-            )
-            n_preds = gpreds.apply(
-                lambda r: "normal" == prediction_ranks(r)[0], axis=1
-            )
-            preds = preds & (~n_preds)
-        else:
-            preds = gpreds.apply(
-                lambda r: "normal" == prediction_ranks(r)[0], axis=1
-            )
 
-        acc = sum(preds) / group.shape[0]
-        results[name] = [acc]
-    return pd.DataFrame.from_dict(results, orient="index", columns=["correct"])
+    pdata = df_prediction_cols(data)
+    group_names = list(pdata.columns)
+    groups = zip(list(range(len(pdata.columns))), group_names)
+
+    gnums = np.vectorize(lambda x: group_names.index(x))(data["group"])
+    preds = np.argsort(pdata.values, axis=1)
+
+    t1 = preds[:, -1] == gnums
+    t2 = preds[:, -2] == gnums
+
+    nnormal = list(pdata.columns).index("normal")
+    normal = preds[:, -1] == nnormal
+
+    if normal_t1:
+        groups = [(i, n) for i, n in groups if n != "normal"]
+        corr = sum(normal[gnums == nnormal])/sum(gnums == nnormal)
+        results["normal"] = [corr, 0, 1-corr]
+
+
+    for i, name in groups:
+        selection = gnums == i
+        group_size = sum(selection)
+        if normal_t1:
+            selection = selection & (~normal)
+
+        corr = sum(t1[selection] | t2[selection])/group_size
+        results[name] = [corr, 0, 1-corr]
+
+    return pd.DataFrame.from_dict(
+        results,
+        orient="index",
+        columns=["correct", "uncertain", "incorrect"]
+    ).sort_index()
 
 
 def top1_uncertainty(data: pd.DataFrame, threshold=0.5) -> pd.DataFrame:
     """Adding a threshold below which cases are sorted to uncertain class."""
     results = {}
-    for name, group in data.groupby("group"):
-        gpreds = df_prediction_cols(group)
-        pred = gpreds.apply(lambda r: predict(r, threshold), axis=1)
-        correct = sum(pred == name)
-        uncert = sum(pred == "uncertain")
+
+    pdata = df_prediction_cols(data)
+    gnums = np.vectorize(lambda x: list(pdata.columns).index(x))(data["group"])
+    preds = np.argmax(pdata.values, axis=1)
+    maxvals = pdata.values[np.arange(len(preds)), preds]
+    rdata = np.stack(
+        (gnums, preds, maxvals),
+        axis=1
+    )
+    for i, name in enumerate(pdata.columns):
+        group_data = rdata[rdata[:, 0] == i]
+        correct = group_data[:, 1] == i
+        certain = group_data[:, 2] >= threshold
 
         results[name] = [
-            correct/(group.shape[0]-uncert), uncert/group.shape[0]
+            sum(correct & certain)/group_data.shape[0],
+            sum(~certain)/group_data.shape[0],
+            sum((~correct) & certain)/group_data.shape[0],
         ]
     return pd.DataFrame.from_dict(
-        results, orient="index", columns=["correct", "uncertain"]
+        results, orient="index", columns=["correct", "uncertain", "incorrect"]
     )
 
 
@@ -198,6 +214,8 @@ def df_stats(data: pd.DataFrame) -> pd.DataFrame:
         "top1_t04": lambda d: top1_uncertainty(d, threshold=0.4),
         "top1_t06": lambda d: top1_uncertainty(d, threshold=0.6),
         "top1_t08": lambda d: top1_uncertainty(d, threshold=0.8),
+        "top2_n+": lambda d: top2(d, normal_t1=False),
+        "top2_n-": lambda d: top2(d, normal_t1=True),
     }
     result = pd.concat(
         [fun(data) for fun in testdict.values()], keys=testdict.keys()
@@ -205,15 +223,34 @@ def df_stats(data: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def avg_stats(somiter_data: dict, ax) -> pd.DataFrame:
+def avg_stats(somiter_data: dict) -> pd.DataFrame:
     """Average df results from multiple dataframes."""
     som_df = pd.concat(
         [df_stats(d) for d in somiter_data.values()], keys=somiter_data.keys()
     )
+    som_df["incorrect"] = 1.0 - (
+        som_df["correct"]+som_df["uncertain"]
+    )
     mean = som_df.mean(level=[1, 2])
     std = som_df.std(level=[1, 2])
-    ax = mean.plot.bar(yerr=std, ax=ax)
-    return ax
+
+    alt_df = mean.stack().reset_index()
+    alt_df.columns = ["cohort", "stat", "type", "val"]
+    chart = alt.Chart(alt_df).mark_bar().encode(
+        x=alt.X("stat:N", axis=alt.Axis(title="")),
+        y=alt.Y("sum(val):Q", axis=alt.Axis(title="", grid=False)),
+        column=alt.Column("cohort:N"),
+        color=alt.Color(
+            "type:N",
+            sort=["incorrect", "uncertain", "correct"],
+            scale=alt.Scale(range=["#ff7e7e", "#FFB87E", "#77F277"]),
+        ),
+        order="ttype:N",
+    ).transform_calculate(
+        ttype="if(datum.type == 'uncertain', 1, if(datum.type == 'correct', 0, 2))"
+    )
+
+    chart.save("chart.html")
 
 
 def avg_auc(somiter_data: dict, ax: "Axes"):
@@ -243,21 +280,22 @@ def avg_auc(somiter_data: dict, ax: "Axes"):
 
 
 def plot_experiment(pattern: str, somiter_data: dict):
-    """Return statistics average over multiple iterations."""
-    fig = Figure()
+     """Return statistics average over multiple iterations."""
+     os.makedirs("analysis", exist_ok=True)
+     fig = Figure()
 
-    # average AUC plots
-    ax = fig.add_subplot(211)
-    avg_auc(somiter_data, ax)
+     # average AUC plots
+     ax = fig.add_subplot(211)
+     avg_auc(somiter_data, ax)
 
-    ax = fig.add_subplot(212)
-    avg_stats(somiter_data, ax)
+     ax = fig.add_subplot(212)
+     avg_stats(somiter_data, ax)
 
-    fig.set_size_inches(8, 16)
-    fig.suptitle(pattern)
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
-    FigureCanvas(fig)
-    fig.savefig("analysis/{}".format(pattern), dpi=200)
+     fig.set_size_inches(8, 16)
+     fig.suptitle(pattern)
+     fig.tight_layout(rect=[0, 0, 1, 0.95])
+     FigureCanvas(fig)
+     fig.savefig("analysis/{}".format(pattern), dpi=200)
 
 
 def main():
@@ -277,6 +315,8 @@ def main():
         }
         for ex, folders in experiments.items()
     }
+
+    td = predictions[list(predictions.keys())[0]]
 
     for experiment, dataframes in predictions.items():
         plot_experiment(experiment, dataframes)

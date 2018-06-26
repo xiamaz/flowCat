@@ -9,3 +9,4 @@ tensorflow
 seaborn
 pydot
 graphviz
+altair
