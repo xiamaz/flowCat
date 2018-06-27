@@ -10,8 +10,8 @@ function run_folder
 	for exp in $argv[1]/*
 		if not [ (basename $exp) = (basename $template) ]
 			echo "Using $exp with $template"
-			make run EXP=$exp TEMPLATE=$template
-			make upload
+			# make run EXP=$exp TEMPLATE=$template
+			make upload EXP=$exp TEMPLATE=$template
 		end
 	end
 end

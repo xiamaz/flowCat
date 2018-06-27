@@ -247,10 +247,12 @@ def avg_stats(somiter_data: dict) -> pd.DataFrame:
         ),
         order="ttype:N",
     ).transform_calculate(
-        ttype="if(datum.type == 'uncertain', 1, if(datum.type == 'correct', 0, 2))"
+        ttype=(
+            "if(datum.type == 'uncertain', 1, "
+            "if(datum.type == 'correct', 0, 2))"
+        )
     )
-
-    chart.save("chart.html")
+    return chart
 
 
 def avg_auc(somiter_data: dict, ax: "Axes"):
@@ -289,14 +291,14 @@ def plot_experiment(pattern: str, somiter_data: dict):
      avg_auc(somiter_data, ax)
 
      ax = fig.add_subplot(212)
-     avg_stats(somiter_data, ax)
 
      fig.set_size_inches(8, 16)
-     fig.suptitle(pattern)
-     fig.tight_layout(rect=[0, 0, 1, 0.95])
+     fig.tight_layout(rect=[0, 0, 1, 1])
      FigureCanvas(fig)
-     fig.savefig("analysis/{}".format(pattern), dpi=200)
+     fig.savefig("analysis/{}_auc.png".format(pattern), dpi=200)
 
+     chart = avg_stats(somiter_data)
+     chart.save("analysis/{}_stats.png".format(pattern))
 
 def main():
     experiments = {

@@ -8,6 +8,8 @@ INPUT = $(DATA)/clustering
 # output data options
 OUTPUT = $(DATA)/classification
 
+EXTRA_TAG = _dedup
+
 # use a specific experiment setup
 TEMPLATE = experiments/template.mk
 include $(TEMPLATE)
@@ -16,7 +18,7 @@ EXP ?= experiments/test.mk
 include $(EXP)
 
 # set to name of included experiment
-NAME := $(TAG)$(basename $(notdir $(lastword $(MAKEFILE_LIST))))_dedup
+NAME := $(TAG)$(basename $(notdir $(lastword $(MAKEFILE_LIST))))$(EXTRA_TAG)
 
 BIN = python3 classify.py
 
@@ -29,7 +31,7 @@ OPTIONS = -n "$(NOTE)" \
 		  -m $(METHOD) \
 		  --tubes "$(TUBES)"
 
-.PHONY: run sync download upload
+.PHONY: run sync download upload report
 
 run: download
 	# always use newest results
@@ -43,5 +45,11 @@ download:
 	mkdir -p $(INPUT)
 	aws s3 sync --exclude "*" --include "*$(PATTERN)*.csv" s3://$(BUCKET)/clustering $(INPUT)
 
-upload: run
-	aws s3 sync $(OUTPUT) s3://$(BUCKET)/classification
+upload:
+	aws s3 sync --exclude "*" --include "*$(NAME)*" $(OUTPUT) s3://$(BUCKET)/classification
+
+report: # regenerate all figures and tables
+	python3 report.py report
+	mkdir -p latex
+	latexmk -pdf -outdir=report report/report.tex
+	cd report && latexmk -c

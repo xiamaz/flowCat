@@ -11,4 +11,4 @@ RUN pip install -r requirements.txt
 COPY . /app
 WORKDIR "/app/"
 
-ENTRYPOINT ["./run_s3.fish"]
+ENTRYPOINT ["./run.fish"]

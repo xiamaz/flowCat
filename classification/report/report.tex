@@ -1,0 +1,76 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+\begin{document}
+
+
+\section{SOM Generation setup}
+
+Result analysis have been done for the included cohort using the following settings in SOM-Generation:
+
+\begin{description}
+   \item[normal] SOM generated using 5 cases from each cohort, without any further modification of the data
+   \item[pregated] Pregating of each individual SOM on negative side-scatter and positive CD45, which roughly translates to the lymphocyte population
+\end{description}
+
+Some additional modifications of the dataset for the consensus SOM generation can be applied in both approaches.
+
+\begin{description}
+   \item[exc] Exclusion of the normal cohort in the reference SOM generation
+   \item[selected] Cases for reference SOM are preselected instead of randomly chosen from each cohort
+\end{description}
+
+This yields us 4 different configurations for the initial consensus SOM generation and followed upsampling.
+
+Additionally some additional SOM processing methods have been tested in another selection of setups.
+
+\begin{description}
+   \item[som] Consensus SOM created using SOM nodes instead of raw data.
+   \item[somgated] Consensus SOM created using SOM nodes after pregating.
+   \item[som\_combined] SOM nodes will be used for combined gating.
+   \item[pregated\_combined] Pregating for consensus SOM batched for all input cases.
+   \item[always\_som] SOM nodes for both consensus SOM and also upsampling of individual samples.
+\end{description}
+
+After our initial AWS Batch runs of the consensus SOM samples, we have obtained the following number of upsampled data.
+
+\begin{figure}[h]
+   \centering
+   \includegraphics[width=1\textwidth]{experiment_overview}
+   \caption{Overview of number of generated experiments per type.}
+\end{figure}
+
+Two sets of experiments have been generated so far, with \emph{initial\_comp} containing the first set of experiments and \emph{comp\_pregating}, containing additional experiments with other SOM-generation settings.
+
+
+\section{Classification setup}
+
+Each setup is classified independently and afterwards identical replications are averaged to provide the average classification
+accuracy over multiple consensus SOM generations.
+
+In classification there are also multiple parameters, which we can vary, of which the most important are:
+
+\begin{description}
+   \item[groups] Diagnoses to be classified, which can also be grouped into new meta-classes, that count as one
+   \item[number] Maximum number of cases classified for each group. Alternatively all classes can be reduced to the lowest one.
+\end{description}
+
+The random component in the classifier is constrained to the initialization of the neural network weights and the choice of cases in the train and test datasets.
+
+\begin{description}
+   \item[initial\_comp] Comparisons between LMg (LPL, Marginal), MtCp (Mantle, CLL/PL), CM (CLL, MBL) and normal with maximum group size of 2000.
+\end{description}
+
+This setup is applied to all experiments described in the SOM setup section.
+
+
+\section{Classification results}
+
+\begin{table}
+   \input{result.tex}
+   \caption{Classification results using the different configurations of SOM input files.}
+\end{table}
+
+\end{document}

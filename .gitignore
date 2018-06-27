@@ -16,3 +16,5 @@ __pycache__
 archive/*esults
 *.LMD
 *.html
+tags
+/*/analysis
