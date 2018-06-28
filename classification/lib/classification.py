@@ -294,7 +294,6 @@ class Classifier:
         '''Build models and create statistics for a list of train, test sets.
         '''
         eval_results = []
-        result_dfs = []
         prediction_dfs = []
         for i, (train, test) in enumerate(train_test_sets):
             model = modelfunc()
@@ -317,8 +316,6 @@ class Classifier:
             predictions = model.predict_classes(test)
             test["prediction"] = predictions
 
-            result_dfs.append(test)
-
             pred = model.predict(test)
 
             t2pred = create_t2(pred)
@@ -338,10 +335,8 @@ class Classifier:
                     confusion, mism, name_tag="_{}_{}".format(name_tag, i)
                 )
 
-        result_df = pd.concat(result_dfs)
         prediction_df = pd.concat(prediction_dfs)
 
-        result_df.to_csv(os.path.join(self.output_path, name_tag+".csv"))
         prediction_df.to_csv(
             os.path.join(
                 self.output_path, name_tag+"_predictions"+".csv"
