@@ -8,6 +8,9 @@ INPUT = $(DATA)/clustering
 # output data options
 OUTPUT = $(DATA)/classification
 
+
+REPORT = $(DATA)/report
+
 EXTRA_TAG = _dedup
 
 # use a specific experiment setup
@@ -49,7 +52,6 @@ upload:
 	aws s3 sync --exclude "*" --include "*$(NAME)*" $(OUTPUT) s3://$(BUCKET)/classification
 
 report: # regenerate all figures and tables
-	python3 report.py report
-	mkdir -p latex
-	latexmk -pdf -outdir=report report/report.tex
-	cd report && latexmk -c
+	python3 -m report $(REPORT)
+	cp templates/report.tex $(REPORT)
+	cd $(REPORT) && latexmk -pdf && latexmk -c

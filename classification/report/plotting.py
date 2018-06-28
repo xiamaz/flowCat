@@ -102,7 +102,7 @@ def plot_avg_roc_curves(somiter_data: dict) -> Figure:
 
     ax = fig.add_subplot(111)
     avg_roc_plot(somiter_data, ax)
-    fig.set_size_inches(8, 16)
+    fig.set_size_inches(8, 8)
     fig.tight_layout(rect=[0, 0, 1, 1])
     FigureCanvas(fig)
     return fig
