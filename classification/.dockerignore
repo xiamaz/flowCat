@@ -1,6 +1,7 @@
 *.png
 *.json
 *.csv
+*.pdf
 
 output/**/*
 output
@@ -10,3 +11,6 @@ env
 
 test/**/*
 test
+
+report/**/*
+report
