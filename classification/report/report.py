@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from .file_utils import (
-    load_experiments, load_predictions,
+    load_experiments, load_predictions, load_metadata,
     add_avg_stats, add_prediction_info
 )
 from .overview import count_groups_filter, group_stats
@@ -95,22 +95,40 @@ class Prediction:
 
         plotpath = os.path.join(path, "predictions_{}".format(pname))
         somiter_data = load_predictions(row["predictions"])
+        metadata = load_metadata(row["path"])
 
-        fig = plot_avg_roc_curves(somiter_data)
-        fig.savefig(plotpath+"_auc.png", dpi=200)
+        # fig = plot_avg_roc_curves(somiter_data)
+        # fig.savefig(plotpath+"_auc.png", dpi=200)
 
-        chart = avg_stats_plot(somiter_data)
-        chart.save(plotpath+"_stats.png")
+        # chart = avg_stats_plot(somiter_data)
+        # chart.save(plotpath+"_stats.png")
+        return pd.Series(
+            name=row.name,
+            data=[
+                metadata["note"],
+                ", ".join(metadata["group_names"]),
+            ],
+            index=[
+                "note",
+                "groups",
+            ]
+        )
 
     def plot_experiments(self, path):
         """Return statistics average over multiple iterations."""
 
         prediction_data = add_prediction_info(self.experiments)
-        prediction_data.apply(lambda x: self.plot_experiment(x, path), axis=1)
-
+        meta = prediction_data.apply(
+            lambda x: self.plot_experiment(x, path), axis=1
+        )
+        return meta
 
     def write(self, path):
-        self.plot_experiments(path)
+        metadata = self.plot_experiments(path)
+        table_data = df_to_table(metadata, "llllp{6cm}")
+        tpath = os.path.join(path, "prediction_meta.tex")
+        with open(tpath, "w") as tfile:
+            tfile.write(table_data)
 
 
 def generate_report(path):

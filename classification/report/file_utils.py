@@ -2,6 +2,7 @@
 import os
 import re
 import glob
+import json
 from math import sqrt
 from datetime import datetime
 from functools import reduce
@@ -108,3 +109,31 @@ def add_prediction_info(experiments: pd.DataFrame) -> pd.DataFrame:
     ]
 
     return most_recent
+
+
+def load_json(path: str):
+    """Load a json file."""
+    with open(path) as jsfile:
+        data = json.load(jsfile)
+    return data
+
+def avg_meta(first, second):
+    """Combine information from different runs for the same experiment."""
+    averaged = ["note", "command", "group_names"]
+    # enforce sameness
+    for key in averaged:
+        assert str(first[key]) == str(second[key])
+
+    return {
+        k: first[k]
+        for k in averaged
+    }
+
+def load_metadata(path: str) -> dict:
+    """Load metadata into a dict structure."""
+    paths = glob.glob("{}/*/*{}".format(path, "info.json"))
+    metadatas = [
+        load_json(p) for p in paths
+    ]
+    metadata = reduce(avg_meta, metadatas)
+    return metadata

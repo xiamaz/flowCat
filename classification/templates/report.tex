@@ -2,6 +2,7 @@
 \usepackage[margin=2cm]{geometry}
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{pdflscape}
 
 \begin{document}
 
@@ -68,9 +69,58 @@ This setup is applied to all experiments described in the SOM setup section.
 
 \section{Classification results}
 
-\begin{table}
+Analysis of classification results has been initially done in the classification procedure itself, which produced a result json file containing individual run statistics and also averaged statistics over all runs.
+This approach lacked flexibility in the analysis approach and did not lend itself well to more complex interpretations of the prediction data, such as top N accuracies, introduction of uncertainty classes and changes in the application and calculation of averages in these approaches.
+
+By directly saving the output layer activations, we can postpone analysis to a later stage. Giving us more flexibility in the interpretation.
+
+\begin{table}[h]
+   \centering
    \input{result.tex}
    \caption{Classification results using the different configurations of SOM input files.}
 \end{table}
+
+\begin{landscape}
+\begin{table}
+   \resizebox{\linewidth}{!}{%
+   \input{prediction_meta.tex}
+   }
+   \caption{Classification result metadata.}
+\end{table}
+\end{landscape}
+
+\section{Classification analysis and prediction interpretation}
+
+In analyzing the results of the classification we want to answer a few basic questions:
+
+\begin{itemize}
+   \item consensus SOM
+      \begin{itemize}
+         \item Which preprocessing steps improve classification results to what extent?
+         \item How does group composition of the SOM affect classification results?
+            \begin{itemize}
+               \item How many cases in the consensus SOM is optimal?
+               \item Does inclusion/exclusion of the normal cohort affect the result?
+               \item How much does case quality influence the quality of classification, does infiltration matter in the selection of the cases?
+            \end{itemize}
+      \end{itemize}
+   \item Classification
+      \begin{itemize}
+         \item Grouping of different entities into combined classes?
+         \item Adaptations to the neural network classifier?
+         \item Implementation of alternative classifiers?
+      \end{itemize}
+   \item Prediction interpretation
+      \begin{itemize}
+         \item Analysis of top-N (especially 2) accuracy as an alternative? (required special treatment of the normal diagnosis)
+         \item thresholds for misclassifications, can we solve a subset with very high certainty? Creation of an uncertain class
+         \item Generalization of this idea in ROC analysis of the results.
+      \end{itemize}
+   \item Misclassification analysis
+      \begin{itemize}
+         \item Identify often misclassified cases.
+         \item Identify cases misclassified with very high certainty.
+      \end{itemize}
+\end{itemize}
 
 \end{document}
