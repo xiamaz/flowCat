@@ -3,6 +3,7 @@
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{pdflscape}
+\usepackage{subcaption}
 
 \begin{document}
 
@@ -122,5 +123,55 @@ In analyzing the results of the classification we want to answer a few basic que
          \item Identify cases misclassified with very high certainty.
       \end{itemize}
 \end{itemize}
+
+\begin{figure}
+   \centering
+   \begin{subfigure}{\textwidth}
+      \begin{subfigure}{0.5\columnwidth}
+         \includegraphics[width=\columnwidth]{predictions_initial_comp_normal_dedup_Random_stats}
+      \end{subfigure}
+      \begin{subfigure}{0.5\columnwidth}
+         \includegraphics[width=\columnwidth]{predictions_initial_comp_normal_dedup_Selected_stats}
+      \end{subfigure}
+      \caption{Normal gating - Random v Selected}
+   \end{subfigure}
+
+   \begin{subfigure}{\textwidth}
+      \begin{subfigure}{0.5\columnwidth}
+         \includegraphics[width=\columnwidth]{predictions_initial_comp_indiv_pregating_dedup_Random_stats}
+      \end{subfigure}
+      \begin{subfigure}{0.5\columnwidth}
+         \includegraphics[width=\columnwidth]{predictions_initial_comp_indiv_pregating_dedup_Selected_stats}
+      \end{subfigure}
+      \caption{Individual pregating - Random v Selected}
+   \end{subfigure}
+
+   \caption{Impact of different classification strategies on accuracy, misclassification distribution. top1 accuracy given with threshold, i.e. all cases with lower accuracies are set to uncertain. top2 accuracy given either for all cohorts (n+), or normal classifications using t1 accuracy (n-).}
+\end{figure}
+
+\begin{figure}
+   \centering
+   \begin{subfigure}{\textwidth}
+      \begin{subfigure}{0.5\columnwidth}
+         \includegraphics[width=\columnwidth]{predictions_initial_comp_normal_dedup_Random_auc}
+      \end{subfigure}
+      \begin{subfigure}{0.5\columnwidth}
+         \includegraphics[width=\columnwidth]{predictions_initial_comp_normal_dedup_Selected_auc}
+      \end{subfigure}
+      \caption{Normal gating - Random v Selected}
+   \end{subfigure}
+
+   \begin{subfigure}{\textwidth}
+      \begin{subfigure}{0.5\columnwidth}
+         \includegraphics[width=\columnwidth]{predictions_initial_comp_indiv_pregating_dedup_Random_auc}
+      \end{subfigure}
+      \begin{subfigure}{0.5\columnwidth}
+         \includegraphics[width=\columnwidth]{predictions_initial_comp_indiv_pregating_dedup_Selected_auc}
+      \end{subfigure}
+      \caption{Individual pregating - Random v Selected}
+   \end{subfigure}
+
+   \caption{receiver operation characteristic for each cohort calculated in one-vs-all fashion. Result is averaged over all SOM-runs by binning results.}
+\end{figure}
 
 \end{document}

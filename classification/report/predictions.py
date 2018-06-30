@@ -1,3 +1,5 @@
+import typing
+
 import numpy as np
 import pandas as pd
 
@@ -62,18 +64,37 @@ def top2(data: pd.DataFrame, normal_t1=True) -> pd.Series:
     ).sort_index()
 
 
+def df_get_predictions_t1(data: pd.DataFrame) -> pd.DataFrame:
+    """Get dataframe of prediction names with certainties for each case."""
+
+    pdata = df_prediction_cols(data)
+    preds = np.argmax(pdata.values, axis=1)
+    maxvals = pdata.values[np.arange(len(preds)), preds]
+    pred_names = np.vectorize(lambda x: pdata.columns[x])(preds)
+    rdata = pd.DataFrame(
+        {
+            "group": data["group"].values,
+            "prediction": pred_names,
+            "certainty": maxvals,
+        },
+        index=data.index
+    )
+    return rdata
+
+
 def top1_uncertainty(data: pd.DataFrame, threshold=0.5) -> pd.DataFrame:
     """Adding a threshold below which cases are sorted to uncertain class."""
     results = {}
 
     pdata = df_prediction_cols(data)
-    gnums = np.vectorize(lambda x: list(pdata.columns).index(x))(data["group"])
+
     preds = np.argmax(pdata.values, axis=1)
     maxvals = pdata.values[np.arange(len(preds)), preds]
-    rdata = np.stack(
-        (gnums, preds, maxvals),
-        axis=1
-    )
+    gnums = np.vectorize(
+        lambda x: list(pdata.columns).index(x)
+    )(data["group"])
+    rdata = np.stack((gnums, preds, maxvals), axis=1)
+
     for i, name in enumerate(pdata.columns):
         group_data = rdata[rdata[:, 0] == i]
         correct = group_data[:, 1] == i

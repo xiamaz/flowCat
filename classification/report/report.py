@@ -12,10 +12,17 @@ from .file_utils import (
 )
 from .overview import count_groups_filter, group_stats
 from .plotting import experiments_plot, plot_avg_roc_curves, avg_stats_plot
+from .predictions import df_get_predictions_t1
 from .pd_latex import df_to_table
 
 CLUSTERING = "output/clustering"
 CLASSIFICATION = "output/classification"
+
+
+def df_save_latex(data: pd.DataFrame, path: str, *args, **kwargs):
+    table = df_to_table(data, *args, **kwargs)
+    with open(path, "w") as tfile:
+        tfile.write(table)
 
 
 class Overview:
@@ -67,10 +74,10 @@ class Overview:
 
         # pretty print count information
         data["count"] = data["count"].astype("int32").apply(str)
-        table_string = df_to_table(data)
+
+        # save data to latex table
         tpath = os.path.join(path, filename)
-        with open(tpath, "w") as tfile:
-            tfile.write(table_string)
+        df_save_latex(data, tpath)
 
     def write(self, path):
         self.plot_clustering_experiments(path)
@@ -97,11 +104,20 @@ class Prediction:
         somiter_data = load_predictions(row["predictions"])
         metadata = load_metadata(row["path"])
 
-        # fig = plot_avg_roc_curves(somiter_data)
-        # fig.savefig(plotpath+"_auc.png", dpi=200)
+        rocpath = plotpath+"_auc.png"
+        if not os.path.exists(rocpath):
+            fig = plot_avg_roc_curves(somiter_data)
+            fig.savefig(rocpath, dpi=200)
+        else:
+            print("{} already exists. Not recreating".format(rocpath))
 
-        # chart = avg_stats_plot(somiter_data)
-        # chart.save(plotpath+"_stats.png")
+        chartpath = plotpath+"_stats.png"
+        if not os.path.exists(chartpath):
+            chart = avg_stats_plot(somiter_data)
+            chart.save(chartpath)
+        else:
+            print("{} already exists. Not recreating".format(chartpath))
+
         return pd.Series(
             name=row.name,
             data=[
@@ -124,14 +140,89 @@ class Prediction:
         return meta
 
     def write(self, path):
+        # create plots for each experiment
         metadata = self.plot_experiments(path)
-        table_data = df_to_table(metadata, "llllp{6cm}")
+        # additionally save metadata as latex table
         tpath = os.path.join(path, "prediction_meta.tex")
-        with open(tpath, "w") as tfile:
-            tfile.write(table_data)
+        df_save_latex(metadata, tpath, "llllp{6cm}")
+
+
+class Misclassifications:
+
+    def __init__(self):
+        self._data = None
+        self._misclassifications = None
+
+    @property
+    def data(self):
+        if self._data is None:
+            self._data = add_prediction_info(load_experiments(CLASSIFICATION))
+        return self._data
+
+    @property
+    def misclassications(self):
+        if self._misclassifications is None:
+            self._misclassifications = self.data.apply(
+                self.get_misclassifications, axis=1
+            )
+        return self._misclassifications
+
+    def get_misclassifications(
+            self,
+            data: pd.Series, threshold=0.8
+    ) -> pd.Series:
+        """Get misclassifications for given slice of experiments with each
+        misclassification tagged with direction and number of occurences"""
+        predictions = load_predictions(data["predictions"])
+        pdatas = {
+            k: df_get_predictions_t1(v)
+            for k, v in predictions.items()
+        }
+        pdata = pd.concat(pdatas.values(), keys=pdatas.keys())
+
+        pdata.index.names = ["exp", "id"]
+        all_misclassified = pdata.loc[pdata["group"] != pdata["prediction"]]
+        all_misclassified.set_index(
+            ["group", "prediction"], append=True, inplace=True
+        )
+        counts = all_misclassified.groupby(
+            level=["id"]
+        ).size() / len(pdatas)
+        common = counts[counts > threshold]
+        common_misclassified = all_misclassified.loc[
+            all_misclassified.index.get_level_values("id").isin(
+                common.index.get_level_values("id")
+            )
+        ]
+        merged_misclassified = common_misclassified.groupby(
+            level=["id", "group", "prediction"]
+        ).apply(
+            merge_misclassified
+        )
+
+        common.name = "count"
+        misclassif_result = merged_misclassified.join(
+            common
+        )
+        print(misclassif_result.columns)
+
+    def write(self, path):
+        tpath = os.path.join(path, "misclassifications.tex")
+        print(self.misclassications)
+        # df_save_latex(self.misclassications)
+
+
+def merge_misclassified(data: pd.DataFrame) -> pd.DataFrame:
+    """Merge misclassification information."""
+    return pd.Series({
+        "mean": data.mean(),
+        "std": data.std() if data.shape[0] > 1 else 0,
+    })
+
 
 
 def generate_report(path):
     os.makedirs(path, exist_ok=True)
     # Overview().write(path)
-    Prediction().write(path)
+    # Prediction().write(path)
+    Misclassifications().write(path)
