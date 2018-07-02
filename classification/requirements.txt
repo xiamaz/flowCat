@@ -2,7 +2,6 @@ scikit-learn
 numpy
 scipy
 pandas
-git+https://github.com/xiamaz/fcsparser.git@latin1
 keras
 keras-applications
 tensorflow
