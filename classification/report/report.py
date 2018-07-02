@@ -156,7 +156,12 @@ class Misclassifications:
     @property
     def data(self):
         if self._data is None:
-            self._data = add_prediction_info(load_experiments(CLASSIFICATION))
+            data = add_prediction_info(
+                load_experiments(CLASSIFICATION)
+            )
+            self._data = data.loc[data["name"].str.contains("dedup")]
+            print(self._data)
+
         return self._data
 
     @property
@@ -169,7 +174,9 @@ class Misclassifications:
 
     def get_misclassifications(
             self,
-            data: pd.Series, threshold=0.8
+            data: pd.Series,
+            frequency: float = 0.8,
+            certainty: float = 0.8,
     ) -> pd.Series:
         """Get misclassifications for given slice of experiments with each
         misclassification tagged with direction and number of occurences"""
@@ -188,23 +195,29 @@ class Misclassifications:
         counts = all_misclassified.groupby(
             level=["id"]
         ).size() / len(pdatas)
-        common = counts[counts > threshold]
-        common_misclassified = all_misclassified.loc[
+        # select cases with high frequency in results
+        frequent = counts[counts > frequency]
+        frequent_misclassified = all_misclassified.loc[
             all_misclassified.index.get_level_values("id").isin(
-                common.index.get_level_values("id")
+                frequent.index.get_level_values("id")
             )
         ]
-        merged_misclassified = common_misclassified.groupby(
+        merged_misclassified = frequent_misclassified.groupby(
             level=["id", "group", "prediction"]
         ).apply(
             merge_misclassified
         )
 
-        common.name = "count"
+        frequent.name = "count"
         misclassif_result = merged_misclassified.join(
-            common
+            frequent
         )
-        print(misclassif_result.columns)
+
+        # keep only cases with very high certainty misclassifications
+        high_certainty = misclassif_result.loc[
+            misclassif_result["mean"] >= certainty
+        ]
+        print(high_certainty)
 
     def write(self, path):
         tpath = os.path.join(path, "misclassifications.tex")
@@ -215,8 +228,8 @@ class Misclassifications:
 def merge_misclassified(data: pd.DataFrame) -> pd.DataFrame:
     """Merge misclassification information."""
     return pd.Series({
-        "mean": data.mean(),
-        "std": data.std() if data.shape[0] > 1 else 0,
+        "mean": float(data.mean()),
+        "std": float(data.std()) if data.shape[0] > 1 else 0.0,
     })
 
 
