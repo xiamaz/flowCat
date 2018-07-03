@@ -148,6 +148,8 @@ class Prediction:
 
 
 class Misclassifications:
+    """Collect and transform the misclassifications into an easier to process
+    information collection."""
 
     def __init__(self):
         self._data = None
@@ -155,29 +157,69 @@ class Misclassifications:
 
     @property
     def data(self):
+        """Get the basic experiment information as a pandas dataframe."""
         if self._data is None:
             data = add_prediction_info(
                 load_experiments(CLASSIFICATION)
             )
-            self._data = data.loc[data["name"].str.contains("dedup")]
-            print(self._data)
+            self._data = data.loc[
+                data["name"].str.contains("dedup") &
+                ~data["name"].str.contains("more_merged") &
+                ~data["name"].str.contains("all_groups")
+            ]
 
         return self._data
 
     @property
-    def misclassications(self):
+    def misclassifications(self):
+        """Get the high-frequency and high-certainty misclassifications."""
         if self._misclassifications is None:
-            self._misclassifications = self.data.apply(
+            dfs = self.data.apply(
                 self.get_misclassifications, axis=1
             )
+            mis_df = pd.concat(
+                dfs.tolist(),
+                keys=self.data.index
+            )
+            self._misclassifications = mis_df
+
         return self._misclassifications
 
-    def get_misclassifications(
+    def get_high_frequency_missed(
             self,
-            data: pd.Series,
             frequency: float = 0.8,
             certainty: float = 0.8,
-    ) -> pd.Series:
+            method: str = "micro",
+    ) -> pd.DataFrame:
+        """Get misclassifications with high frequency in and across experiment
+        sets."""
+        all_nums = sum(self.data["predictions"].apply(len))
+        counts = self.misclassifications.groupby("id").apply(
+            lambda r: sum(r["count"]))
+        counts.name = "all_count"
+
+        macro_count = self.misclassifications.groupby("id").apply(
+            lambda r: sum(r["rel_count"]) / self.data.shape[0]
+        )
+        macro_count.name = "macro"
+        freq_df = pd.DataFrame([counts, macro_count]).T
+        result = self.misclassifications.join(freq_df)
+
+        result = result.mean(level=["id", "group", "prediction"])
+
+        if method == "micro":
+            freq_sel = result["all_count"] / all_nums >= frequency
+        elif method == "macro":
+            freq_sel = result["macro"].astype("float32") >= frequency
+        else:
+            raise RuntimeError("Unsupported averaging method.")
+
+        result = result.loc[(result["mean"] >= certainty) & freq_sel]
+        print(result)
+        return result
+
+    @staticmethod
+    def get_misclassifications(data: pd.Series) -> pd.Series:
         """Get misclassifications for given slice of experiments with each
         misclassification tagged with direction and number of occurences"""
         predictions = load_predictions(data["predictions"])
@@ -192,37 +234,35 @@ class Misclassifications:
         all_misclassified.set_index(
             ["group", "prediction"], append=True, inplace=True
         )
-        counts = all_misclassified.groupby(
-            level=["id"]
-        ).size() / len(pdatas)
-        # select cases with high frequency in results
-        frequent = counts[counts > frequency]
-        frequent_misclassified = all_misclassified.loc[
-            all_misclassified.index.get_level_values("id").isin(
-                frequent.index.get_level_values("id")
-            )
-        ]
-        merged_misclassified = frequent_misclassified.groupby(
+
+        merged_misclassified = all_misclassified.groupby(
             level=["id", "group", "prediction"]
         ).apply(
             merge_misclassified
         )
 
-        frequent.name = "count"
-        misclassif_result = merged_misclassified.join(
-            frequent
+        counts = all_misclassified.groupby(
+            level=["id", "group", "prediction"]
+        ).size()
+        counts.name = "count"
+        rel_counts = counts / len(data["predictions"])
+        rel_counts.name = "rel_count"
+        cdf = pd.DataFrame([counts, rel_counts]).T
+
+        misclassif_result = merge_multi(
+            merged_misclassified, cdf, ["id", "group", "prediction"]
         )
 
-        # keep only cases with very high certainty misclassifications
-        high_certainty = misclassif_result.loc[
-            misclassif_result["mean"] >= certainty
-        ]
-        print(high_certainty)
+        return misclassif_result
 
     def write(self, path):
         tpath = os.path.join(path, "misclassifications.tex")
-        print(self.misclassications)
-        # df_save_latex(self.misclassications)
+        csv_path = os.path.join(path, "misclassifications.csv")
+
+        hi_freq = self.get_high_frequency_missed(method="macro")
+
+        df_save_latex(hi_freq, tpath)
+        hi_freq.to_csv(csv_path)
 
 
 def merge_misclassified(data: pd.DataFrame) -> pd.DataFrame:
@@ -232,6 +272,11 @@ def merge_misclassified(data: pd.DataFrame) -> pd.DataFrame:
         "std": float(data.std()) if data.shape[0] > 1 else 0.0,
     })
 
+
+def merge_multi(self, df, on):
+    return self.reset_index().join(
+        df, on=on
+    ).set_index(self.index.names)
 
 
 def generate_report(path):
