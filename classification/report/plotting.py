@@ -20,7 +20,7 @@ def avg_stats_plot(somiter_data: dict) -> alt.Chart:
         som_df["correct"]+som_df["uncertain"]
     )
     mean = som_df.mean(level=[1, 2])
-    std = som_df.std(level=[1, 2])
+    # std = som_df.std(level=[1, 2])
 
     alt_df = mean.stack().reset_index()
     alt_df.columns = ["cohort", "stat", "type", "val"]
@@ -57,7 +57,7 @@ def roc_plot(roc_data: dict, auc: dict, ax: "Axes") -> Figure:
             data["tpr"]-data["std"],
             data["tpr"]+data["std"],
             color=colors[i*2+1],
-            alpha = 1-(1/len(auc)*i),
+            alpha=1-(1/len(auc)*i),
         )
 
     ax.plot([0, 1], [0, 1], color="navy", lw=1, linestyle="--")
@@ -145,3 +145,17 @@ def experiments_plot(data: pd.DataFrame) -> alt.Chart:
         )
     )
     return chart
+
+
+def plot_frequency(data: pd.DataFrame, path: str):
+    """Set frequency of cases against certainty with standard deviation"""
+
+    plt_data = data.reset_index()
+    plt_data.sort_values("macro", inplace=True)
+
+    chart = alt.Chart(plt_data).mark_point().encode(
+        x="macro",
+        y="mean",
+        color="group",
+    )
+    chart.save(path)

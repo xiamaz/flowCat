@@ -174,4 +174,58 @@ In analyzing the results of the classification we want to answer a few basic que
    \caption{receiver operation characteristic for each cohort calculated in one-vs-all fashion. Result is averaged over all SOM-runs by binning results.}
 \end{figure}
 
+\begin{figure}
+   \centering
+   \begin{subfigure}{\textwidth}
+      \begin{subfigure}{0.5\columnwidth}
+         \includegraphics[width=\columnwidth]{predictions_comp_pregating_pregated_combined_dedup_Random_auc}
+      \end{subfigure}
+      \begin{subfigure}{0.5\columnwidth}
+         \includegraphics[width=\columnwidth]{predictions_comp_pregating_somgated_dedup_Random_auc}
+      \end{subfigure}
+      \caption{Pregated combined - Somgated both random}
+   \end{subfigure}
+
+   \begin{subfigure}{\textwidth}
+      \begin{subfigure}{0.5\columnwidth}
+         \includegraphics[width=\columnwidth]{predictions_comp_pregating_som_combined_dedup_Random_auc}
+      \end{subfigure}
+      \begin{subfigure}{0.5\columnwidth}
+         \includegraphics[width=\columnwidth]{predictions_comp_pregating_always_som_dedup_Random_auc}
+      \end{subfigure}
+      \caption{Som combined - Always SOM both random}
+   \end{subfigure}
+
+   \begin{subfigure}{\textwidth}
+      \begin{subfigure}{0.5\columnwidth}
+         \includegraphics[width=\columnwidth]{predictions_comp_pregating_som_dedup_Random_auc}
+      \end{subfigure}
+      \caption{SOM nodes used - random}
+   \end{subfigure}
+
+   \caption{Comp pregating results with more exotic SOM preprocessing combinations.}
+\end{figure}
+
+\begin{figure}
+   \centering
+
+   \begin{subfigure}{\textwidth}
+      \begin{subfigure}{0.5\columnwidth}
+         \includegraphics[width=\columnwidth]{predictions_comp_pregating_som_combined_dedup_Random_stats}
+      \end{subfigure}
+      \begin{subfigure}{0.5\columnwidth}
+         \includegraphics[width=\columnwidth]{predictions_comp_pregating_somgated_dedup_Random_stats}
+      \end{subfigure}
+      \caption{Som combined - SOM-gated both random}
+   \end{subfigure}
+
+   \caption{Comp pregating results with more exotic SOM preprocessing combinations.}
+\end{figure}
+
+\begin{figure}
+   \centering
+   \includegraphics[width=\textwidth]{missed_frequency}
+   \caption{Plot of frequency of misclassifications vs classification certainty.}
+\end{figure}
+
 \end{document}

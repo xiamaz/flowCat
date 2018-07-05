@@ -11,7 +11,12 @@ from .file_utils import (
     add_avg_stats, add_prediction_info
 )
 from .overview import count_groups_filter, group_stats
-from .plotting import experiments_plot, plot_avg_roc_curves, avg_stats_plot
+from .plotting import (
+    experiments_plot,
+    plot_avg_roc_curves,
+    avg_stats_plot,
+    plot_frequency
+)
 from .predictions import df_get_predictions_t1
 from .pd_latex import df_to_table
 
@@ -154,6 +159,7 @@ class Misclassifications:
     def __init__(self):
         self._data = None
         self._misclassifications = None
+        self._misclassifications_rel = None
 
     @property
     def data(self):
@@ -185,6 +191,48 @@ class Misclassifications:
 
         return self._misclassifications
 
+    @property
+    def misclassifications_rel(self):
+        """Misclassification table with relative counts."""
+
+        if self._misclassifications_rel is None:
+            # average by taking all individual numbers and dividing by the
+            # overall total number
+            all_nums = sum(self.data["predictions"].apply(len))
+            counts = self.misclassifications.groupby("id").apply(
+                lambda r: sum(r["count"])) / all_nums
+            counts.name = "micro"
+
+            # average by averaging individual total numbers, this will give
+            # each group equal weight, but ignore size imbalances between
+            # groups
+            macro_count = self.misclassifications.groupby("id").apply(
+                lambda r: sum(r["rel_count"]) / self.data.shape[0]
+            )
+            macro_count.name = "macro"
+
+            # join calculations into the original dataframe
+            freq_df = pd.DataFrame([counts, macro_count]).T
+            result = self.misclassifications.join(freq_df)
+
+            # cast results into the correct datatypes
+            result["micro"] = result["micro"].astype("float32")
+            result["macro"] = result["macro"].astype("float32")
+
+            self._misclassifications_rel = result
+
+        return self._misclassifications_rel
+
+    @property
+    def avg_missed(self):
+        """Average over sets of experiments. This will not produce
+        reasonable results for all columns.
+        """
+        set_averages = self.misclassifications_rel.mean(
+            level=["id", "group", "prediction"]
+        )
+        return set_averages
+
     def get_high_frequency_missed(
             self,
             frequency: float = 0.8,
@@ -193,29 +241,15 @@ class Misclassifications:
     ) -> pd.DataFrame:
         """Get misclassifications with high frequency in and across experiment
         sets."""
-        all_nums = sum(self.data["predictions"].apply(len))
-        counts = self.misclassifications.groupby("id").apply(
-            lambda r: sum(r["count"]))
-        counts.name = "all_count"
+        set_averages = self.avg_missed
 
-        macro_count = self.misclassifications.groupby("id").apply(
-            lambda r: sum(r["rel_count"]) / self.data.shape[0]
-        )
-        macro_count.name = "macro"
-        freq_df = pd.DataFrame([counts, macro_count]).T
-        result = self.misclassifications.join(freq_df)
+        # filter frequency on the selected method
+        freq_sel = set_averages[method].astype("float32") >= frequency
 
-        result = result.mean(level=["id", "group", "prediction"])
-
-        if method == "micro":
-            freq_sel = result["all_count"] / all_nums >= frequency
-        elif method == "macro":
-            freq_sel = result["macro"].astype("float32") >= frequency
-        else:
-            raise RuntimeError("Unsupported averaging method.")
-
-        result = result.loc[(result["mean"] >= certainty) & freq_sel]
-        print(result)
+        # filter misclassification dataframe on both
+        result = set_averages.loc[
+            (set_averages["mean"] >= certainty) & freq_sel
+        ]
         return result
 
     @staticmethod
@@ -259,10 +293,17 @@ class Misclassifications:
         tpath = os.path.join(path, "misclassifications.tex")
         csv_path = os.path.join(path, "misclassifications.csv")
 
-        hi_freq = self.get_high_frequency_missed(method="macro")
+        hi_freq = self.get_high_frequency_missed(
+            frequency=1.0,
+            method="macro"
+        )
+        print(hi_freq)
 
         df_save_latex(hi_freq, tpath)
         hi_freq.to_csv(csv_path)
+
+        freq_plot_path = os.path.join(path, "missed_frequency.png")
+        plot_frequency(self.avg_missed, freq_plot_path)
 
 
 def merge_misclassified(data: pd.DataFrame) -> pd.DataFrame:
@@ -281,6 +322,6 @@ def merge_multi(self, df, on):
 
 def generate_report(path):
     os.makedirs(path, exist_ok=True)
-    # Overview().write(path)
-    # Prediction().write(path)
+    Overview().write(path)
+    Prediction().write(path)
     Misclassifications().write(path)
