@@ -6,7 +6,6 @@ import re
 import json
 import numpy as np
 import pandas as pd
-import matplotlib
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
@@ -15,7 +14,7 @@ from sklearn.pipeline import Pipeline
 
 import fcsparser
 
-from clustering.clustering import (
+from clustering.transformation.base import (
     create_pipeline, ScatterFilter, GatingFilter, SOMGatingFilter
 )
 from clustering.case_collection import CaseCollection
@@ -31,6 +30,7 @@ handler.setLevel(logging.DEBUG)
 logger.addHandler(handler)
 
 RE_CHANNEL = re.compile(r"\$P\d+S")
+
 
 def print_meta(metadata):
     machine = metadata["$CYT"]

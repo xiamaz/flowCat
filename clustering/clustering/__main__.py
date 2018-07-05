@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 
 from .case_collection import CaseCollection
-from .clustering import (
+from .transformation.base import (
     create_pipeline,
     create_pipeline_multistage,
     create_presom_each,
@@ -16,7 +16,7 @@ from .clustering import (
     create_pregate,
     create_pregate_nodes,
 )
-from .collection_transforms import ApplySingle, Merge
+from .transformation.collection import ApplySingle, Merge
 from .utils import (
     get_file_path, put_file_path,
     create_stamp,

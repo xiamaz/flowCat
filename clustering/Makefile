@@ -56,6 +56,11 @@ run:
 run-selected: $(REFCASES)
 	$(BIN) $(OPTS) --output $(OUTPUT)_selected --refcases $(REFCASES)
 
+run-test:
+	$(eval EXP:=experiments/test.mk)
+	$(eval TEMP:=tmp)
+	$(BIN) $(OPTS) --output output/clustering
+
 tests:
 	python3 -m unittest discover
 

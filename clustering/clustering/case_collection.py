@@ -11,7 +11,7 @@ import pandas as pd
 
 import fcsparser
 
-from .case_transforms import MarkerFilter, TubesFilter
+from .transformation.case import MarkerFilter, TubesFilter
 
 
 LOGGER = logging.getLogger(__name__)

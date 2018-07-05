@@ -12,14 +12,73 @@ from sklearn import cluster
 from sklearn.preprocessing import StandardScaler
 
 from .tfsom.tfsom import SelfOrganizingMap
-from .case_collection import CaseCollection
-from .plotting import plot_overview
+from ..case_collection import CaseCollection
+from ..plotting import plot_overview
 
 
 LOGGER = logging.getLogger(__name__)
 
 
+class ClusteringTransform(BaseEstimator, TransformerMixin):
+    """Create SOM from input data, which can be used for prediction
+    and transformation purposes.
+    """
+
+    def __init__(self, m=10, n=10, batch_size=4096, test_batch_size=8192):
+        self.m = m
+        self.n = n
+        self.batch_size = batch_size
+        self.test_batch_size = test_batch_size
+        self.graph = None
+        self.model = None
+
+    def fit(self, X, *_):
+        # Build the TensorFlow dataset pipeline per the standard tutorial.
+        self.graph = tf.Graph()
+        with self.graph.as_default():
+            dataset = tf.data.Dataset.from_tensor_slices(
+                X.astype(np.float32)
+            )
+            num_inputs, dims = X.shape
+
+            dataset = dataset.repeat()
+            dataset = dataset.batch(self.batch_size)
+            iterator = dataset.make_one_shot_iterator()
+            next_element = iterator.get_next()
+
+            self.session = tf.Session(
+                config=tf.ConfigProto(
+                    allow_soft_placement=True,
+                    log_device_placement=False
+                )
+            )
+            self.model = SelfOrganizingMap(
+                m=self.m, n=self.n, dim=dims, max_epochs=10, gpus=1,
+                session=self.session, graph=self.graph,
+                input_tensor=next_element, batch_size=self.batch_size,
+                test_batch_size=self.test_batch_size,
+                initial_learning_rate=0.05
+            )
+            init_op = tf.global_variables_initializer()
+            self.session.run([init_op])
+            self.model.train(num_inputs=num_inputs)
+        return self
+
+    def predict(self, X, *_):
+        """Map all events to their respective nodes as a list of
+        event-length."""
+        result = self.model.predict(X)
+        return result
+
+    def transform(self, X, *_):
+        """Return relative distribution of all events in the created SOM."""
+        result = self.model.transform(X)
+        return result / np.sum(result)
+
+
 class FCSLogTransform(BaseEstimator, TransformerMixin):
+    """Transform FCS files logarithmically.  Currently this does not work
+    correctly, since FCS files are not $PnE transformed on import"""
 
     def __init__(self):
         pass
@@ -34,6 +93,7 @@ class FCSLogTransform(BaseEstimator, TransformerMixin):
 
 
 class ScatterFilter(BaseEstimator, TransformerMixin):
+    """Remove events with values below threshold in specified channels."""
 
     def __init__(
             self,
@@ -91,13 +151,13 @@ class GatingFilter(BaseEstimator, TransformerMixin):
             )
             if abs(cdist - dist) < self._merge_dist:
                 LOGGER.debug(
-                    "Merging %d because dist diff %d", cl_num, abs(cdist- dist)
+                    "Merging %d because dist diff %d", cl_num, abs(cdist-dist)
                 )
                 merged.append(cl_num)
 
         sel_res = np.zeros(predictions.shape)
-        for cluster in merged:
-            sel_res[predictions == cluster] = 1
+        for sel_cluster in merged:
+            sel_res[predictions == sel_cluster] = 1
 
         return sel_res
 
@@ -122,59 +182,6 @@ class GatingFilter(BaseEstimator, TransformerMixin):
             eps=self._eps, min_samples=min_samples, metric="manhattan"
         )
         return self
-
-
-class ClusteringTransform(BaseEstimator, TransformerMixin):
-    def __init__(self, m=10, n=10, batch_size=4096, test_batch_size=8192):
-        self.m = m
-        self.n = n
-        self.batch_size = batch_size
-        self.test_batch_size = test_batch_size
-        self.graph = None
-        self.model = None
-
-    def fit(self, X, *_):
-        # Build the TensorFlow dataset pipeline per the standard tutorial.
-        self.graph = tf.Graph()
-        with self.graph.as_default():
-            dataset = tf.data.Dataset.from_tensor_slices(
-                X.astype(np.float32)
-            )
-            num_inputs, dims = X.shape
-
-            dataset = dataset.repeat()
-            dataset = dataset.batch(self.batch_size)
-            iterator = dataset.make_one_shot_iterator()
-            next_element = iterator.get_next()
-
-            self.session = tf.Session(
-                config=tf.ConfigProto(
-                    allow_soft_placement=True,
-                    log_device_placement=False
-                )
-            )
-            self.model = SelfOrganizingMap(
-                m=self.m, n=self.n, dim=dims, max_epochs=10, gpus=1,
-                session=self.session, graph=self.graph,
-                input_tensor=next_element, batch_size=self.batch_size,
-                test_batch_size=self.test_batch_size,
-                initial_learning_rate=0.05
-            )
-            init_op = tf.global_variables_initializer()
-            self.session.run([init_op])
-            self.model.train(num_inputs=num_inputs)
-        return self
-
-    def transform(self, X, *_):
-        """Return relative distribution of all events in the created SOM."""
-        result = self.model.transform(X)
-        return result / np.sum(result)
-
-    def predict(self, X, *_):
-        """Map all events to their respective nodes as a list of
-        event-length."""
-        result = self.model.predict(X)
-        return result
 
 
 class SOMNodes(BaseEstimator, TransformerMixin):
@@ -291,12 +298,13 @@ def create_presom_each(
     ])
     return pipe
 
-def create_pre(
-):
+
+def create_pre():
     pipe = Pipeline(steps=[
         ("scatter", ScatterFilter()),
     ])
     return pipe
+
 
 def create_pregate_nodes(
         channels=["CD45-KrOr", "SS INT LIN"],
@@ -309,6 +317,7 @@ def create_pregate_nodes(
         ("nodes", SOMNodes(*first))
     ])
     return pipe
+
 
 def create_pregate(
         channels=["CD45-KrOr", "SS INT LIN"],
