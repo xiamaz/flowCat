@@ -1,0 +1,48 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2cm]{geometry}
+
+%% adding graphics
+\usepackage{graphicx}
+$$%% nicer tables
+\usepackage{booktabs}
+%% rotate pages for landscape
+\usepackage{pdflscape}
+%% nice grid layouts for latex figures
+\usepackage{subcaption}
+
+\begin{document}
+
+\title{Automatic Flow-based Classification of B-Cell Lymphoma}
+
+\section{Introduction}
+
+Flowcytometry aids in the detection and classification of lymphatic disorders, but current multi-channel flow data is hampered by the limitations of human interpretability.
+Statistical preprocessing promises to enable the description of higher-dimensional relationships in measured events.
+Extending previous work on preprocessing and classification of flowcytometry data, we created a proof-of-concept approach for unattended debris-removal and classification on a large dataset of B-Cell-Lymphoma.
+
+\section{Aims}
+
+
+
+\section{Methods}
+
+A self-organizing map is trained on a sample of cases from all cohorts, creating a reference map of the data, we refer to as \emph{consensus-SOM}.
+Invididual samples are afterwards sampled into the trained SOM and the distribution utilized for the classification into diagnoses in a sequential neural network.
+
+In order to focus the map on a cell population in question individual samples were preprocessed by automatically selecting a CD45 positive and side-scatter negative population using a density based clustering of individually generated SOMs.
+
+%% som based algorithm
+%% consensus SOM
+%% debris gating based on dbscan
+
+\section{Results}
+
+%% tsne results and som for normal vs cll
+%% pregating w/ dbscan
+%% neural net classification normal cll
+%% results for xxx different lymphoma entities
+%% clustering joint entities, similarity in classification
+
+\section{Conclusions}
+
+\end{document}
