@@ -3,7 +3,7 @@ import pandas as pd
 from clustering.clustering import (
     create_pipeline, create_pipeline_multistage
 )
-from .test_case_collection import BaseView
+from .base import BaseView
 
 
 class ClusteringTest(BaseView):

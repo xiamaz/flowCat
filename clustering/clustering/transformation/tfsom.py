@@ -23,6 +23,7 @@
 import logging
 from pathlib import Path
 
+from sklearn.base import BaseEstimator, TransformerMixin
 import tensorflow as tf
 import numpy as np
 
@@ -39,25 +40,23 @@ https://codesachin.wordpress.com/2015/11/28/self-organizing-maps-with-googles-te
 LOGGER = logging.getLogger(__name__)
 
 
-class SelfOrganizingMap:
+class SelfOrganizingMap(BaseEstimator, TransformerMixin):
     """
     2-D rectangular grid planar Self-Organizing Map with Gaussian neighbourhood
     function.
     """
 
     def __init__(
-            self, m, n, dim, max_epochs=100, initial_radius=None,
-            batch_size=2048, test_batch_size=4096, initial_learning_rate=0.1,
-            graph=None, std_coeff=0.5, model_name='Self-Organizing-Map',
+            self, m, n, max_epochs=10, initial_radius=None,
+            batch_size=4096, test_batch_size=8192, initial_learning_rate=0.1,
+            std_coeff=0.5, model_name='Self-Organizing-Map',
             softmax_activity=False, gpus=0, output_sensitivity=-1.0,
-            input_tensor=None, session=None, checkpoint_dir=None,
-            restore_path=None
+            checkpoint_dir=None, restore_path=None
     ):
         """
         Initialize a self-organizing map on the tensorflow graph
         :param m: Number of rows of neurons
         :param n: Number of columns of neurons
-        :param dim: Dimensionality of the input data
         :param max_epochs: Number of epochs to train for
         :param initial_radius: Starting value of the neighborhood radius -
                 defaults to max(m, n) / 2.0
@@ -78,25 +77,28 @@ class SelfOrganizingMap:
         """
         self._m = abs(int(m))
         self._n = abs(int(n))
-        self._dim = abs(int(dim))
+
         if initial_radius is None:
             self._initial_radius = max(m, n) / 2.0
         else:
             self._initial_radius = float(initial_radius)
+
         self._max_epochs = abs(int(max_epochs))
         self._batch_size = abs(int(batch_size))
         self._test_batch_size = abs(int(test_batch_size))
         self._std_coeff = abs(float(std_coeff))
         self._softmax_activity = bool(softmax_activity)
         self._model_name = str(model_name)
+
         if output_sensitivity > 0:
             output_sensitivity *= -1
         elif output_sensitivity == 0:
             output_sensitivity = -1
+
         # The activity equation is kind of long so I'm naming this c for
         # brevity
         self._c = float(output_sensitivity)
-        self._sess = session
+
         self._checkpoint_dir = checkpoint_dir
         self._restore_path = restore_path
         self._gpus = int(abs(gpus))
@@ -104,6 +106,7 @@ class SelfOrganizingMap:
 
         # Initialized later, just declaring up here for neatness and to avoid
         # warnings
+        self._dim = None  # dimensionality is inferred from fit input
         self._weights = None
         self._location_vects = None
         self._input = None
@@ -125,19 +128,19 @@ class SelfOrganizingMap:
         # This will be the collection of summaries for this subgraph. Add new
         # summaries to it and pass it to merge()
         self._summary_list = list()
-        self._input_tensor = input_tensor
+        self._input_tensor = None
 
-        if graph is None:
-            self._graph = tf.Graph()
-        elif type(graph) is not tf.Graph:
-            raise AttributeError('SOM graph input is not of type tf.Graph')
-        else:
-            self._graph = graph
+        self._graph = tf.Graph()
+
+        self._sess = tf.Session(
+            graph=self._graph,
+            config=tf.ConfigProto(
+                allow_soft_placement=True,
+                log_device_placement=False
+            )
+        )
+
         self._initial_learning_rate = initial_learning_rate
-        # Create the ops and put them on the graph
-        self._initialize_tf_graph()
-        # If we want to reload from a save this will do that
-        self._maybe_reload_from_checkpoint()
 
     def _save_checkpoint(self, global_step):
         """ Save a checkpoint file
@@ -181,6 +184,9 @@ class SelfOrganizingMap:
         In multi-gpu mode it will duplicate the model across the GPUs and use
         the CPU to calculate the final weight updates.
         """
+        # ensure that input has been provided before initialization
+        assert self._input_tensor is not None, "Load input before initializing"
+
         with self._graph.as_default(), \
                 tf.variable_scope(tf.get_variable_scope()), \
                 tf.device('/cpu:0'):
@@ -600,6 +606,34 @@ class SelfOrganizingMap:
                 self.__transform_output = tf.reduce_sum(one_hot_assignments, 0)
         return self.__transform_output
 
+    def fit(self, X, *_):
+        # Build the TensorFlow dataset pipeline per the standard tutorial.
+        with self._graph.as_default():
+            dataset = tf.data.Dataset.from_tensor_slices(
+                X.astype(np.float32)
+            )
+            num_inputs, self._dim = X.shape
+
+            dataset = dataset.repeat()
+            dataset = dataset.batch(self._batch_size)
+            iterator = dataset.make_one_shot_iterator()
+            next_element = iterator.get_next()
+
+            self._input_tensor = next_element
+
+            # Create the ops and put them on the graph
+            self._initialize_tf_graph()
+
+            init_op = tf.global_variables_initializer()
+            self._sess.run([init_op])
+
+            self.train(num_inputs=num_inputs)
+
+            # If we want to reload from a save this will do that
+            # self._maybe_reload_from_checkpoint()
+
+        return self
+
     def predict(self, data):
         """Predict cluster center for each event in the given data.
         :param data: Input data in tensorflow object.
@@ -621,10 +655,11 @@ class SelfOrganizingMap:
                 break
         return np.concatenate(results)
 
-    def transform(self, data):
+    def transform(self, data, relative=True):
         """Transform data of individual events to histogram of events per
         cluster center.
         :param data: Pandas dataframe or np.matrix
+        :param relative: Output relative distribution instead of absolute.
         :return: Dataframe with one row containing cluster histograms.
         """
         self._sess.run(
@@ -639,4 +674,7 @@ class SelfOrganizingMap:
                 results += res
             except tf.errors.OutOfRangeError:
                 break
+
+        if relative:
+            results = results / np.sum(results)
         return results
