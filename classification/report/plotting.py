@@ -77,7 +77,7 @@ def avg_roc_plot(somiter_data: dict, ax: "Axes") -> "Axes":
     )
     roc_curves.index.rename("som", level=0, inplace=True)
 
-    bin_index = pd.interval_range(0, 1, 100)
+    bin_index = pd.interval_range(start=0, end=1, periods=100)
     roc_curves["bin"] = pd.cut(roc_curves["fpr"], bin_index)
     roc_curves.set_index("bin", append=True, inplace=True)
     roc_mean = roc_curves.mean(
