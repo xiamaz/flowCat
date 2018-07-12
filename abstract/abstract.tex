@@ -30,20 +30,11 @@ Design and implementation of an automated analysis process for determination of 
 
 For the initial analysis flow cytometry data was obtained from routine flow panels for B-Cell-Lymphoma from the years 2016--2018. A total of xxx patients have been obtained. The given cohort contained 9 different B-Cell lymphoma subtypes, as well as non-pathological normal cases.
 
-%% describe preprocessing, choronological in processing steps is easier to grasp
+FCS data is prepared with removal of some zero values and limitation of data to shared markers. A CD45 positive, side scatter negative cell population is automatically selected in each case using a DBSCAN-based (density based spatial clustering of applications with noise) population search on an individually generated SOM (self-organizing map), representing the data.
 
-In order to focus the map on a cell population in question individual samples were preprocessed by automatically selecting a CD45 positive and side-scatter negative population using a density based clustering of individually generated SOMs.
+From each disease entity a small subset of cases is selected for the generation of the consensus SOM, which is trained on small subsets of all included diagnoses. The fitted model is used to transform invididual cases into their distribution on the SOM.
 
-A self-organizing map is trained on a sample of cases from all cohorts, creating a reference map of the data, we refer to as \emph{consensus-SOM}.
-Invididual samples are afterwards sampled into the trained SOM and the distribution utilized for the classification into diagnoses in a sequential neural network.
-
-%% describe classification process further
-
-
-%% som based algorithm
-%% consensus SOM
-%% debris gating based on dbscan
-
+The distribution information serves as input to the classification process for the prediction of individual labels. For which currently a sequential neural network and a random decision tree have been implemented.
 
 \section{Results}
 
@@ -88,7 +79,7 @@ Hierarchical clustering showed similarities between CLL/PL and mantle cell lymph
 \section{Conclusions}
 
 Our classification prototype shows the viability for automated classification on large routine diagnostics dataset.
-Further improvements can be made to increase the flexibility of the approach to encompass incomplete and changing panels, as well as testing of a more diverse patient set, including cases with diagnoses outside the diagnostic target of given panel.
+Further improvements to flexibility and generalizability of the approach can be made to encompass incomplete and changing panels, as well as testing of a more diverse patient set, including cases with diagnoses outside the diagnostic target of given panel, such as patients later diagnosed with myeloic leukemias.
 
 %% viability of automated conclusions
 
