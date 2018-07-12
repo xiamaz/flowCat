@@ -25,6 +25,7 @@ from pathlib import Path
 
 from sklearn.base import BaseEstimator, TransformerMixin
 import tensorflow as tf
+from tensorflow.python.client import device_lib
 import numpy as np
 
 __author__ = "Chris Gorman"
@@ -50,8 +51,8 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
             self, m, n, max_epochs=10, initial_radius=None,
             batch_size=4096, test_batch_size=8192, initial_learning_rate=0.1,
             std_coeff=0.5, model_name='Self-Organizing-Map',
-            softmax_activity=False, gpus=0, output_sensitivity=-1.0,
-            checkpoint_dir=None, restore_path=None
+            softmax_activity=False, output_sensitivity=-1.0,
+            checkpoint_dir="checkpoints", restore_path=None
     ):
         """
         Initialize a self-organizing map on the tensorflow graph
@@ -69,11 +70,9 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
         :param model_name: The name that will be given to the checkpoint files
         :param softmax_activity: If `True` the activity will be softmaxed to
                 form a probability distribution
-        :param gpus: The number of GPUs to train the SOM on
         :param output_sensitivity The constant controlling the width of the
                 activity gaussian. See the Jupyter Notebook
                 for an explanation.
-        :param session: A `tf.Session()` for executing the graph
         """
         self._m = abs(int(m))
         self._n = abs(int(n))
@@ -101,11 +100,17 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
 
         self._checkpoint_dir = checkpoint_dir
         self._restore_path = restore_path
-        self._gpus = int(abs(gpus))
         self._trained = False
+
+        # always run with the maximum number of gpus
+        self._gpus = [
+            d.name for d in device_lib.list_local_devices()
+            if d.device_type == "GPU"
+        ]
 
         # Initialized later, just declaring up here for neatness and to avoid
         # warnings
+        self._iter_input = None
         self._dim = None  # dimensionality is inferred from fit input
         self._weights = None
         self._location_vects = None
@@ -115,19 +120,16 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
         self._centroid_grid = None
         self._locations = None
         self._activity_op = None
-        self._saver = None
-        self._merged = None
         self._activity_merged = None
 
         # prediction variables
-        self.__invar = None
-        self.__prediction_input = None
-        self.__prediction_output = None
-        self.__transform_output = None
+        self._invar = None
+        self._prediction_input = None
+        self._prediction_output = None
+        self._transform_output = None
 
         # This will be the collection of summaries for this subgraph. Add new
         # summaries to it and pass it to merge()
-        self._summary_list = list()
         self._input_tensor = None
 
         self._graph = tf.Graph()
@@ -136,40 +138,33 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
             graph=self._graph,
             config=tf.ConfigProto(
                 allow_soft_placement=True,
-                log_device_placement=False
+                log_device_placement=True,
             )
         )
 
         self._initial_learning_rate = initial_learning_rate
 
+    @classmethod
+    def load(cls, path):
+        """Load configuration and state from saved configuration."""
+        pass
+        #     LOGGER.info(
+        #         "Restoring variables from checkpoint file %s",
+        #         self._restore_path
+        #     )
+        #     self._saver.restore(self._sess, Path(self._restore_path))
+        #     self._trained = True
+        #     LOGGER.info("Checkpoint loaded")
+        # return cls()
+
     def _save_checkpoint(self, global_step):
         """ Save a checkpoint file
         :param global_step: The current step of the network.
         """
-        if self._saver is None:
-            # Create the saver object
-            self._saver = tf.train.Saver()
-        if self._checkpoint_dir is not None:
-            output_name = Path(self._checkpoint_dir) / self._model_name
-            self._saver.save(self._sess, output_name, global_step=global_step)
+        saver = tf.train.Saver()
 
-    def _maybe_reload_from_checkpoint(self):
-        """ If the program was called with a checkpoint argument, load the
-        variables from that.
-
-        We are assuming that if it's loaded then it's already trained.
-        """
-        if self._saver is None:
-            self._saver = tf.train.Saver()
-
-        if self._restore_path is not None:
-            LOGGER.info(
-                "Restoring variables from checkpoint file %s",
-                self._restore_path
-            )
-            self._saver.restore(self._sess, Path(self._restore_path))
-            self._trained = True
-            LOGGER.info("Checkpoint loaded")
+        output_name = Path(self._checkpoint_dir) / self._model_name
+        saver.save(self._sess, output_name, global_step=global_step)
 
     def _neuron_locations(self):
         """ Maps an absolute neuron index to a 2d vector for calculating the
@@ -197,19 +192,17 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
             # graph, so let's put it here
             with tf.name_scope('Iteration'):
                 self._iter_input = tf.placeholder("float", [], name="iter")
-            if self._gpus > 0:
-                for i in range(self._gpus):
-                    # We only want the summaries of the last tower, so wipe it
-                    # out each time
-                    self._summary_list = list()
-                    with tf.device('/gpu:{}'.format(i)):
+
+            if self._gpus:
+                for i, gpu_name in enumerate(self._gpus):
+                    with tf.device(gpu_name):
                         with tf.name_scope('Tower_{}'.format(i)):
                             # Create the model on this tower and add the
                             # (numerator, denominator) tensors to the list
                             tower_updates.append(self._tower_som())
                             tf.get_variable_scope().reuse_variables()
 
-                with tf.device('/gpu:{}'.format(self._gpus - 1)):
+                with tf.device(self._gpus[-1]):
                     # Put the activity op on the last GPU
                     self._activity_op = self._make_activity_op(
                         self._input_tensor
@@ -234,6 +227,34 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
                 # Assign them
                 self._training_op = tf.assign(self._weights, new_weights)
 
+        with self._graph.as_default():
+            self._prediction_variables()
+
+    def _prediction_variables(self):
+        """Create prediction ops"""
+        with tf.name_scope("Prediction"):
+            self._invar = tf.placeholder(tf.float32)
+            self._prediction_input = tf.data.Dataset.from_tensor_slices(
+                self._invar
+            ).batch(
+                self._test_batch_size
+            ).make_initializable_iterator()
+
+            # Get the index of the minimum distance for each input item,
+            # shape will be [batch_size],
+            self._prediction_output = tf.argmin(tf.reduce_sum(
+                tf.pow(tf.subtract(
+                    tf.expand_dims(self._weights, axis=0),
+                    tf.expand_dims(self._prediction_input.get_next(), axis=1)
+                ), 2), 2
+            ), axis=1)
+
+            # Summarize values across columns to get the absolute number
+            # of assigned events for each node
+            self._transform_output = tf.reduce_sum(tf.one_hot(
+                self._prediction_output, self._m * self._n
+            ), 0)
+
     def _tower_som(self):
         """ Build a single SOM tower on the TensorFlow graph """
         # Randomly initialized weights for all neurons, stored together
@@ -248,30 +269,6 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
                 shape=[self._m * self._n, self._dim],
                 initializer=tf.random_uniform_initializer(maxval=1)
             )
-
-            with tf.name_scope('summaries'):
-                # All summary ops are added to a list and then the merge()
-                # function is called at the end of this method
-                mean = tf.reduce_mean(self._weights)
-                self._summary_list.append(tf.summary.scalar('mean', mean))
-                with tf.name_scope('stdev'):
-                    stdev = tf.sqrt(
-                        tf.reduce_mean(
-                            tf.squared_difference(self._weights, mean)
-                        )
-                    )
-                self._summary_list.append(
-                    tf.summary.scalar('stdev', stdev)
-                )
-                self._summary_list.append(
-                    tf.summary.scalar('max', tf.reduce_max(self._weights))
-                )
-                self._summary_list.append(
-                    tf.summary.scalar('min', tf.reduce_min(self._weights))
-                )
-                self._summary_list.append(
-                    tf.summary.histogram('histogram', self._weights)
-                )
 
         # Matrix of size [m*n, 2] for SOM grid locations of neurons.
         # Maps an index to an (x,y) coordinate of a neuron in the map for
@@ -380,9 +377,16 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
             # This tensor will be of shape [batch_size, num_neurons] as well
             # and will be the value multiplied to each neuron based on its
             # distance from the BMU for each input vector
-            neighbourhood_func = tf.exp(tf.divide(tf.negative(tf.cast(
-                bmu_distance_squares, "float32")), tf.multiply(
-                tf.square(tf.multiply(radius, self._std_coeff)), 2)))
+            neighbourhood_func = tf.exp(
+                tf.divide(
+                    tf.negative(
+                        tf.cast(bmu_distance_squares, "float32")
+                    ),
+                    tf.multiply(
+                        tf.square(tf.multiply(radius, self._std_coeff)), 2
+                    )
+                )
+            )
 
             # Finally multiply by the learning rate to decrease overall neuron
             # movement over time
@@ -421,7 +425,7 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
         # We on;y really care about summaries from one of the tower SOMs, so
         # assign the merge op to the last tower we make. Otherwise there's way
         # too many on Tensorboard.
-        self._merged = tf.summary.merge(self._summary_list)
+        # self._merged = tf.summary.merge(self._summary_list)
 
         # With multi-gpu training we collect the results and do the weight
         # assignment on the CPU
@@ -442,9 +446,9 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
                 # Get the euclidean distance between each neuron and the input
                 # vectors
                 dist = tf.norm(tf.subtract(
-                        tf.expand_dims(self._weights, axis=0),
-                        tf.expand_dims(input_tensor, axis=1)),
-                    name="Distance")  # [batch_size, neurons]
+                    tf.expand_dims(self._weights, axis=0),
+                    tf.expand_dims(input_tensor, axis=1)
+                ), name="Distance")  # [batch_size, neurons]
 
                 # Calculate the Gaussian of the activity. Units with distances
                 # closer to 0 will have activities closer to 1.
@@ -465,10 +469,7 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
 
                 return tf.identity(activity, name="Output")
 
-    def get_activity_op(self):
-        return self._activity_op
-
-    def train(self, num_inputs, writer=None, step_offset=0):
+    def _train(self, num_inputs, step_offset=0):
         """ Train the network on the data provided by the input tensor.
         :param num_inputs: The total number of inputs in the data-set. Used to
                             determine batches per epoch
@@ -481,14 +482,13 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
         """
         # Divide by num_gpus to avoid accidentally training on the same data a
         # bunch of times
-        if self._gpus > 0:
-            batches_per_epoch = num_inputs // self._batch_size // self._gpus
-        else:
-            batches_per_epoch = num_inputs // self._batch_size
+        batches_per_epoch = (
+            num_inputs // self._batch_size // max(len(self._gpus), 1)
+        )
+
         total_batches = batches_per_epoch * self._max_epochs
         # Get how many batches constitute roughly 10 percent of the total for
         # recording summaries
-        summary_mod = int(0.1 * total_batches)
         global_step = step_offset
 
         LOGGER.info("Training self-organizing Map")
@@ -505,38 +505,10 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
                     percent_complete * 100
                 )
                 # Only do summaries when a SummaryWriter has been provided
-                if writer:
-                    if current_batch > 0 and current_batch % summary_mod == 0:
-                        run_options = tf.RunOptions(
-                            trace_level=tf.RunOptions.FULL_TRACE
-                        )
-                        run_metadata = tf.RunMetadata()
-                        summary, _, _, = self._sess.run(
-                            [
-                                self._merged,
-                                self._training_op,
-                                self._activity_op
-                            ],
-                            feed_dict={self._epoch: epoch},
-                            options=run_options,
-                            run_metadata=run_metadata
-                        )
-                        writer.add_run_metadata(
-                            run_metadata, "step_{}".format(global_step)
-                        )
-                        writer.add_summary(summary, global_step)
-                        self._save_checkpoint(global_step)
-                    else:
-                        summary, _ = self._sess.run(
-                            [self._merged, self._training_op],
-                            feed_dict={self._epoch: epoch}
-                        )
-                        writer.add_summary(summary, global_step)
-                else:
-                    self._sess.run(
-                        self._training_op,
-                        feed_dict={self._epoch: epoch}
-                    )
+                self._sess.run(
+                    self._training_op,
+                    feed_dict={self._epoch: epoch}
+                )
 
         self._trained = True
         return global_step
@@ -549,70 +521,21 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
         """
         if self._trained:
             return np.array(self._sess.run(self._weights))
-        else:
-            return None
 
-    @property
-    def _invar(self):
-        if self.__invar is None:
-            with self._graph.as_default():
-                self.__invar = tf.placeholder(tf.float32)
-        return self.__invar
+        return None
 
-    @property
-    def _prediction_input(self):
-        if self.__prediction_input is None:
-            with self._graph.as_default():
-                dataset = tf.data.Dataset.from_tensor_slices(self._invar)
-                # dataset = dataset.repeat()
-                dataset = dataset.batch(self._test_batch_size)
-                self.__prediction_input = dataset.make_initializable_iterator()
-
-        return self.__prediction_input
-
-    @property
-    def _prediction_output(self):
-        if self.__prediction_output is None:
-            with self._graph.as_default():
-                squared_distance = tf.reduce_sum(
-                    tf.pow(
-                        tf.subtract(
-                            tf.expand_dims(
-                                self._weights,
-                                axis=0
-                            ),
-                            tf.expand_dims(
-                                self._prediction_input.get_next(),
-                                axis=1
-                            )
-                        ),
-                        2
-                    ),
-                    2
-                )
-
-                # Get the index of the minimum distance for each input item,
-                # shape will be [batch_size],
-                self.__prediction_output = tf.argmin(squared_distance, axis=1)
-        return self.__prediction_output
-
-    @property
-    def _transform_output(self):
-        if self.__transform_output is None:
-            with self._graph.as_default():
-                one_hot_assignments = tf.one_hot(
-                    self._prediction_output, self._m * self._n
-                )
-                self.__transform_output = tf.reduce_sum(one_hot_assignments, 0)
-        return self.__transform_output
-
-    def fit(self, X, *_):
+    def fit(self, data, *_):
+        """Fit the data using a matrix containing the data. The input
+        can be either a numpy matrix or a pandas dataframe."""
         # Build the TensorFlow dataset pipeline per the standard tutorial.
+        if self._trained:
+            LOGGER.warning("Model is already trained.")
+
         with self._graph.as_default():
             dataset = tf.data.Dataset.from_tensor_slices(
-                X.astype(np.float32)
+                data.astype(np.float32)
             )
-            num_inputs, self._dim = X.shape
+            num_inputs, self._dim = data.shape
 
             dataset = dataset.repeat()
             dataset = dataset.batch(self._batch_size)
@@ -627,10 +550,7 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
             init_op = tf.global_variables_initializer()
             self._sess.run([init_op])
 
-            self.train(num_inputs=num_inputs)
-
-            # If we want to reload from a save this will do that
-            # self._maybe_reload_from_checkpoint()
+            self._train(num_inputs=num_inputs)
 
         return self
 

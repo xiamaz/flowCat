@@ -66,14 +66,3 @@ def create_stamp():
     """Create timestamp usable for filepaths"""
     stamp = datetime.datetime.now()
     return stamp.strftime("%Y%m%d_%H%M")
-
-
-def configure_print_logging(rootname="clustering"):
-    """Configure default logging for visual output to stdout."""
-    rootlogger = logging.getLogger(rootname)
-    rootlogger.setLevel(logging.INFO)
-    formatter = logging.Formatter()
-    handler = logging.StreamHandler()
-    handler.setLevel(logging.DEBUG)
-    handler.setFormatter(formatter)
-    rootlogger.addHandler(handler)
