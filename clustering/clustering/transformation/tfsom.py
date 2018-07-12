@@ -138,7 +138,7 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
             graph=self._graph,
             config=tf.ConfigProto(
                 allow_soft_placement=True,
-                log_device_placement=True,
+                log_device_placement=False,
             )
         )
 
@@ -227,6 +227,8 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
                 # Assign them
                 self._training_op = tf.assign(self._weights, new_weights)
 
+        # use autoplacement until we know how to parallelize across
+        # multiple gpus
         with self._graph.as_default():
             self._prediction_variables()
 
