@@ -14,8 +14,7 @@ from sklearn.pipeline import Pipeline
 from .utils import load_json, create_stamp, get_file_path, put_file_path
 from .transformation import base
 from .transformation.fcs import ScatterFilter, MarkersTransform
-from .transformation.tfsom import SelfOrganizingMap
-from .transformation.som import SOMNodes
+from .transformation.tfsom import SelfOrganizingMap, SOMNodes
 from .transformation.pregating import SOMGatingFilter
 from .collection import CaseCollection
 

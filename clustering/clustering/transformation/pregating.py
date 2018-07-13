@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.cluster import DBSCAN
 
-from .som import SOMNodes
+from .tfsom import SOMNodes
 
 
 LOGGER = logging.getLogger(__name__)

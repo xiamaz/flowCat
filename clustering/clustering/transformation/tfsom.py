@@ -23,10 +23,12 @@
 import logging
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
+
 import tensorflow as tf
 from tensorflow.python.client import device_lib
-import numpy as np
 
 __author__ = "Chris Gorman"
 __email__ = "chris@cgorman.net"
@@ -41,8 +43,9 @@ https://codesachin.wordpress.com/2015/11/28/self-organizing-maps-with-googles-te
 LOGGER = logging.getLogger(__name__)
 
 
-class SelfOrganizingMap(BaseEstimator, TransformerMixin):
-    """
+class TFSom:
+    """Tensorflow Model of a self-organizing map, without assumptions about
+    usage.
     2-D rectangular grid planar Self-Organizing Map with Gaussian neighbourhood
     function.
     """
@@ -55,12 +58,10 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
             initial_radius=None,
             initial_learning_rate=0.1,
             std_coeff=0.5,
-            model_name='Self-Organizing-Map',
             softmax_activity=False,
             output_sensitivity=-1.0,
-            checkpoint_dir="checkpoints",
             initialization_method="sample",
-            restore_path=None,
+            model_name="Self-Organizing-Map"
     ):
         """
         Initialize a self-organizing map on the tensorflow graph
@@ -85,6 +86,7 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
         Choices are either random number initialization or sample based
         initialization.
         """
+
         self._m = abs(int(m))
         self._n = abs(int(n))
 
@@ -111,8 +113,6 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
 
         self._initialization_method = initialization_method
 
-        self._checkpoint_dir = checkpoint_dir
-        self._restore_path = restore_path
         self._trained = False
 
         # always run with the maximum number of gpus
@@ -160,28 +160,6 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
         )
 
         self._initial_learning_rate = initial_learning_rate
-
-    @classmethod
-    def load(cls, path):
-        """Load configuration and state from saved configuration."""
-        pass
-        #     LOGGER.info(
-        #         "Restoring variables from checkpoint file %s",
-        #         self._restore_path
-        #     )
-        #     self._saver.restore(self._sess, Path(self._restore_path))
-        #     self._trained = True
-        #     LOGGER.info("Checkpoint loaded")
-        # return cls()
-
-    def _save_checkpoint(self, global_step):
-        """ Save a checkpoint file
-        :param global_step: The current step of the network.
-        """
-        saver = tf.train.Saver()
-
-        output_name = Path(self._checkpoint_dir) / self._model_name
-        saver.save(self._sess, output_name, global_step=global_step)
 
     def _neuron_locations(self):
         """ Maps an absolute neuron index to a 2d vector for calculating the
@@ -496,7 +474,7 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
 
                 return tf.identity(activity, name="Output")
 
-    def _train(self, num_inputs, step_offset=0):
+    def train(self, data, step_offset=0):
         """ Train the network on the data provided by the input tensor.
         :param num_inputs: The total number of inputs in the data-set. Used to
                             determine batches per epoch
@@ -507,6 +485,43 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
         :param step_offset: The offset for the global step variable so I don't
                             accidentally overwrite my summaries
         """
+
+        # Build the TensorFlow dataset pipeline per the standard tutorial.
+        if self._trained:
+            LOGGER.warning("Model is already trained.")
+
+        # initialize the input fitting dataset
+        # the fitting input tensor is directly integrated into the
+        # graph, which is why graph creation is postponed until fitting,
+        # when we know the actual data of our input
+        with self._graph.as_default():
+            dataset = tf.data.Dataset.from_tensor_slices(
+                data.astype(np.float32)
+            )
+            # number of samples and number of dimensions in our data
+            num_inputs, self._dim = data.shape
+
+            if self._initialization_method == "sample":
+                samples = data.values[np.random.choice(
+                    data.shape[0], self._m * self._n, replace=False
+                ), :]
+                self._init_samples = tf.convert_to_tensor(
+                    samples, dtype=tf.float32
+                )
+
+            dataset = dataset.repeat()
+            dataset = dataset.batch(self._batch_size)
+            iterator = dataset.make_one_shot_iterator()
+            next_element = iterator.get_next()
+
+            self._input_tensor = next_element
+
+            # Create the ops and put them on the graph
+            self._initialize_tf_graph()
+
+            init_op = tf.global_variables_initializer()
+            self._sess.run([init_op])
+
         # Divide by num_gpus to avoid accidentally training on the same data a
         # bunch of times
         batches_per_epoch = (
@@ -551,49 +566,8 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
 
         return None
 
-    def fit(self, data, *_):
-        """Fit the data using a matrix containing the data. The input
-        can be either a numpy matrix or a pandas dataframe."""
-        # Build the TensorFlow dataset pipeline per the standard tutorial.
-        if self._trained:
-            LOGGER.warning("Model is already trained.")
-
-        with self._graph.as_default():
-            dataset = tf.data.Dataset.from_tensor_slices(
-                data.astype(np.float32)
-            )
-            num_inputs, self._dim = data.shape
-
-            if self._initialization_method == "sample":
-                samples = data.values[np.random.choice(
-                    data.shape[0], self._m * self._n, replace=False
-                ), :]
-                self._init_samples = tf.convert_to_tensor(
-                    samples, dtype=tf.float32
-                )
-
-            dataset = dataset.repeat()
-            dataset = dataset.batch(self._batch_size)
-            iterator = dataset.make_one_shot_iterator()
-            next_element = iterator.get_next()
-
-            self._input_tensor = next_element
-
-            # Create the ops and put them on the graph
-            self._initialize_tf_graph()
-
-            init_op = tf.global_variables_initializer()
-            self._sess.run([init_op])
-
-            self._train(num_inputs=num_inputs)
-
-        return self
-
-    def predict(self, data):
-        """Predict cluster center for each event in the given data.
-        :param data: Input data in tensorflow object.
-        :return: List of cluster centers for each event.
-        """
+    def map_to_nodes(self, data):
+        """Map data to the closest node in the map."""
         # initialize dataset
         self._sess.run(
             self._prediction_input.initializer, feed_dict={self._invar: data}
@@ -610,12 +584,16 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
                 break
         return np.concatenate(results)
 
-    def transform(self, data, relative=True):
-        """Transform data of individual events to histogram of events per
-        cluster center.
+    def map_to_histogram_distribution(self, data, relative=True):
+        """Map input data to the distribution across the SOM map.
+        Either return absolute values for each node or relative distribution
+        across the dataset.
+
         :param data: Pandas dataframe or np.matrix
         :param relative: Output relative distribution instead of absolute.
-        :return: Dataframe with one row containing cluster histograms.
+
+        :return: Array of m x n length, eg number of mapped events for each
+                    node.
         """
         self._sess.run(
             self._prediction_input.initializer, feed_dict={self._invar: data}
@@ -633,3 +611,68 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
         if relative:
             results = results / np.sum(results)
         return results
+
+
+class SelfOrganizingMap(BaseEstimator, TransformerMixin):
+    """SOM abstraction for usage as a scikit learn transformer."""
+
+    def __init__(
+            self,
+            m, n,
+            max_epochs=10,
+            checkpoint_dir="checkpoints",
+            initialization_method="sample",
+            restore_path=None,
+    ):
+        """Expose a subset of tested parameters for external tuning."""
+        self._model = TFSom(m=m, n=n, max_epochs=max_epochs)
+
+    @classmethod
+    def load(cls, path):
+        """Load configuration and state from saved configuration."""
+        pass
+
+    def fit(self, data, *_):
+        """Fit the data using a matrix containing the data. The input
+        can be either a numpy matrix or a pandas dataframe."""
+        self._model.train(data)
+        return self
+
+    def predict(self, data):
+        """Predict cluster center for each event in the given data.
+        :param data: Input data in tensorflow object.
+        :return: List of cluster centers for each event.
+        """
+        return self._model.map_to_nodes(data)
+
+    def transform(self, data):
+        """Transform data of individual events to histogram of events per
+        cluster center.
+        """
+        return self._model.map_to_histogram_distribution(data)
+
+
+class SOMNodes(BaseEstimator, TransformerMixin):
+    """
+    Create SOM from input data and transform into the weights
+    for each SOM-Node, effectively reducing the data to num_nodes x channels
+    dimensions.
+    """
+
+    def __init__(self, m=10, n=10, batch_size=1024):
+        self._model = TFSom(m, n, batch_size=batch_size)
+        self.history = []
+
+    def fit(self, *args, **kwargs):
+        return self
+
+    def transform(self, X, *_):
+        self._model.train(X)
+        weights = pd.DataFrame(
+            self._model.output_weights, columns=X.columns
+        )
+        self.history.append({
+            "data": weights,
+            "mod": weights.index,
+        })
+        return weights
