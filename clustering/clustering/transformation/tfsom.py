@@ -48,20 +48,28 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
     """
 
     def __init__(
-            self, m, n, max_epochs=10, initial_radius=None,
-            batch_size=4096, test_batch_size=8192, initial_learning_rate=0.1,
-            std_coeff=0.5, model_name='Self-Organizing-Map',
-            softmax_activity=False, output_sensitivity=-1.0,
-            checkpoint_dir="checkpoints", restore_path=None
+            self,
+            m, n,
+            max_epochs=10,
+            batch_size=4096, test_batch_size=8192,
+            initial_radius=None,
+            initial_learning_rate=0.1,
+            std_coeff=0.5,
+            model_name='Self-Organizing-Map',
+            softmax_activity=False,
+            output_sensitivity=-1.0,
+            checkpoint_dir="checkpoints",
+            initialization_method="sample",
+            restore_path=None,
     ):
         """
         Initialize a self-organizing map on the tensorflow graph
         :param m: Number of rows of neurons
         :param n: Number of columns of neurons
         :param max_epochs: Number of epochs to train for
+        :param batch_size: Number of input vectors to train on at a time
         :param initial_radius: Starting value of the neighborhood radius -
                 defaults to max(m, n) / 2.0
-        :param batch_size: Number of input vectors to train on at a time
         :param initial_learning_rate: The starting learning rate of the SOM.
                 Decreases linearly w/r/t `max_epochs`
         :param graph: The tensorflow graph to build the network on
@@ -70,9 +78,12 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
         :param model_name: The name that will be given to the checkpoint files
         :param softmax_activity: If `True` the activity will be softmaxed to
                 form a probability distribution
-        :param output_sensitivity The constant controlling the width of the
+        :param output_sensitivity: The constant controlling the width of the
                 activity gaussian. See the Jupyter Notebook
                 for an explanation.
+        :param initialization_method: method used to initialize the som nodes.
+        Choices are either random number initialization or sample based
+        initialization.
         """
         self._m = abs(int(m))
         self._n = abs(int(n))
@@ -98,15 +109,18 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
         # brevity
         self._c = float(output_sensitivity)
 
+        self._initialization_method = initialization_method
+
         self._checkpoint_dir = checkpoint_dir
         self._restore_path = restore_path
         self._trained = False
 
         # always run with the maximum number of gpus
+        # limit to the first gpu at first
         self._gpus = [
             d.name for d in device_lib.list_local_devices()
             if d.device_type == "GPU"
-        ]
+        ][0:1]
 
         # Initialized later, just declaring up here for neatness and to avoid
         # warnings
@@ -127,6 +141,9 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
         self._prediction_input = None
         self._prediction_output = None
         self._transform_output = None
+
+        # optional for alternative initialization
+        self._init_samples = None
 
         # This will be the collection of summaries for this subgraph. Add new
         # summaries to it and pass it to merge()
@@ -266,10 +283,18 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
             # the towers are constructed sequentially, the handle to the
             # Tensors will be different for each tower even if we reference
             # "self"
+            if self._initialization_method == "random":
+                initializer = tf.random_uniform_initializer(maxval=1)
+                shape = [self._m * self._n, self._dim]
+            elif self._initialization_method == "sample":
+                initializer = self._init_samples
+                shape = None
+            else:
+                raise TypeError("Initialization method not supported.")
             self._weights = tf.get_variable(
                 name='weights',
-                shape=[self._m * self._n, self._dim],
-                initializer=tf.random_uniform_initializer(maxval=1)
+                shape=shape,
+                initializer=initializer,
             )
 
         # Matrix of size [m*n, 2] for SOM grid locations of neurons.
@@ -538,6 +563,14 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
                 data.astype(np.float32)
             )
             num_inputs, self._dim = data.shape
+
+            if self._initialization_method == "sample":
+                samples = data.values[np.random.choice(
+                    data.shape[0], self._m * self._n, replace=False
+                ), :]
+                self._init_samples = tf.convert_to_tensor(
+                    samples, dtype=tf.float32
+                )
 
             dataset = dataset.repeat()
             dataset = dataset.batch(self._batch_size)
