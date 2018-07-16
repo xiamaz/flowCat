@@ -11,6 +11,9 @@ import boto3
 TMP_PATH = "tmp"
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 def resolve_s3(path):
     """Download file from S3 into a temporary location.
     Currently removal of temporary files is not implemented.
@@ -20,10 +23,14 @@ def resolve_s3(path):
 
     os.makedirs(TMP_PATH, exist_ok=True)
 
-    dest = pathlib.PurePath(TMP_PATH, s3file)
-    boto3.client("s3").download_file(
-        s3url.netloc, s3file, str(dest)
-    )
+    dest = pathlib.Path(TMP_PATH, s3file)
+    if not dest.exists():
+        LOGGER.debug("%s: Downloading", path)
+        boto3.client("s3").download_file(
+            s3url.netloc, s3file, str(dest)
+        )
+    else:
+        LOGGER.debug("%s: Using existing in cache", path)
 
     return str(dest)
 

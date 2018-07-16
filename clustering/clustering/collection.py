@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 
 import pandas as pd
 
-from .case import Case, CasePath
+from .case import Case, CasePath, Material
 from .utils import load_json, get_file_path, put_file_path
 
 
@@ -16,6 +16,8 @@ from .utils import load_json, get_file_path, put_file_path
 # they will be ignored.
 MARKER_THRESHOLD = 0.9
 
+# materials allowed in processing
+ALLOWED_MATERIALS = [Material.BONE_MARROW, Material.PERIPHERAL_BLOOD]
 
 COLNAMES = ["label", "group", "infiltration"]
 
@@ -118,21 +120,31 @@ class CaseIterable:
         return self._groups
 
     def __getitem__(self, key):
-        return self._data[key]
+        return self.data[key]
 
     def __len__(self):
-        return len(self._data)
+        return len(self.data)
 
     def __iter__(self):
         self._current = 0
         return self
 
     def __next__(self):
-        if self._current > len(self):
+        if self._current >= len(self):
             raise StopIteration
         else:
             self._current += 1
             return self[self._current - 1]
+
+
+def filter_materials(data: list) -> list:
+    """Filter cases to remove not allowed materials."""
+    for single_case in data:
+        single_case.filepaths = [
+            p for p in single_case.filepaths
+            if p.material in ALLOWED_MATERIALS
+        ]
+    return data
 
 
 class CaseCollection(CaseIterable):
@@ -142,11 +154,15 @@ class CaseCollection(CaseIterable):
     def __init__(self, infopath: str, tubes: list):
         super().__init__()
 
+        data = self._read_info(infopath)
+
+        material_data = filter_materials(data)
+
         markers = SelectedMarkers()
-        self._data = markers.fit_transform(self._read_info(infopath))
+        self._data = markers.fit_transform(material_data)
         self.markers = markers.selected_markers
 
-            # either use selected provided tubes or use all tubes
+        # either use selected provided tubes or use all tubes
         self.selected_tubes = tubes or self.tubes
         self._data = [
             d for d in self._data if d.has_tubes(tubes)
@@ -218,6 +234,16 @@ class TubeView:
     def __init__(self, data: [CasePath], markers: list):
         self.data = data
         self.markers = markers
+        self._materials = None
+
+    @property
+    def materials(self):
+        if self._materials is None:
+            self._materials = defaultdict(list)
+            for casepath in self.data:
+                self._materials[str(casepath.material)].append(casepath)
+
+        return self._materials
 
     def export_results(self):
         """Export histogram results to pandas dataframe."""
@@ -231,3 +257,6 @@ class TubeView:
         return pd.DataFrame.from_records(
             list(filter(bool, hists))#, columns=colnames
         )
+
+    def __len__(self):
+        return len(self.data)

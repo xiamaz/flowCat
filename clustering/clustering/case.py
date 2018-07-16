@@ -1,10 +1,10 @@
 import os
 import logging
+from enum import Enum
 
-import pandas as pd
 import fcsparser
 
-from .utils import get_file_path, put_file_path
+from .utils import get_file_path
 
 
 LOGGER = logging.getLogger(__name__)
@@ -22,6 +22,23 @@ def all_in(smaller, larger):
         if item not in larger:
             return False
     return True
+
+
+class Material(Enum):
+    """Class containing material types. Abstracting the concept for
+    easier consumption."""
+    PERIPHERAL_BLOOD = 1
+    BONE_MARROW = 2
+    OTHER = 3
+
+    @staticmethod
+    def from_str(label: str) -> "Material":
+        if label in ["1", "2", "3", "4", "5", "PB"]:
+            return Material.PERIPHERAL_BLOOD
+        elif label == "KM":
+            return Material.BONE_MARROW
+        else:
+            return Material.OTHER
 
 
 class Case:
@@ -82,7 +99,7 @@ class Case:
         """Get filedict for a single tube. Return the last filedict in the
         list."""
         assert self.has_tube(tube), "Case does not have specified tube."
-        all_tube = self.tubepaths.get(tube, [])
+        all_tube = self.tubepaths[tube]
         return all_tube[-1]
 
     def has_tube(self, tube: int) -> bool:
@@ -105,6 +122,8 @@ class CasePath:
         self.path = create_fcs_path(path["path"])
         self.tube = int(path["tube"])
         self.markers = path["markers"]
+        self.material = Material.from_str(path["material"])
+
         self.parent = parent
 
         self.result = None
