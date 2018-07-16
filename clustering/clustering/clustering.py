@@ -9,81 +9,12 @@ Save input config for later loading.
 import logging
 import os
 
-from sklearn.pipeline import Pipeline
-
 from .utils import load_json, create_stamp, get_file_path, put_file_path
-from .transformation import base
-from .transformation.fcs import ScatterFilter, MarkersTransform
-from .transformation.tfsom import SelfOrganizingMap, SOMNodes
-from .transformation.pregating import SOMGatingFilter
+from .transformation.base import Merge
 from .collection import CaseCollection
 
 
 LOGGER = logging.getLogger(__name__)
-
-
-def get_main(name: str, *_) -> Pipeline:
-    """Build main pipeline components."""
-    steps = []
-    if name == "normal":
-        steps.append(("clust", SelfOrganizingMap(m=10, n=10)))
-    elif name == "gated":
-        channels = ["CD45-KrOr", "SS INT LIN"]
-        positions = ["+", "-"]
-        # first gate merged results in fitting and individual
-        # cases in transformation
-        steps.append(
-            ("somgating", SOMGatingFilter(channels, positions))
-        )
-        steps.append(
-            ("somcluster", SelfOrganizingMap(m=10, n=10))
-        )
-    else:
-        raise RuntimeError("Unknown main transformation.")
-
-    return Pipeline(
-        steps=steps
-    )
-
-
-def get_pre(name: str, markers: list, *_) -> Pipeline:
-    steps = []
-    # basic preprocessing used in all preprocessings
-    steps.append(
-        ("scatter", ScatterFilter())
-    )
-    if name == "normal":
-        # default preprocessing
-        pass
-    elif name == "som":
-        steps.append(
-            ("out", SOMNodes(20, 20, 512))
-        )
-    elif name == "gated":
-        channels = ["CD45-KrOr", "SS INT LIN"]
-        positions = ["+", "-"]
-        steps.append(
-            ("out", SOMGatingFilter(channels, positions))
-        )
-    elif name == "gatedsom":
-        channels = ["CD45-KrOr", "SS INT LIN"]
-        positions = ["+", "-"]
-        steps.append(
-            ("out", SOMGatingFilter(channels, positions))
-        )
-        steps.append(
-            ("nodes", SOMNodes(20, 20, 512))
-        )
-    else:
-        raise RuntimeError("Unknown preprocesing")
-
-    steps.append(
-        ("marker", MarkersTransform(markers))
-    )
-
-    return Pipeline(
-        steps=steps
-    )
 
 
 class Clustering:
@@ -112,6 +43,7 @@ class Clustering:
             cls,
             args: "Arguments",
     ):
+        """Initialize Clustering main program from command line arguments."""
         # case information for json inputs
         collection = CaseCollection(
             args.input, [int(t) for t in args.tubes.split(";")]
@@ -163,18 +95,14 @@ class Clustering:
 
         # load pipeline from a tube
         if tube not in self._pipelines:
-            pipeline = base.Merge(
-                transformer=get_main(self._pipeline_opts["main"]),
-                eachfit=get_pre(
-                    self._pipeline_opts["prefit"], data.markers
-                ),
-                eachtrans=get_pre(
-                    self._pipeline_opts["pretrans"], data.markers
-                ),
-            )
+            pipeline = Merge(**self._pipeline_opts, markers=data.markers)
 
             LOGGER.info("Fitting for tube %d", tube)
             pipeline.fit(data.data)
+
+            pipeline.save(
+                os.path.join(self._output_path, "model_tube{}".format(tube))
+            )
         else:
             pipeline = self._pipelines[tube]
 

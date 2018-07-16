@@ -161,6 +161,19 @@ class TFSom:
 
         self._initial_learning_rate = initial_learning_rate
 
+    def save(self, location):
+        """Save the current model into the specified location."""
+        tf.saved_model.simple_save(
+            self._sess, location,
+            inputs={
+                "indata": self._invar
+            },
+            outputs={
+                "mapping": self._prediction_output,
+                "histogram": self._transform_output,
+            },
+        )
+
     def _neuron_locations(self):
         """ Maps an absolute neuron index to a 2d vector for calculating the
         neighborhood function """
@@ -631,6 +644,10 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
     def load(cls, path):
         """Load configuration and state from saved configuration."""
         pass
+
+    def save(self, path):
+        """Save inner model and add some additional metadata to be saved."""
+        self._model.save(path)
 
     def fit(self, data, *_):
         """Fit the data using a matrix containing the data. The input
