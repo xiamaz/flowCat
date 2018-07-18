@@ -103,7 +103,8 @@ class Case:
         return all_tube[-1]
 
     def has_tube(self, tube: int) -> bool:
-        """Check whether case has a specified tube."""
+        """Check whether case has a specified tube.
+        """
         return bool(self.tubepaths.get(tube, []))
 
     def get_tube_markers(self, tube: int) -> list:
@@ -114,6 +115,14 @@ class Case:
         """Check that a Case has all given tubes.
         """
         return all([self.has_tube(t) for t in tubes])
+
+    def same_material(self, tubes: list):
+        """Check that the materials returned for the
+        list of given tubes are of the same material"""
+        material_num = len(
+            {self.get_tube(t).material for t in tubes}
+        )
+        return material_num == 1
 
 
 class CasePath:

@@ -138,7 +138,8 @@ class CaseIterable:
 
 
 def filter_materials(data: list) -> list:
-    """Filter cases to remove not allowed materials."""
+    """Filter cases to remove not allowed materials.
+    """
     for single_case in data:
         single_case.filepaths = [
             p for p in single_case.filepaths
@@ -166,6 +167,11 @@ class CaseCollection(CaseIterable):
         self.selected_tubes = tubes or self.tubes
         self._data = [
             d for d in self._data if d.has_tubes(tubes)
+        ]
+
+        # ensure that data uses same material
+        self._data = [
+            d for d in self._data if d.same_material(tubes)
         ]
 
     @staticmethod
@@ -249,13 +255,8 @@ class TubeView:
         """Export histogram results to pandas dataframe."""
         hists = [d.dict for d in self.data]
 
-        # sizes = [len(v) for hist in hists for v in hist.values()]
-        # assert len(set(sizes)) == 1, "Rows are not same size."
-
-        # colnames = [str(l) for l in range(sizes[0] - len(COLNAMES))] + COLNAMES
-        # print(list(filter(bool, hists)))
         return pd.DataFrame.from_records(
-            list(filter(bool, hists))#, columns=colnames
+            list(filter(bool, hists))
         )
 
     def __len__(self):
