@@ -1,6 +1,6 @@
 TAG := $(basename $(notdir $(lastword $(MAKEFILE_LIST))))_
 
-GROUPS = CLL:normal
+GROUPS = CLL;normal
 METHOD = kfold:10
-FILTERS = max_size:100
+FILTERS = smallest
 TUBES = 1;2
