@@ -1,7 +1,6 @@
 #!/usr/bin/fish
 
 function run_folder
-	echo (count $argv)
 	if [ (count $argv) -ge 2 ]
 		set template $argv[2]
 	else
