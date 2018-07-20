@@ -36,7 +36,7 @@ def preprocess_data(
             # used in conjunction with max_size
             iter_group, max_group, step = option.lstrip(
                 "iter_size:").split(",")
-            sizes = range(max_size, int(max_group)+1, int(step))
+            sizes = range(max_size, int(max_group) + 1, int(step))
 
     if not sizes:
         sizes = [max_size]
@@ -86,8 +86,6 @@ def evaluate(
         results.append((i, clas.past_experiments))
 
     plot_combined(results, output_path)
-
-
 
 
 def main():
