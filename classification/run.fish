@@ -7,7 +7,7 @@ function run_folder
 	else
 		set template (echo $argv[1] | sed 's/\/*$//')/(basename $argv[1])".mk"
 	end
-	for exp in $argv[1]/*
+	for exp in $argv[1]/*.mk
 		if not [ (basename $exp) = (basename $template) ]
 			echo "Using $exp with $template"
 			make run EXP=$exp TEMPLATE=$template
