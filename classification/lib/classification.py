@@ -66,7 +66,7 @@ def avg_dicts(dicts: [dict]) -> dict:
     for item in dicts:
         for key, value in item.items():
             avg_dict[key] += value
-    avg_dict = {k: v/len(dicts) for k, v in avg_dict.items()}
+    avg_dict = {k: v / len(dicts) for k, v in avg_dict.items()}
     return avg_dict
 
 
@@ -220,7 +220,7 @@ class Classifier:
             "experiments": self.past_experiments
         }
         dumppath = os.path.join(
-            self.output_path, self.name+"_info.json")
+            self.output_path, self.name + "_info.json")
         json.dump(dumpdata, open(dumppath, "w"), indent=4)
 
     def k_fold_validation(
@@ -236,7 +236,7 @@ class Classifier:
 
         splits = self._data.k_fold_split(k_num)
         train_test_sets = [
-            (pd.concat(splits[:i] + splits[i+1:]), splits[i])
+            (pd.concat(splits[:i] + splits[i + 1:]), splits[i])
             for i in range(k_num)
         ]
 
@@ -339,7 +339,7 @@ class Classifier:
 
         prediction_df.to_csv(
             os.path.join(
-                self.output_path, name_tag+"_predictions"+".csv"
+                self.output_path, name_tag+"_predictions" + ".csv"
             )
         )
 
