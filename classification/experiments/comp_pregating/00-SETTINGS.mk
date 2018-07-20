@@ -1,4 +1,4 @@
-TAG := $(basename $(notdir $(lastword $(MAKEFILE_LIST))))_
+TAG := $(shell basename $(dir $(lastword $(MAKEFILE_LIST))))_
 
 GROUPS = LMg:LPL,Marginal;MtCp:Mantel,CLLPL;CM:CLL,MBL;normal
 METHOD = kfold:10

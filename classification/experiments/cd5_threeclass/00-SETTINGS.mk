@@ -1,4 +1,5 @@
-TAG := $(basename $(notdir $(lastword $(MAKEFILE_LIST))))_
+# experiment set name
+TAG := $(shell basename $(dir $(lastword $(MAKEFILE_LIST))))_
 
 GROUPS = CD5pos:CLL,MBL,Mantel,CLLPL;CD5neg:FL,LPL,Marginal;normal
 METHOD = kfold:10
