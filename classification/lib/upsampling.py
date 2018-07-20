@@ -26,7 +26,7 @@ def merge_on_label(left_df: pd.DataFrame, right_df: pd.DataFrame, metacols) \
         right_df, how="inner", on="label", suffixes=("", "_y")
     )
     merged.drop([
-        s+"_y" for s in metacols if s != "label"
+        s + "_y" for s in metacols if s != "label"
     ], inplace=True, axis=1)
 
     # continuous field naming
@@ -90,7 +90,7 @@ class DataView:
             block_size = round(group.shape[0] / k_num)
             for i in range(k_num):
                 start = block_size * i
-                end = block_size * (i+1) if i+1 < k_num else group.shape[0]
+                end = block_size * (i + 1) if i + 1 < k_num else group.shape[0]
                 group_slice = shuffled.iloc[start:end, :]
                 df_group.append(group_slice)
             df_list.append(df_group)
@@ -149,7 +149,10 @@ class UpsamplingData:
         return [self._group_sizes(d) for d in self.datas]
 
     def filter_data(
-            self, groups: GroupSelection, cutoff: SizeOption, max_size: SizeOption
+            self,
+            groups: GroupSelection,
+            cutoff: SizeOption,
+            max_size: SizeOption
     ) -> DataView:
         '''Filter data based on criteria and return a data view.'''
         for name, data in self.datas.items():
@@ -199,6 +202,7 @@ class UpsamplingData:
 
     @staticmethod
     def _group_sizes(data: pd.DataFrame) -> pd.Series:
+        print(data)
         return data.groupby("group").size()
 
     @staticmethod
