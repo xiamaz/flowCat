@@ -184,8 +184,8 @@ class CmdArgs:
                 min_value, max_value = 0, nums[0]
 
             size[key] = {
-                "min_size": int(min_value),
-                "max_size": int(max_value),
+                "min_size": int(min_value) if min_value else 0,
+                "max_size": int(max_value) if max_value else 0,
             }
 
         if "" not in size:
