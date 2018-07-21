@@ -92,7 +92,8 @@ class CmdArgs:
                   "Format: <group?>:(min-)max;... "
                   "Examples: CLL:100;normal:20-100;10-0 -- CLL max size "
                   "100, normal at least 20 to be included, all other cohorts "
-                  "at least 10 cases to be included.")
+                  "at least 10 cases to be included."),
+            default=""
         )
 
         self.args = parser.parse_args()
