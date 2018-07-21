@@ -8,3 +8,4 @@ PATTERN = normal_2018
 SIZE = --size 2000
 
 INFILTRATION = --infiltration 10.0
+MODIFIERS = 

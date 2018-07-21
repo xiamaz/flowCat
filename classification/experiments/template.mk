@@ -18,12 +18,15 @@ METHOD = kfold:5
 # Names of groups to be included
 #   different groups can be merged by assigning multiple comma separated groups
 #   to a single custom label, such as example:normal,CLL
-GROUPS = --group "LMg:LPL,Marginal;MtCp:Mantel,CLLPL;CM:CLL,MBL;normal"
+# GROUPS = --group "LMg:LPL,Marginal;MtCp:Mantel,CLLPL;CM:CLL,MBL;normal"
+GROUPS = 
 
 # Set a size for the content
 # format: (group?):(min-?)max;...
-SIZE = --size 100
+# SIZE = --size 100
+SIZE = 
 
 # specify a number of filters to be used with the data
 # valid: smallest - all cohorts are size of the smallest cohort
-MODIFIERS = --modifiers smallest
+# MODIFIERS = --modifiers smallest
+MODIFIERS = 
