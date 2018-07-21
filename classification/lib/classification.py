@@ -71,7 +71,6 @@ def avg_dicts(dicts: [dict]) -> dict:
 
 
 def create_t2(predictions: pd.DataFrame) -> pd.DataFrame:
-    print(predictions)
     arglist = predictions.apply(np.argsort, axis=1)
     vals = predictions.columns.to_series()[arglist.values[:, ::-1][:, :2]]
     return pd.DataFrame(vals, index=predictions.index)
