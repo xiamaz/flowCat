@@ -124,6 +124,8 @@ def get_pre(name: str, markers: list, pipeline_name: str = "", *_) -> Pipeline:
             channels,
             positions,
         )
+        # remove channels used in pregating from later usage
+        markers = [m for m in markers if m not in channels]
     elif name == "gatedsom":
         channels = ["CD45-KrOr", "SS INT LIN"]
         positions = ["+", "-"]
@@ -138,6 +140,8 @@ def get_pre(name: str, markers: list, pipeline_name: str = "", *_) -> Pipeline:
             "SOMNodes",
             20, 20, 512
         )
+        # remove channels used in pregating from later usage
+        markers = [m for m in markers if m not in channels]
     else:
         raise RuntimeError("Unknown preprocesing")
 

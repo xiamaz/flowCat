@@ -118,6 +118,8 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
         return self
 
     def predict(self, X, *_):
+        # fit the SOMNodes for the individual case
+        self._pre.fit(X)
         new_weights = self._pre.transform(X)
         self._clust.fit(new_weights)
 

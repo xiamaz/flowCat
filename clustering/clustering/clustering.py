@@ -95,14 +95,16 @@ class Clustering:
 
         # load pipeline from a tube
         if tube not in self._pipelines:
-            pipeline = Merge(**self._pipeline_opts, markers=data.markers)
+            pipeline = Merge.from_names(
+                **self._pipeline_opts, markers=data.markers
+            )
 
             LOGGER.info("Fitting for tube %d", tube)
             pipeline.fit(data.data)
 
-            pipeline.save(
-                os.path.join(self._output_path, "model_tube{}".format(tube))
-            )
+            # pipeline.save(
+            #     os.path.join(self._output_path, "model_tube{}".format(tube))
+            # )
         else:
             pipeline = self._pipelines[tube]
 

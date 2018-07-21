@@ -53,11 +53,12 @@ OUTPUT = s3://mll-flow-classification/clustering/$(OUTNAME)
 run:
 	$(BIN) $(OPTS) --output $(OUTPUT)
 
+# use selected cases provided in reference json file for consensus SOM
 run-selected: $(REFCASES)
 	$(BIN) $(OPTS) --output $(OUTPUT)_selected --refcases $(REFCASES)
 
-run-test:
-	$(eval EXP:=experiments/test.mk)
+# run the experiment locally and output to a local folder
+run-local:
 	$(eval TEMP:=tmp)
 	$(BIN) $(OPTS) --output output/clustering
 

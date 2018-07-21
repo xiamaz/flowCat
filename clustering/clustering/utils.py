@@ -21,9 +21,11 @@ def resolve_s3(path):
     s3url = urlparse(path)
     s3file = s3url.path.lstrip("/")
 
-    os.makedirs(TMP_PATH, exist_ok=True)
-
     dest = pathlib.Path(TMP_PATH, s3file)
+
+    # create all folders as needed
+    os.makedirs(str(dest.parent), exist_ok=True)
+
     if not dest.exists():
         LOGGER.debug("%s: Downloading", path)
         boto3.client("s3").download_file(
@@ -41,6 +43,7 @@ def upload_s3(dest, writefun):
     filepath = s3url.path.lstrip("/")
 
     tempdest = pathlib.PurePath(TMP_PATH, filepath)
+    # create temp folders as needed
     os.makedirs(str(tempdest.parent), exist_ok=True)
     writefun(str(tempdest))
     boto3.client("s3").upload_file(str(tempdest), s3url.netloc, filepath)
@@ -64,9 +67,16 @@ def put_file_path(path, writefun):
 
 
 def load_json(path):
+    """Load json data from a path as a simple function."""
     with open(path) as jspath:
         data = json.load(jspath)
     return data
+
+
+def save_json(path, data):
+    """Write json data to a file as a simple function."""
+    with open(path, "w") as jsfile:
+        json.dump(data, jsfile)
 
 
 def create_stamp():

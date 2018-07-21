@@ -677,14 +677,22 @@ class SOMNodes(BaseEstimator, TransformerMixin):
     """
 
     def __init__(self, m=10, n=10, batch_size=1024):
-        self._model = TFSom(m, n, batch_size=batch_size)
+        self._m = m
+        self._n = n
+        self._batch_size = batch_size
+        self._model = None
         self.history = []
 
-    def fit(self, *args, **kwargs):
+    def fit(self, X, *args, **kwargs):
+        """Always retrain model, if fit is called."""
+        self._model = TFSom(self._m, self._n, batch_size=self._batch_size)
+        self._model.train(X)
         return self
 
+    def predict(self, X, *_):
+        return self._model.map_to_nodes(X)
+
     def transform(self, X, *_):
-        self._model.train(X)
         weights = pd.DataFrame(
             self._model.output_weights, columns=X.columns
         )
