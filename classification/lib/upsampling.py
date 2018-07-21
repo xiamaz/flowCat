@@ -25,6 +25,10 @@ SizeOption = typing.Union[int, SizesDict]
 MaybeList = typing.Union[typing.List[int], None]
 
 
+# Groups without infiltration, if using this option for splitting the data
+NO_INFILTRATION = ["normal"]
+
+
 RE_TUBE = re.compile(r"tube(\d+)\.csv")
 
 LOGGER = logging.getLogger(__name__)
@@ -95,8 +99,11 @@ class BaseData:
         """Select data according to group dict."""
         # get all data contained in the tags
         sel_data = self.data.loc[self.data["group"].isin(group_info["tags"])]
+
+        # explicitly ok modifications of selection
+        sel_data.is_copy = False
         # rename group column in these data to the specified label
-        sel_data["group"] = group_info["name"]
+        sel_data.loc[:, "group"] = group_info["name"]
         return sel_data
 
     def select_groups(self, groups: [dict], sizes: dict) -> list:
@@ -181,7 +188,7 @@ class DataView(BaseData):
             if i < 0:
                 raise RuntimeError("Cutoff below zero. Perhaps small cohort.")
             shuffled = group.sample(frac=1)
-            if train_infiltration:
+            if train_infiltration and group_name not in NO_INFILTRATION:
                 over_thres = shuffled["infiltration"].astype("float32") \
                     > train_infiltration
                 hi_infil = shuffled.loc[over_thres]
@@ -252,6 +259,12 @@ class InputData(BaseData):
     continuous pandas dataframe usable for later usage.
     '''
 
+    metacols = {
+        "infiltration": object,
+        "group": object,
+        "label": object,
+    }
+
     @classmethod
     def from_files(
             cls, tubesdict: dict, name: str, tubes: MaybeList = None
@@ -268,11 +281,18 @@ class InputData(BaseData):
     def _read_file(filepath: str) -> pd.DataFrame:
         '''Read output from preprocessing in csv format.
         '''
-        csv_data = pd.read_table(filepath, sep=";", index_col=0)
-        csv_data["infiltration"] = csv_data["infiltration"].apply(
+        csv_data = pd.read_table(
+            filepath,
+            sep=";",
+            index_col=0,
+            dtype=InputData.metacols
+        )
+        csv_data.loc[:, "infiltration"] = csv_data["infiltration"].apply(
             lambda x: str(x).replace(",", ".")
         )
-        csv_data["infiltration"] = csv_data["infiltration"].astype("float32")
+        csv_data.loc[:, "infiltration"] = csv_data["infiltration"].astype(
+            "float32"
+        )
 
         csv_data.drop_duplicates(subset="label", keep=False, inplace=True)
         return csv_data

@@ -44,7 +44,7 @@ run: download
 
 sync: # synchronize output folder containg all results
 	aws s3 sync s3://$(BUCKET) output
-	aws s3 sync output s3://$(BUCKET)
+	# aws s3 sync output s3://$(BUCKET)
 
 download:
 	mkdir -p $(INPUT)
