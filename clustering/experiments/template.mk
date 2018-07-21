@@ -11,7 +11,7 @@ NUM = 5
 # Number of cases per cohort to be upsampled (maximum number)
 # enable: NUM
 # disable: set to 0 or lower
-UPSAMPLING_NUM = 800
+UPSAMPLING_NUM = 0
 # Select specific cohorts to be upsampled, otherwise all cohorts will be
 # processed
 # enable: --groups GROUPS
