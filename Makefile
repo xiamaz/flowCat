@@ -15,4 +15,4 @@ ecr: clustering.ecr classification.ecr
 	docker run --mount type=bind,source=$$HOME/.aws,target=/root/.aws $(basename $@) $(CMD)
 
 login:
-	@eval $$(aws ecr get-login --no-include-email --region eu-central-1)
+	@eval $$(sudo -u max aws ecr get-login --no-include-email --region eu-central-1)
