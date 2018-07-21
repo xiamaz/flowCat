@@ -8,7 +8,7 @@ import sys
 
 from collections import defaultdict
 
-from lib.upsampling import UpsamplingData
+from lib.upsampling import DataCollection
 from lib.classification import Classifier, NeuralNet, Tree
 from lib.plotting import plot_combined
 from lib.stamper import create_stamp
@@ -17,41 +17,17 @@ from lib.parser import CmdArgs
 
 
 def preprocess_data(
-        args: CmdArgs
-) -> UpsamplingData:
+        data: DataCollection, args: CmdArgs
+) -> "DataView":
     '''Apply grouping and other manipulation of the input data.'''
 
-    data = UpsamplingData.from_files(args.files, args.tubes)
-
-    cutoff = 0
-    max_size = 0
-    sizes = []
-    iter_group = ""
-    for option in args.filters:
-        if option == "smallest":
-            max_size = min(data.get_group_sizes())
-        elif "max_size" in option:
-            max_size = int(option.lstrip("max_size:"))
-        elif "iter_size" in option:
-            # used in conjunction with max_size
-            iter_group, max_group, step = option.lstrip(
-                "iter_size:").split(",")
-            sizes = range(max_size, int(max_group) + 1, int(step))
-
-    if not sizes:
-        sizes = [max_size]
-
-    for size in sizes:
-        for name, view in data.filter_data(
-                groups=args.groups, cutoff=cutoff, max_size=size
-        ):
-            if iter_group:
-                size = {
-                    g: size if g == iter_group else max_size
-                    for g in view.group_names()
-                }
-            vname = "{}_{}".format(name, size)
-            yield vname, view
+    for i, basedata in enumerate(data):
+        view = basedata.filter_data(
+            groups=args.groups,
+            sizes=args.sizes,
+            modifiers=args.modifiers,
+        )
+        yield i, view
 
 
 def evaluate(
@@ -61,13 +37,16 @@ def evaluate(
 
     name = "{}_{}".format(args.name, create_stamp())
 
+    data = DataCollection(args.files, args.pattern, args.tubes)
+
     results = []
 
     output_path = os.path.join(args.output, name)
 
     modelfunc = NeuralNet
 
-    for i, view in preprocess_data(args):
+    for i, view in preprocess_data(data, args):
+
         subname = "{}_{}".format(name, i)
         clas = Classifier(view, name=subname, output_path=output_path)
 
@@ -75,10 +54,18 @@ def evaluate(
             if method_name == "holdout":
                 if method_info.startswith("a"):
                     abs_num = int(method_info.strip("a"))
-                    clas.holdout_validation(modelfunc, abs_num=abs_num)
+                    clas.holdout_validation(
+                        modelfunc,
+                        abs_num=abs_num,
+                        infiltration=args.infiltration
+                    )
                 elif method_info.startswith("r"):
                     ratio = float(method_info.strip("r"))
-                    clas.holdout_validation(modelfunc, ratio=ratio)
+                    clas.holdout_validation(
+                        modelfunc,
+                        ratio=ratio,
+                        infiltration=args.infiltration
+                    )
             elif method_name == "kfold":
                 clas.k_fold_validation(modelfunc, int(method_info))
 

@@ -1,8 +1,8 @@
 TAG := $(shell basename $(dir $(lastword $(MAKEFILE_LIST))))_
-
-GROUPS = LMg:LPL,Marginal;MtCp:Mantel,CLLPL;CM:CLL,MBL;normal
+PATTERN := comp_pregating
 METHOD = kfold:10
-FILTERS = max_size:2000
 TUBES = 1;2
 
-PATTERN := comp_pregating
+GROUPS = --group "LMg:LPL,Marginal;MtCp:Mantel,CLLPL;CM:CLL,MBL;normal"
+SIZE = --size 2000
+MODIFIERS = 

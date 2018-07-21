@@ -257,15 +257,20 @@ class Classifier:
             abs_num: int = None,
             save_weights: bool = True,
             val_split: float = 0.2,
+            infiltration: float = 0.0,
     ) -> None:
         '''Simple holdout validation. If given abs_num, then each test cohort
         will contain the absolute number of cases.'''
         if abs_num:
             name_tag = "absolute"
-            train, test = self._data.get_test_train_split(abs_num=abs_num)
+            train, test = self._data.get_test_train_split(
+                abs_num=abs_num, train_infiltration=infiltration
+            )
         else:
             name_tag = "holdout"
-            train, test = self._data.get_test_train_split(ratio=ratio)
+            train, test = self._data.get_test_train_split(
+                ratio=ratio, train_infiltration=infiltration
+            )
 
         train_test_sets = [(train, test)]
 

@@ -5,6 +5,8 @@ import typing
 from collections import defaultdict
 from argparse import ArgumentParser
 
+from .upsampling import ViewModifiers
+
 RE_TUBE_NAME = re.compile(r"tube(\d+)\.csv$")
 
 
@@ -49,21 +51,21 @@ class CmdArgs:
             default="output/preprocess"
         )
         parser.add_argument(
-            "-n", "--note",
-            help="Adding a string note text describing the experiment."
-        )
-        parser.add_argument(
             "-o", "--output",
             help="Output location.",
             default="output/classification"
         )
         parser.add_argument(
-            "-m", "--method",
+            "--note",
+            help="Adding a string note text describing the experiment."
+        )
+        parser.add_argument(
+            "--method",
             help="Analysis method. Holdout or kfold. <name>:<prefix><num>",
             default="holdout:r0.8,kfold:10"
         )
         parser.add_argument(
-            "-g", "--group",
+            "--group",
             help="Groups included in analysis. Eg g1:CLL,MBL;normal"
         )
         parser.add_argument(
@@ -75,11 +77,24 @@ class CmdArgs:
             help="Selected tubes for processing",
         )
         parser.add_argument(
-            "-f", "--filters",
-            help=("Add data preprocessing options. "
-                  "smallest - Limit size of all cohorts to smallest cohort. "
-                  "max_size - Set highest size to maximum size.")
+            "--modifiers",
+            help=("Add global modifier options applied to data filtering. "
+                  "smallest - Limit size of all cohorts to smallest cohort. ")
         )
+        parser.add_argument(
+            "--infiltration",
+            help="Require minimum infiltration in training data.",
+            default=0.0
+        )
+        parser.add_argument(
+            "--size",
+            help=("Add size information. In a semicolon delimited list. "
+                  "Format: <group?>:(min-)max;... "
+                  "Examples: CLL:100;normal:20-100;10-0 -- CLL max size "
+                  "100, normal at least 20 to be included, all other cohorts "
+                  "at least 10 cases to be included.")
+        )
+
         self.args = parser.parse_args()
 
     @property
@@ -108,11 +123,19 @@ class CmdArgs:
         return method
 
     @property
+    def infiltration(self):
+        return float(self.args.infiltration)
+
+    @property
     def files(self):
         pattern = self.args.pattern
         inputdir = self.args.input
         files = get_files(inputdir, pattern)
         return files
+
+    @property
+    def pattern(self):
+        return self.args.pattern
 
     @property
     def groups(self):
@@ -123,12 +146,54 @@ class CmdArgs:
                     group[1].split(",")
                     if len(group) > 1
                     else [group[0]]
-                )
+                ),
             }
             for group in
             [m.split(":") for m in self.args.group.split(";")]
         ] if self.args.group else []
         return groups
+
+    @property
+    def modifiers(self):
+        modifiers = self.args.modifiers.split(";") \
+            if self.args.modifiers else []
+        return ViewModifiers.from_modifiers(modifiers)
+
+    @property
+    def sizes(self):
+        """Format: g:min_max;
+        """
+        tokens = [symbol.split(":") for symbol in self.args.size.split(";")]
+        size = {}
+        for token in tokens:
+            key, value = token if len(token) > 1 else ("", token[0])
+
+            if key in size:
+                raise RuntimeError("Duplicate key in size definition.")
+
+            nums = value.split("-")
+
+            # check whether argument is of form:
+            # a-b, a- (min_value), or -b or b (max_value)
+            if len(nums) == 2:
+                min_value, max_value = nums
+            elif value.endswith("-"):
+                min_value, max_value = nums[0], 0
+            else:
+                min_value, max_value = 0, nums[0]
+
+            size[key] = {
+                "min_size": int(min_value),
+                "max_size": int(max_value),
+            }
+
+        if "" not in size:
+            size[""] = {
+                "min_size": 0,
+                "max_size": 0,
+            }
+
+        return size
 
     @property
     def tubes(self):
@@ -137,8 +202,3 @@ class CmdArgs:
         else:
             tubes = []
         return tubes
-
-    @property
-    def filters(self):
-        filters = self.args.filters.split(";") if self.args.filters else []
-        return filters

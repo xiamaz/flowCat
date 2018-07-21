@@ -25,14 +25,16 @@ NAME := $(TAG)$(basename $(notdir $(lastword $(MAKEFILE_LIST))))$(EXTRA_TAG)
 
 BIN = python3 classify.py
 
-OPTIONS = -n "$(NOTE)" \
-		  -g "$(GROUPS)" \
-		  -f "$(FILTERS)" \
-		  -i $(INPUT) \
+OPTIONS = --note "$(NOTE)" \
 		  --pattern $(PATTERN) \
+		  --method $(METHOD) \
+		  --tubes "$(TUBES)" \
+		  -i $(INPUT) \
 		  -o $(OUTPUT) \
-		  -m $(METHOD) \
-		  --tubes "$(TUBES)"
+		  $(GROUPS) \
+		  $(MODIFIERS) \
+		  $(SIZE) \
+		  $(INFILTRATION) \
 
 .PHONY: run sync download upload report
 

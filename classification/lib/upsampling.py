@@ -3,10 +3,20 @@ CSV file operations needed for upsampling based classification
 '''
 import re
 import logging
+from enum import Enum
 from functools import reduce
 import typing
 
 import pandas as pd
+
+
+class ViewModifiers(Enum):
+    SMALLEST = 1
+
+    @staticmethod
+    def from_modifiers(modifiers: list) -> list:
+        return [ViewModifiers[m.upper()] for m in modifiers]
+
 
 SizesDict = typing.Dict[str, int]
 FilesDict = typing.Dict[int, typing.Dict[int, str]]
@@ -16,6 +26,8 @@ MaybeList = typing.Union[typing.List[int], None]
 
 
 RE_TUBE = re.compile(r"tube(\d+)\.csv")
+
+LOGGER = logging.getLogger(__name__)
 
 
 def merge_on_label(left_df: pd.DataFrame, right_df: pd.DataFrame, metacols) \
@@ -43,19 +55,119 @@ def merge_on_label(left_df: pd.DataFrame, right_df: pd.DataFrame, metacols) \
     return merged
 
 
-class DataView:
+class BaseData:
+    """Base data class containing filtering and basic abstractions."""
+    def __init__(self, data: pd.DataFrame, name: str = ""):
+        self._data = None
+        self._groups = None
+
+        self.data = data
+        self.name = name
+
+    @classmethod
+    def from_obj(cls, obj):
+        return cls(obj.data, obj.name)
+
+    @property
+    def data(self):
+        return self._data
+
+    @data.setter
+    def data(self, value):
+        self._data = value
+        self._groups = self.split_groups(self._data)
+
+    @property
+    def group_names(self):
+        return [n for n, _ in self._groups]
+
+    @property
+    def group_sizes(self):
+        return {n: len(d) for n, d in self._groups}
+
+    @staticmethod
+    def split_groups(data):
+        '''Split data into a list of group_name, dataframe tuples.
+        '''
+        return list(data.groupby("group"))
+
+    def _get_group(self, group_info: dict) -> pd.DataFrame:
+        """Select data according to group dict."""
+        # get all data contained in the tags
+        sel_data = self.data.loc[self.data["group"].isin(group_info["tags"])]
+        # rename group column in these data to the specified label
+        sel_data["group"] = group_info["name"]
+        return sel_data
+
+    def select_groups(self, groups: [dict], sizes: dict) -> list:
+        '''Select only certain groups.
+        Input is a list of dicts, containing
+        {
+            "name": label of group,
+            "tags": raw cohort labels to be assigned to this group
+        }
+        '''
+        dfs = []
+        for group in groups:
+            groupdf = self._get_group(group)
+            gname = group["name"]
+
+            ginfo = sizes.get(gname, sizes[""])
+
+            # exclude cohort if smaller than min cutoff
+            if ginfo["min_size"] and groupdf.shape[0] < ginfo["min_size"]:
+                groupdf = groupdf.iloc[0:0, :]
+            # randomly downsample cohort if larger than max size
+            elif ginfo["max_size"] \
+                    and groupdf.shape[0] > ginfo["max_size"]:
+                groupdf = groupdf.sample(n=ginfo["max_size"])
+
+            dfs.append(groupdf)
+
+        return dfs
+
+    def filter_data(
+            self,
+            groups: list,
+            sizes: dict,
+            modifiers: [ViewModifiers]
+    ) -> "BaseView":
+        '''Filter data based on criteria and return a data view.'''
+        if not groups:
+            groups = [{"name": g, "tags": [g]} for g in self.group_names]
+
+        df_list = self.select_groups(groups, sizes)
+
+        for modifier in modifiers:
+            if modifier == ViewModifiers.SMALLEST:
+                smallest_group = min(map(lambda d: d.shape[0], df_list))
+
+                df_list = [d.sample(n=smallest_group) for d in df_list]
+
+        data = pd.concat(df_list)
+        return self.__class__(data, name=self.name)
+
+
+class DataView(BaseData):
     '''Contains upsampling data with possiblity to apply filters, keeping
     state.
     '''
 
-    def __init__(self, data: pd.DataFrame):
-        self._data = data
-        self._groups, self.group_names = self.split_groups(self._data)
-
-    def get_test_train_split(self, ratio: float = None, abs_num: int = None) \
-            -> (pd.DataFrame, pd.DataFrame):
+    def get_test_train_split(
+            self, ratio: float = None, abs_num: int = None,
+            train_infiltration: float = 0.0
+    ) -> (pd.DataFrame, pd.DataFrame):
         '''Test and training split for data evaluation.
         Ratio and abs_num are applied per cohort (eg unique label).
+
+        Args:
+            ratio: Relative ratio of train-test split
+            abs: Absolute number in the train cohort
+            train_infiltration: Minimum infiltration requirement for train
+                inclusion
+        Returns:
+            Tuple of (train, test). Rows in each dataframe will be randomly
+            shuffled.
         '''
         if not (ratio or abs_num):
             raise TypeError("Neither ratio nor absolute number cutoff given")
@@ -63,13 +175,36 @@ class DataView:
         test_list = []
         train_list = []
         for group_name, group in self._groups:
-            logging.info("Splitting %s", group_name)
+            LOGGER.info("Splitting %s", group_name)
             i = (group.shape[0] - abs_num) \
                 if abs_num else int(ratio * group.shape[0])
             if i < 0:
                 raise RuntimeError("Cutoff below zero. Perhaps small cohort.")
             shuffled = group.sample(frac=1)
-            train, test = shuffled.iloc[:i, :], shuffled.iloc[i:, :]
+            if train_infiltration:
+                over_thres = shuffled["infiltration"].astype("float32") \
+                    > train_infiltration
+                hi_infil = shuffled.loc[over_thres]
+                lo_infil = shuffled.loc[~over_thres]
+
+                delta_train = max(i - hi_infil.shape[0], 0)
+                if delta_train > 0:
+                    LOGGER.warning((
+                        "%s high infiltration only %d cases, "
+                        "below cutoff %d required for given split."
+                    ), group_name, hi_infil.shape[0], i)
+
+                train = pd.concat([
+                    hi_infil.iloc[:min(i, hi_infil.shape[0]), :],
+                    lo_infil.iloc[:delta_train, :],
+                ])
+                test = pd.concat([
+                    hi_infil.iloc[min(i, hi_infil.shape[0]):, :],
+                    lo_infil.iloc[delta_train:, :],
+                ])
+            else:
+                train, test = shuffled.iloc[:i, :], shuffled.iloc[i:, :]
+
             test_list.append(test)
             train_list.append(train)
 
@@ -109,25 +244,17 @@ class DataView:
         labels = dataframe['group']
         return data, labels
 
-    @staticmethod
-    def split_groups(data):
-        '''Split data into separate groups and binarizer functions and group
-        name lists for easier processing.
-        '''
-        groups = list(data.groupby("group"))
-        group_names = [n for n, _ in groups]
-        return groups, group_names
 
+class InputData(BaseData):
+    '''Data from upsampling in pandas dataframe form.
 
-class UpsamplingData:
-    '''Data from upsampling in pandas dataframe form.'''
-
-    def __init__(self, dataframe: [pd.DataFrame]):
-        self._datas = dataframe
+    This class handles parsing from the raw data format into a
+    continuous pandas dataframe usable for later usage.
+    '''
 
     @classmethod
     def from_files(
-            cls, files: FilesDict, tubes: MaybeList = None
+            cls, tubesdict: dict, name: str, tubes: MaybeList = None
     ) -> "UpsamplingData":
         '''Create upsampling data from structure containing multiple tubes
         for multiple files.
@@ -135,75 +262,7 @@ class UpsamplingData:
         which are in turn joined on columns. (eg multiple tubes on the inner
         level split into multiple output files on the outer level)
         '''
-        merged_tubes = {
-            name: cls._merge_tubes(f, tubes) for name, f in files.items()
-        }
-        return cls(merged_tubes)
-
-    @property
-    def datas(self):
-        return self._datas
-
-    def get_group_sizes(self):
-        '''Get number of rows per group.'''
-        return [self._group_sizes(d) for d in self.datas]
-
-    def filter_data(
-            self,
-            groups: GroupSelection,
-            cutoff: SizeOption,
-            max_size: SizeOption
-    ) -> DataView:
-        '''Filter data based on criteria and return a data view.'''
-        for name, data in self.datas.items():
-            if groups:
-                data = self._select_groups(data, groups)
-            if cutoff or max_size:
-                if not isinstance(cutoff, dict):
-                    cutoff = {g: cutoff for g in data["group"].unique()}
-                if not isinstance(max_size, dict):
-                    max_size = {g: max_size for g in data["group"].unique()}
-
-                data = self._limit_size_per_group(
-                    data, lower=cutoff, upper=max_size
-                )
-            yield name, DataView(data)
-
-    @staticmethod
-    def _select_groups(data: pd.DataFrame, groups: GroupSelection):
-        '''Select only certain groups.'''
-        for group in groups:
-            if (
-                    not len(group["tags"]) == 1
-                    or not group["name"] == group["tags"][0]
-            ):
-                data.loc[
-                    data["group"].isin(group["tags"]),
-                    "group"
-                ] = group["name"]
-        group_names = [group["name"] for group in groups]
-        data = data.loc[data["group"].isin(group_names)]
-        return data
-
-    @staticmethod
-    def _limit_size_per_group(data: pd.DataFrame, lower: dict, upper: dict):
-        '''Limit size per group.
-        Lower limit of size - group will be excluded if smaller
-        Upper limit of size - group will be downsampled if larger
-        '''
-        new_data = []
-        for name, group in data.groupby("group"):
-            if name in lower and group.shape[0] < lower[name]:
-                continue
-            if name in upper and group.shape[0] > upper[name]:
-                group = group.sample(n=upper[name])
-            new_data.append(group)
-        return pd.concat(new_data)
-
-    @staticmethod
-    def _group_sizes(data: pd.DataFrame) -> pd.Series:
-        print(data)
-        return data.groupby("group").size()
+        return cls(cls._merge_tubes(tubesdict, tubes), name)
 
     @staticmethod
     def _read_file(filepath: str) -> pd.DataFrame:
@@ -223,10 +282,18 @@ class UpsamplingData:
         '''Merge results from different tubes joining on label.
         Labels only contained in some of the tubes will be excluded in the join
         operation.'''
+        # filter which tubes to read
+        if not tubes:
+            tubes = list(files.keys())
+
+        # ensure that the tube list is properly sorted
+        tubes = sorted(tubes)
+
+        # read all tubes
         dataframes = [
-            UpsamplingData._read_file(fp) for t, fp in files.items()
-            if t in tubes or not tubes
+            InputData._read_file(files[tube]) for tube in tubes
         ]
+
         non_number_cols = [
             [c for c in df.columns if not c.isdigit()]
             for df in dataframes
@@ -240,5 +307,32 @@ class UpsamplingData:
         )
         return merged
 
-    def __repr__(self) -> str:
-        return repr(self._datas)
+    def filter_data(self, *args, **kwargs):
+        """Explicitly return a DataView object."""
+        obj = super().filter_data(*args, **kwargs)
+        return DataView.from_obj(obj)
+
+
+class DataCollection:
+    """Class wrapping multiple data sources, such as multiple SOM
+    iterations.
+    Individual data is saved in InputData objects.
+    """
+
+    def __init__(self, filesdict: dict, name: str, tubes: list):
+        """Enter a mapping between names and dicts mapping tubes to files."""
+        # load data into a dict mapping names with InputData objects
+        self.name = name
+        self._data = {
+            name: InputData.from_files(tubedict, name=name, tubes=tubes)
+            for name, tubedict in filesdict.items()
+        }
+
+    def __iter__(self):
+        return iter(self._data.values())
+
+    def __items__(self):
+        return self._data.items()
+
+    def __getitem__(self, value):
+        self._data[value]
