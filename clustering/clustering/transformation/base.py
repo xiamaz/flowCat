@@ -271,7 +271,7 @@ class Merge(BaseEstimator, TransformerMixin):
             return False, "{} rows below {}".format(
                 fcs_data.shape[0], FCS_MIN_ROWS
             )
-        return True, ""
+        return True, fcs_data
 
     @add_history
     def fit(self, X: list, *_):
@@ -293,13 +293,13 @@ class Merge(BaseEstimator, TransformerMixin):
         for data in X:
             LOGGER.info("%s:%s transform", data.parent.group, data.parent.id)
             # check if the base data has enough events before preprocessing
-            valid, trans_msg = self._trans_requirements(preprocessed)
+            valid, fcsdata = self._trans_requirements(data.data)
             if not valid:
-                data.result = trans_msg
+                data.result = fcsdata
                 data.result_success = False
                 continue
 
-            preprocessed = self.eachtrans.fit_transform(data.data)
+            preprocessed = self.eachtrans.fit_transform(fcsdata)
 
             # check if requirements fulfilled
             # otherwise put error message into the results field
