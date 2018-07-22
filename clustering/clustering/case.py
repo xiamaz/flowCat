@@ -136,16 +136,25 @@ class CasePath:
         self.parent = parent
 
         self.result = None
-        self._data = None
+        self.result_success = False
 
     @property
     def data(self):
-        """FCS data."""
-        if self._data is None:
-            _, self._data = fcsparser.parse(
-                get_file_path(self.path), data_set=0, encoding="latin-1"
-            )
-        return self._data
+        """FCS data. Do not save the fcs data in the case, since
+        it would be too large."""
+        _, data = fcsparser.parse(
+            get_file_path(self.path), data_set=0, encoding="latin-1"
+        )
+        return data
+
+    @property
+    def metainfo_dict(self):
+        """Return case metainformation."""
+        return {
+            "label": self.parent.id,
+            "group": self.parent.group,
+            "infiltration": self.parent.infiltration,
+        }
 
     @property
     def dict(self) -> dict:
@@ -154,11 +163,18 @@ class CasePath:
             raise RuntimeError("Result not generated for case path.")
         return {
             **dict(zip(range(len(self.result)), self.result)),
+            **self.metainfo_dict,
+        }
+
+    @property
+    def fail_dict(self) -> dict:
+        """Dict representation of failure messages."""
+        return {
             **{
-                "label": self.parent.id,
-                "group": self.parent.group,
-                "infiltration": self.parent.infiltration,
-            }
+                "status": self.result_success,
+                "reason": self.result if isinstance(self.result, str) else "",
+            },
+            **self.metainfo_dict,
         }
 
     def has_markers(self, markers: list) -> bool:

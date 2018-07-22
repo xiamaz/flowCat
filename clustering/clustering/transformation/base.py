@@ -2,6 +2,7 @@
 Base classes to combine for each and combined transformators.
 """
 
+import os
 from typing import List
 
 import logging
@@ -21,6 +22,9 @@ from ..utils import save_json
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+FCS_MIN_ROWS = 500
 
 
 class PipelineBuilder():
@@ -207,13 +211,20 @@ class Merge(BaseEstimator, TransformerMixin):
     """
 
     def __init__(
-            self, main: Pipeline, fit: Pipeline, trans: Pipeline, steps: dict,
+            self,
+            main: Pipeline,
+            fit: Pipeline,
+            trans: Pipeline,
+            steps: dict,
     ):
         self.model = main
         self.eachfit = fit
+
         self.eachtrans = trans
         self.steps = steps
         self._history = defaultdict(list)
+
+        self._failures = []
 
     @classmethod
     def from_names(cls, main: str, prefit: str, pretrans: str, markers: list):
@@ -250,14 +261,28 @@ class Merge(BaseEstimator, TransformerMixin):
         # save stateful and stateless models
         # for stateful steps save the trained weights in an individual manner
 
+    def _trans_requirements(self, fcs_data):
+        """Check whether requirements for further processing have been
+        fulfilled."""
+
+        if fcs_data is None or not isinstance(fcs_data, pd.DataFrame):
+            return False, "Invalid type {}.".format(type(fcs_data))
+        if fcs_data.shape[0] < FCS_MIN_ROWS:
+            return False, "{} rows below {}".format(
+                fcs_data.shape[0], FCS_MIN_ROWS
+            )
+        return True, ""
+
     @add_history
     def fit(self, X: list, *_):
         """Fit model using a list a case paths."""
-        fcs_data = [d.data for d in X]
 
-        processed = map(self.eachfit.fit_transform, fcs_data)
+        processed_data = []
+        for case in X:
+            preprocessed = self.eachfit.fit_transform(case.data)
+            processed_data.append(preprocessed)
 
-        data = pd.concat(processed)
+        data = pd.concat(processed_data)
         self.model.fit(data)
         return self
 
@@ -267,7 +292,22 @@ class Merge(BaseEstimator, TransformerMixin):
         the transformed result."""
         for data in X:
             LOGGER.info("%s:%s transform", data.parent.group, data.parent.id)
-            data.result = self.model.transform(
-                self.eachtrans.fit_transform(data.data)
-            )
+            # check if the base data has enough events before preprocessing
+            valid, trans_msg = self._trans_requirements(preprocessed)
+            if not valid:
+                data.result = trans_msg
+                data.result_success = False
+                continue
+
+            preprocessed = self.eachtrans.fit_transform(data.data)
+
+            # check if requirements fulfilled
+            # otherwise put error message into the results field
+            valid, trans_msg = self._trans_requirements(preprocessed)
+            if valid:
+                data.result = self.model.transform(preprocessed)
+                data.result_success = True
+            else:
+                data.result = trans_msg
+                data.result_success = False
         return X

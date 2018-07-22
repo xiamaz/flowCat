@@ -115,7 +115,13 @@ class Clustering:
         trans_data.data = pipeline.transform(trans_data.data)
 
         outpath = os.path.join(self._output_path, "tube{}.csv".format(tube))
-        put_file_path(outpath, trans_data.export_results().to_csv)
+        failpath = os.path.join(
+            self._output_path, "failures_tube{}.csv".format(tube)
+        )
+        hist_results, failure_msgs = trans_data.export_results()
+
+        put_file_path(outpath, hist_results.to_csv)
+        put_file_path(failpath, failure_msgs.to_csv)
 
         # save pipeline into the pipeline dict
         self._pipelines[tube] = pipeline

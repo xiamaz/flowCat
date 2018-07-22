@@ -253,10 +253,12 @@ class TubeView:
 
     def export_results(self):
         """Export histogram results to pandas dataframe."""
-        hists = [d.dict for d in self.data]
+        hists = [d.dict for d in self.data if d.result_success]
+        failures = [d.fail_dict for d in self.data if not d.result_success]
 
-        return pd.DataFrame.from_records(
-            list(filter(bool, hists))
+        return (
+            pd.DataFrame.from_records(hists),
+            pd.DataFrame.from_records(failures)
         )
 
     def __len__(self):
