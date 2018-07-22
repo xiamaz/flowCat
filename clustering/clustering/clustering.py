@@ -41,51 +41,10 @@ class Clustering:
     @classmethod
     def from_args(
             cls,
-            args: "Arguments",
+            args: "CmdArgs",
     ):
         """Initialize Clustering main program from command line arguments."""
-        # case information for json inputs
-        collection = CaseCollection(
-            args.input, [int(t) for t in args.tubes.split(";")]
-        )
-
-        # selection options for all cases to be transformed
-        transform_opts = {
-            "labels": None,
-            "num": args.upsampled if args.upsampled > 0 else None,
-            "groups": list(
-                map(lambda x: x.strip(), args.groups.split(";"))
-            ) if args.groups else collection.groups,
-        }
-
-        # selection options for all cases to be trained
-        train_opts = {
-            "labels": [
-                case
-                for cases in load_json(get_file_path(args.refcases)).values()
-                for case in cases
-            ] if args.refcases else None,
-            "num": args.num if args.num != -1 else None,
-            "groups": [
-                g for g in transform_opts["groups"]
-                if g != "normal" or args.refnormal
-            ]
-        }
-
-        # pipeline options
-        pipeline_opts = {
-            "main": args.pipeline,
-            "prefit": args.prefit,
-            "pretrans": args.pretrans,
-        }
-
-        # add timestamp to output directory
-        outdir = "{}_{}".format(args.output, create_stamp())
-        return cls(
-            collection,
-            train_opts, transform_opts, pipeline_opts,
-            outdir
-        )
+        return cls(**args.clustering_args)
 
     def fit_transform(self, tube: int):
         """Train som model on pipeline and save result."""

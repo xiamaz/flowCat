@@ -183,7 +183,8 @@ class CaseCollection(CaseIterable):
         return [Case(d) for dd in data.values() for d in dd]
 
     def create_view(
-            self, labels=None, num=None, groups=None, **kwargs
+            self, labels=None, num=None, groups=None, infiltration=None,
+            **kwargs
     ):
         """Filter view to specified criteria and return a new view object."""
         # choose the basis for further filtering from either all cases
@@ -195,6 +196,9 @@ class CaseCollection(CaseIterable):
             )
         else:
             data = self._data
+
+        if infiltration:
+            data = [d for d in data if d.infiltration >= infiltration]
 
         if labels:
             data = [

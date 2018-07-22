@@ -139,7 +139,9 @@ class TFSom:
         # prediction variables
         self._invar = None
         self._prediction_input = None
+        self._squared_distances = None
         self._prediction_output = None
+        self._prediction_distance = None
         self._transform_output = None
 
         # optional for alternative initialization
@@ -252,12 +254,20 @@ class TFSom:
 
             # Get the index of the minimum distance for each input item,
             # shape will be [batch_size],
-            self._prediction_output = tf.argmin(tf.reduce_sum(
+            self._squared_distances = tf.reduce_sum(
                 tf.pow(tf.subtract(
                     tf.expand_dims(self._weights, axis=0),
                     tf.expand_dims(self._prediction_input.get_next(), axis=1)
                 ), 2), 2
-            ), axis=1)
+            )
+            self._prediction_output = tf.argmin(
+                self._squared_distances, axis=1
+            )
+
+            # get the minimum distance for each event
+            self._prediction_distance = tf.sqrt(tf.reduce_min(
+                self._squared_distances, axis=1
+            ))
 
             # Summarize values across columns to get the absolute number
             # of assigned events for each node
@@ -579,13 +589,20 @@ class TFSom:
 
         return None
 
-    def map_to_nodes(self, data):
-        """Map data to the closest node in the map."""
-        # initialize dataset
+    @property
+    def prediction_input(self):
+        """Get the prediction input."""
+        return self._prediction_input
+
+    @prediction_input.setter
+    def prediction_input(self, value):
         self._sess.run(
-            self._prediction_input.initializer, feed_dict={self._invar: data}
+            self._prediction_input.initializer, feed_dict={self._invar: value}
         )
 
+    def map_to_nodes(self, data):
+        """Map data to the closest node in the map."""
+        self.prediction_input = data
         results = []
         while True:
             try:
@@ -608,9 +625,7 @@ class TFSom:
         :return: Array of m x n length, eg number of mapped events for each
                     node.
         """
-        self._sess.run(
-            self._prediction_input.initializer, feed_dict={self._invar: data}
-        )
+        self.prediction_input = data
         results = np.zeros(self._m * self._n)
         while True:
             try:
@@ -624,6 +639,29 @@ class TFSom:
         if relative:
             results = results / np.sum(results)
         return results
+
+    def distance_to_map(self, data):
+        """Return the summed loss of the current case."""
+        self.prediction_input = data
+
+        # run in batches to get the result
+        results = []
+        while True:
+            try:
+                res = self._sess.run(
+                    self._prediction_distance
+                )
+                print(res.shape)
+                results.append(res)
+            except tf.errors.OutOfRangeError:
+                break
+
+        distance = np.concatenate(results)
+
+        avg_distance = np.average(distance)
+        median_distance = np.median(distance)
+        print(avg_distance, median_distance)
+        return avg_distance
 
 
 class SelfOrganizingMap(BaseEstimator, TransformerMixin):

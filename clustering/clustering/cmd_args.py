@@ -1,4 +1,6 @@
 from argparse import ArgumentParser
+from .collection import CaseCollection
+from .utils import create_stamp, load_json, get_file_path
 
 
 def create_parser():
@@ -52,3 +54,62 @@ def create_parser():
 def get_args():
     """Create parser, parse arguments and return processed arguments."""
     return create_parser().parse_args()
+
+
+class CmdArgs:
+    def __init__(self):
+        self._refcases = None
+
+        self.args = get_args()
+
+        self.output_directory = "{}_{}".format(
+            self.args.output, create_stamp()
+        )
+        self.tubes = [int(t) for t in self.args.tubes.split(";")]
+        self.collection_args = {
+            "infopath": self.args.input,
+            "tubes": self.tubes
+        }
+
+        self.collection = CaseCollection(**self.collection_args)
+
+        self.transform_args = {
+            "labels": None,
+            "num": self.args.upsampled if self.args.upsampled > 0 else None,
+            "groups": list(
+                map(lambda x: x.strip(), self.args.groups.split(";"))
+            ) if self.args.groups else self.collection.groups,
+        }
+
+        self.train_args = {
+            "labels": [
+                case for cases in self.refcases.values() for case in cases
+            ] if self.args.refcases else None,
+            "num": self.args.num if self.args.num != -1 else None,
+            "groups": [
+                g for g in self.transform_args["groups"]
+                if g != "normal" or self.args.refnormal
+            ]
+        }
+
+        self.pipeline_args = {
+            "main": self.args.pipeline,
+            "prefit": self.args.prefit,
+            "pretrans": self.args.pretrans,
+        }
+
+    @property
+    def refcases(self):
+        if self._refcases is None:
+            self._refcases = load_json(get_file_path(self.args.refcases))
+        return self._refcases
+
+    @property
+    def clustering_args(self):
+        return {
+            "cases": self.collection,
+            "train_opts": self.train_args,
+            "transform_opts": self.transform_args,
+            "pipeline_opts": self.pipeline_args,
+            "output_path": self.output_directory,
+        }

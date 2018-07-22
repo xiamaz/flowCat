@@ -1,7 +1,7 @@
 import os
 import logging
 
-from .cmd_args import get_args
+from .cmd_args import CmdArgs
 from .clustering import Clustering
 
 
@@ -17,5 +17,6 @@ def configure_print_logging(rootname="clustering"):
 
 
 configure_print_logging()
-clustering = Clustering.from_args(get_args())
+arguments = CmdArgs()
+clustering = Clustering.from_args(arguments)
 clustering.run()
