@@ -22,7 +22,7 @@ function batchsub
 	set jobname $argv[1]
 	if not contains $jobname (batchjobs)
 		if [ (count $argv) -ge 3 ]
-			aws batch submit-job --job-definition $DEFINITION --job-queue $QUEUE --job-name $jobname --parameters target=$argv[2] --container-overrides environment="[{name=EXP_NAME,value=$argv[3]},{name=TAG_NAME,value=$argv[4]}]"
+			aws batch submit-job --job-definition $DEFINITION --job-queue $QUEUE --job-name $jobname --parameters target=$argv[2] --container-overrides environment="[{name=EXP_NAME,value=$argv[3]},{name=TAG_NAME,value=$argv[4]},{name=SUFFIX,value=_$argv[5]}]"
 		else if [ (count $argv) -eq 2 ]
 			aws batch submit-job --job-definition $DEFINITION --job-queue $QUEUE --job-name $jobname --container-overrides command=$argv[2]
 		else
@@ -47,7 +47,7 @@ function submit_jobs
 			for i in (seq 1 $RAND)
 				set expname $TAG"_"$experiment"_"$run"_"$i
 				echo "Creating $run $expname with $expfile"
-				batchsub $expname $run $expfile $TAG
+				batchsub $expname $run $expfile $TAG $i
 			end
 		end
 	end
