@@ -47,7 +47,7 @@ def evaluate(
 
     for i, view in preprocess_data(data, args):
 
-        subname = "{}_{}".format(name, i)
+        subname = "{}_{}".format(view.name, i)
         clas = Classifier(view, name=subname, output_path=output_path)
 
         for method_name, method_info in args.methods.items():
