@@ -651,7 +651,6 @@ class TFSom:
                 res = self._sess.run(
                     self._prediction_distance
                 )
-                print(res.shape)
                 results.append(res)
             except tf.errors.OutOfRangeError:
                 break
@@ -659,8 +658,7 @@ class TFSom:
         distance = np.concatenate(results)
 
         avg_distance = np.average(distance)
-        median_distance = np.median(distance)
-        print(avg_distance, median_distance)
+        # median_distance = np.median(distance)
         return avg_distance
 
 

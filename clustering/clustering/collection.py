@@ -21,6 +21,8 @@ ALLOWED_MATERIALS = [Material.BONE_MARROW, Material.PERIPHERAL_BLOOD]
 
 COLNAMES = ["label", "group", "infiltration"]
 
+NO_INFILTRATION = ["normal"]
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -198,7 +200,10 @@ class CaseCollection(CaseIterable):
             data = self._data
 
         if infiltration:
-            data = [d for d in data if d.infiltration >= infiltration]
+            data = [
+                d for d in data
+                if d.infiltration >= infiltration or d.group in NO_INFILTRATION
+            ]
 
         if labels:
             data = [
