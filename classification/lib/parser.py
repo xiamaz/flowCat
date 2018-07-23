@@ -7,7 +7,7 @@ from argparse import ArgumentParser
 
 from .upsampling import ViewModifiers
 
-RE_TUBE_NAME = re.compile(r"tube(\d+)\.csv$")
+RE_TUBE_NAME = re.compile(r"/tube(\d+)\.csv$")
 
 
 FilesDict = typing.Dict[str, typing.Dict[str, str]]

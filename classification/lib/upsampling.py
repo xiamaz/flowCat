@@ -98,10 +98,11 @@ class BaseData:
     def _get_group(self, group_info: dict) -> pd.DataFrame:
         """Select data according to group dict."""
         # get all data contained in the tags
-        sel_data = self.data.loc[self.data["group"].isin(group_info["tags"])]
+        sel_data = self.data.loc[
+            self.data["group"].isin(group_info["tags"])
+        ].copy()
 
         # explicitly ok modifications of selection
-        sel_data.is_copy = False
         # rename group column in these data to the specified label
         sel_data.loc[:, "group"] = group_info["name"]
         return sel_data
@@ -259,10 +260,24 @@ class InputData(BaseData):
     continuous pandas dataframe usable for later usage.
     '''
 
-    metacols = {
-        "infiltration": object,
-        "group": object,
-        "label": object,
+    old_format = {
+        "sep": ";",
+        "index_col": 0,
+        "dtype": {
+            "infiltration": object,
+            "group": object,
+            "label": object,
+        }
+    }
+
+    new_format = {
+        "sep": ",",
+        "index_col": 0,
+        "dtype": {
+            "infiltration": "float32",
+            "group": object,
+            "label": object,
+        },
     }
 
     @classmethod
@@ -278,21 +293,27 @@ class InputData(BaseData):
         return cls(cls._merge_tubes(tubesdict, tubes), name)
 
     @staticmethod
-    def _read_file(filepath: str) -> pd.DataFrame:
+    def _read_file(filepath: str, csv_format: str = "new") -> pd.DataFrame:
         '''Read output from preprocessing in csv format.
         '''
-        csv_data = pd.read_table(
-            filepath,
-            sep=";",
-            index_col=0,
-            dtype=InputData.metacols
-        )
-        csv_data.loc[:, "infiltration"] = csv_data["infiltration"].apply(
-            lambda x: str(x).replace(",", ".")
-        )
-        csv_data.loc[:, "infiltration"] = csv_data["infiltration"].astype(
-            "float32"
-        )
+        if csv_format == "old":
+            csv_data = pd.read_table(
+                filepath,
+                **InputData.old_format
+            )
+            csv_data.loc[:, "infiltration"] = csv_data["infiltration"].apply(
+                lambda x: str(x).replace(",", ".")
+            )
+            csv_data.loc[:, "infiltration"] = csv_data["infiltration"].astype(
+                "float32"
+            )
+        elif csv_format == "new":
+            csv_data = pd.read_table(
+                filepath,
+                **InputData.new_format
+            )
+        else:
+            raise RuntimeError("Unknown csv format {}".format(csv_format))
 
         csv_data.drop_duplicates(subset="label", keep=False, inplace=True)
         return csv_data

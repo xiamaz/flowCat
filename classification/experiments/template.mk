@@ -30,3 +30,8 @@ SIZE =
 # valid: smallest - all cohorts are size of the smallest cohort
 # MODIFIERS = --modifiers smallest
 MODIFIERS = 
+
+
+# optional organization of clustering files in a separate set
+# this will be represented as another folder level
+SET = 
