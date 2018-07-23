@@ -364,16 +364,27 @@ class DataCollection:
         """Enter a mapping between names and dicts mapping tubes to files."""
         # load data into a dict mapping names with InputData objects
         self.name = name
-        self._data = {
-            name: InputData.from_files(tubedict, name=name, tubes=tubes)
-            for name, tubedict in filesdict.items()
-        }
+        self._tubes = tubes
+        self._filesdict = filesdict
+        self._names = list(self._filesdict.keys())
+        self._data = {}
+
+        self._current_key = 0
 
     def __iter__(self):
-        return iter(self._data.values())
+        self._current_key = 0
+        return self
 
-    def __items__(self):
-        return self._data.items()
+    def __next__(self):
+        key = self._current_key
+
+        if key >= len(self._names):
+            raise StopIteration
+
+        self._current_key += 1
+        return self[self._names[key]]
 
     def __getitem__(self, value):
-        self._data[value]
+        return InputData.from_files(
+            self._filesdict[value], name=value, tubes=self._tubes
+        )
