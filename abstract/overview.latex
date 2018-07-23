@@ -1,0 +1,45 @@
+\documentclass{beamer}
+
+%% adding graphics
+\usepackage{graphicx}
+%% nicer tables
+\usepackage{booktabs}
+
+\begin{document}
+
+\newcommand{\colimg}[2]{
+   \begin{column}{.3\columnwidth}
+      \begin{center}
+         \includegraphics[width=\columnwidth]{#1}
+         {\footnotesize #2}
+      \end{center}
+   \end{column}
+}
+
+\newcommand{\multi}[2]{
+   \begin{center}
+   \begin{columns}[onlytextwidth]
+      #2
+   \end{columns}
+   #1
+   \end{center}
+}
+
+\begin{frame}
+   \frametitle{CLL vs normal}
+
+   \multi{100 cases in each cohort.}{
+      \colimg{confusion/cll_normal/normal_dedup.png}{Normal}
+      \colimg{confusion/cll_normal/pregated_dedup.png}{Pregated}
+      \colimg{confusion/cll_normal/somcombined_dedup.png}{SOM combined}
+   }
+
+   \multi{Both size of CLL cohort (n=3293)}{
+      \colimg{confusion/cll_normal/max_normal.png}{Normal}
+      \colimg{confusion/cll_normal/max_pregated.png}{Pregated}
+      \colimg{confusion/cll_normal/max_somcombined.png}{SOM combined}
+   }
+
+\end{frame}
+
+\end{document}
