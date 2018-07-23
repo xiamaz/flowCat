@@ -1,4 +1,4 @@
-TAG := $(shell basename $(dir $(lastword $(MAKEFILE_LIST))))_
+TAG := $(shell basename $(dir $(lastword $(MAKEFILE_LIST))))
 PATTERN := comp_pregating
 METHOD = kfold:10
 TUBES = 1;2

@@ -1,5 +1,5 @@
 # experiment set name
-TAG := $(shell basename $(dir $(lastword $(MAKEFILE_LIST))))_
+TAG := $(shell basename $(dir $(lastword $(MAKEFILE_LIST))))
 METHOD = kfold:10
 TUBES = 1;2
 PATTERN := initial_comp_normal_2018

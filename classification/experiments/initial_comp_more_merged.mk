@@ -1,4 +1,4 @@
-TAG := $(basename $(notdir $(lastword $(MAKEFILE_LIST))))_
+TAG := $(basename $(notdir $(lastword $(MAKEFILE_LIST))))
 METHOD = kfold:10
 TUBES = 1;2
 

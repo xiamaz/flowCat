@@ -1,4 +1,4 @@
-TAG := $(shell basename $(dir $(lastword $(MAKEFILE_LIST))))_
+TAG := $(shell basename $(dir $(lastword $(MAKEFILE_LIST))))
 TUBES = 1;2
 METHOD = kfold:10
 
