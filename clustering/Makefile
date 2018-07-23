@@ -24,7 +24,7 @@ EXP = experiments/$(EXP_NAME)
 
 include $(EXP)
 
-OUTNAME := $(TAG_NAME)_$(basename $(notdir $(lastword $(MAKEFILE_LIST))))$(SUFFIX)
+OUTNAME := $(TAG_NAME)/$(basename $(notdir $(lastword $(MAKEFILE_LIST))))$(SUFFIX)
 
 BIN = python3 -m clustering
 
@@ -46,7 +46,6 @@ OPTS = \
 	   $(USROPTS)
 
 OUTPUT = s3://mll-flow-classification/clustering/$(OUTNAME)
-# OUTPUT = ../classification/output/clustering/$(OUTNAME)
 
 .PHONY: run run-selected tests image
 
