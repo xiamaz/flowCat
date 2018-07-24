@@ -1,4 +1,4 @@
-\documentclass{beamer}
+\documentclass[8pt]{beamer}
 
 %% adding graphics
 \usepackage{graphicx}
@@ -7,13 +7,21 @@
 
 \begin{document}
 
-\newcommand{\colimg}[2]{
-   \begin{column}{.3\columnwidth}
+\newcommand{\colimg}[3]{
+   \begin{column}{#3\columnwidth}
       \begin{center}
          \includegraphics[width=\columnwidth]{#1}
          {\footnotesize #2}
       \end{center}
    \end{column}
+}
+
+\newcommand{\threecol}[2]{
+   \colimg{#1}{#2}{0.32}
+}
+
+\newcommand{\twocol}[2]{
+   \colimg{#1}{#2}{0.49}
 }
 
 \newcommand{\multi}[2]{
@@ -29,17 +37,33 @@
    \frametitle{CLL vs normal}
 
    \multi{100 cases in each cohort.}{
-      \colimg{confusion/cll_normal/normal_dedup.png}{Normal}
-      \colimg{confusion/cll_normal/pregated_dedup.png}{Pregated}
-      \colimg{confusion/cll_normal/somcombined_dedup.png}{SOM combined}
+      \threecol{confusion/cll_normal/normal_dedup.png}{Normal}
+      \threecol{confusion/cll_normal/pregated_dedup.png}{Pregated}
+      \threecol{confusion/cll_normal/somcombined_dedup.png}{SOM combined}
    }
-
+\end{frame}
+\begin{frame}
+   \frametitle{CLL vs normal}
    \multi{Both size of CLL cohort (n=3293)}{
-      \colimg{confusion/cll_normal/max_normal.png}{Normal}
-      \colimg{confusion/cll_normal/max_pregated.png}{Pregated}
-      \colimg{confusion/cll_normal/max_somcombined.png}{SOM combined}
+      \threecol{confusion/cll_normal/max_normal.png}{Normal}
+      \threecol{confusion/cll_normal/max_pregated.png}{Pregated}
+      \threecol{confusion/cll_normal/max_somcombined.png}{SOM combined}
    }
 
+   \multi{Both maximum size CLL (n=3293) and normal (n=8183}{
+      \threecol{confusion/cll_normal/all_normal.png}{Normal}
+      \threecol{confusion/cll_normal/all_pregated.png}{Pregated}
+      \threecol{confusion/cll_normal/all_somcombined.png}{SOM combined}
+   }
+
+\end{frame}
+
+\begin{frame}
+   \frametitle{9-class classification}
+   \multi{9-class classification results}{
+      \twocol{confusion/single_groups/normal.png}{Normal}
+      \twocol{confusion/single_groups/pregated.png}{Pregated}
+   }
 \end{frame}
 
 \end{document}
