@@ -1,5 +1,6 @@
 """Utilities to get folders and read files"""
 import os
+from pathlib import Path
 import re
 import glob
 import json
@@ -40,22 +41,28 @@ def load_experiments(path: str) -> pd.DataFrame:
     Returns:
         Information parsed from the directory names.
     """
-    with os.scandir(path) as pdir:
-        filenames = [p.name for p in pdir if p.is_dir()]
+    exp_sets = [p for p in Path(path).iterdir() if p.is_dir()]
 
+    experiments = [
+        {
+            "set": expset.name,
+            "name": exp.name.replace("_selected", "").replace("_" + m[2], ""),
+            "time": datetime.strptime(m[2], "%Y%m%d_%H%M"),
+            "type": "Selected" if "selected" in k else "Random",
+            "path": os.path.join(path, k)
+        }
+        for expset in exp_sets
+        for exp in expset.iterdir() if exp.is_dir()
+    ]
     fdict = [
         {
             **k,
-            "name": k["name"].replace(k["set"]+"_", ""),
+            "name": k["name"].replace(k["set"] + "_", ""),
         }
         for k in
         [
             {
                 "set": m[1],
-                "name": k.replace("_selected", "").replace("_"+m[2], ""),
-                "time": datetime.strptime(m[2], "%Y%m%d_%H%M"),
-                "type": "Selected" if "selected" in k else "Random",
-                "path": os.path.join(path, k)
             }
             for k, m in
             [

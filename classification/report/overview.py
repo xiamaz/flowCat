@@ -11,9 +11,9 @@ def group_avg_stat(data: pd.DataFrame) -> pd.Series:
     count = data.shape[0]
 
     f1_score, var = tuple(map(
-        lambda x: x/count,
+        lambda x: x / count,
         reduce(
-            lambda ab, xy: (ab[0]+xy[0], ab[1]+xy[1]), data["f1"], (0, 0)
+            lambda ab, xy: (ab[0] + xy[0], ab[1] + xy[1]), data["f1"], (0, 0)
         )
     ))
     std = sqrt(var)

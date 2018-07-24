@@ -13,6 +13,8 @@ include $(EXP)
 # set to name of included experiment
 NAME := $(basename $(notdir $(lastword $(MAKEFILE_LIST))))$(EXTRA_TAG)
 
+TAG ?= $(NAME)
+
 # input settings
 INPUT = clustering/$(SET)
 # output data options

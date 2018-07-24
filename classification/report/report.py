@@ -109,14 +109,14 @@ class Prediction:
         somiter_data = load_predictions(row["predictions"])
         metadata = load_metadata(row["path"])
 
-        rocpath = plotpath+"_auc.png"
+        rocpath = plotpath + "_auc.png"
         if not os.path.exists(rocpath):
             fig = plot_avg_roc_curves(somiter_data)
             fig.savefig(rocpath, dpi=200)
         else:
             print("{} already exists. Not recreating".format(rocpath))
 
-        chartpath = plotpath+"_stats.png"
+        chartpath = plotpath + "_stats.png"
         if not os.path.exists(chartpath):
             chart = avg_stats_plot(somiter_data)
             chart.save(chartpath)
