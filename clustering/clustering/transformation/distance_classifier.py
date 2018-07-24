@@ -31,6 +31,7 @@ class DistanceClassifier(TransformerMixin, BaseEstimator):
             )
             casedata = pd.concat([
                 self._premodel.fit_transform(c.data[X.markers]) for c in cases
+                if c.data.shape[0] > 1000
             ])
             self._models[name].train(casedata)
 
@@ -47,6 +48,13 @@ class DistanceClassifier(TransformerMixin, BaseEstimator):
         """Get the predicted class for the given TubeView."""
         pred_records = []
         for tubecase in X.data:
+            if tubecase.data.shape[0] <= 1000:
+                tubecase.result_success = False
+                tubecase.result = "{} <= 1000 required".format(
+                    tubecase.data.shape[0]
+                )
+                continue
+
             distances = self._calculate_distances(
                 self._premodel.fit_transform(tubecase.data[X.markers])
             )

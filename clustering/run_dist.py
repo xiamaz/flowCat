@@ -46,7 +46,10 @@ confusion = confusion_matrix(
 )
 print(confusion)
 
-records = [{**t.result, **t.metainfo_dict} for t in tubeview.data]
+records = [
+    {**t.result, **t.metainfo_dict} for t in tubeview.data
+    if t.result_success
+]
 alldata = pd.DataFrame.from_records(records)
 alldata.to_csv("dist_predictions.csv")
 
