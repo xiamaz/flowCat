@@ -45,16 +45,18 @@ class DistanceClassifier(TransformerMixin, BaseEstimator):
 
     def predict(self, X, *_):
         """Get the predicted class for the given TubeView."""
+        pred_records = []
         for tubecase in X.data:
             distances = self._calculate_distances(
                 self._premodel.fit_transform(tubecase.data[X.markers])
             )
             prediction = min(distances, key=distances.get)
 
-            tubecase.result = prediction
+            tubecase.result = distances
             tubecase.result_success = True
 
-        pred_records = [{**{
-            "prediction": d.result
-        }, **d.metainfo_dict} for d in X.data if d.result_success]
+            pred_records.append(
+                {**{"prediction": prediction}, **tubecase.metainfo_dict}
+            )
+
         return pd.DataFrame.from_records(pred_records)
