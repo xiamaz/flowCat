@@ -1,6 +1,6 @@
 #!/usr/bin/fish
 
-source run_batch.fish
+source ../lib/run_batch.fish
 
 # Create experiments for indiv pregating
 set TAG "initial_comp"
