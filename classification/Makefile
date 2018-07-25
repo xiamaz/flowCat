@@ -2,7 +2,7 @@
 BUCKET = mll-flow-classification
 DATA = output
 REPORT = $(DATA)/report
-EXTRA_TAG = _dedup
+EXTRA_TAG = 
 
 # use a specific experiment setup
 TEMPLATE = experiments/template.mk
