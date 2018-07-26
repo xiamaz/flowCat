@@ -23,8 +23,8 @@ from ..utils import save_json
 
 LOGGER = logging.getLogger(__name__)
 
-
-FCS_MIN_ROWS = 500
+# set the minimal number of events for inclusion in analysis
+FCS_MIN_ROWS = 10000
 
 
 class PipelineBuilder():
