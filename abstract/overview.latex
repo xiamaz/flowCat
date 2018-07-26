@@ -59,11 +59,44 @@
 \end{frame}
 
 \begin{frame}
+   \frametitle{CM (MBL \& CLL) vs normal}
+
+   \begin{columns}[onlytextwidth]
+      \begin{column}{0.6\columnwidth}
+         \centering
+         \includegraphics[width=\columnwidth]{confusion/mblcll/normal.png}
+         {\footnotesize Normal}
+      \end{column}
+
+      \begin{column}{0.39\columnwidth}
+         Average Accuracy: 96,90 \%
+      \end{column}
+
+   \end{columns}
+
+\end{frame}
+
+\begin{frame}
    \frametitle{9-class classification}
    \multi{9-class classification results}{
-      \twocol{confusion/single_groups/normal.png}{Normal}
-      \twocol{confusion/single_groups/pregated.png}{Pregated}
+      \threecol{confusion/single_groups/normal.png}{Normal}
+      \threecol{confusion/single_groups/pregated.png}{Pregated}
+      \threecol{confusion/single_groups/somgated.png}{SOMgated}
    }
+\end{frame}
+
+\begin{frame}
+   \frametitle{Hierarchical clustering}
+   \begin{column}{0.6\columnwidth}
+      \centering
+      \includegraphics[width=\columnwidth]{confusion/single_groups/somgated_dendro.png}
+   \end{column}
+   \begin{column}{0.39\columnwidth}
+      Hierarchical clustering of SOMGated confusion matrix results.
+      Groups sharing similar misclassifications are grouped closer.
+
+      Inner groupings reflect known similarities in manual MFC analysis.
+   \end{column}
 \end{frame}
 
 \end{document}
