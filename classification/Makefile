@@ -1,6 +1,6 @@
 # Basic settings
 BUCKET = mll-flow-classification
-DATA = output
+DATA = ../output
 REPORT = $(DATA)/report
 EXTRA_TAG = 
 
