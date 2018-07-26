@@ -48,7 +48,7 @@ end
 
 # set RUNTYPES "run" "run-selected"
 
-set RUNTYPES "run"
+set RUNTYPES "run-selected"
 
 function submit_jobs
 	set TAG $argv[1]
