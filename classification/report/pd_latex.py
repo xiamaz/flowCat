@@ -64,3 +64,9 @@ def df_to_table(data: pd.DataFrame, spec: str = ""):
         r"\end{tabular}",
     ]
     return "\n".join(outtext)
+
+
+def df_save_latex(data: pd.DataFrame, path: str, *args, **kwargs):
+    table = df_to_table(data, *args, **kwargs)
+    with open(path, "w") as tfile:
+        tfile.write(table)

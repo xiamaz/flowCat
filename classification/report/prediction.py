@@ -6,10 +6,14 @@ import pandas as pd
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.metrics import roc_auc_score, roc_curve
 
+from .base import Reporter
+from .file_utils import load_avg_metadata
+
 
 def df_prediction_cols(data: pd.DataFrame) -> np.matrix:
     predictions = data.select_dtypes("number").drop(
-       "infiltration", axis=1).astype("float32")
+        "infiltration", axis=1
+    ).astype("float32")
     return predictions
 
 
@@ -44,9 +48,8 @@ def top2(data: pd.DataFrame, normal_t1=True) -> pd.Series:
 
     if normal_t1:
         groups = [(i, n) for i, n in groups if n != "normal"]
-        corr = sum(normal[gnums == nnormal])/sum(gnums == nnormal)
-        results["normal"] = [corr, 0, 1-corr]
-
+        corr = sum(normal[gnums == nnormal]) / sum(gnums == nnormal)
+        results["normal"] = [corr, 0, 1 - corr]
 
     for i, name in groups:
         selection = gnums == i
@@ -54,8 +57,8 @@ def top2(data: pd.DataFrame, normal_t1=True) -> pd.Series:
         if normal_t1:
             selection = selection & (~normal)
 
-        corr = sum(t1[selection] | t2[selection])/group_size
-        results[name] = [corr, 0, 1-corr]
+        corr = sum(t1[selection] | t2[selection]) / group_size
+        results[name] = [corr, 0, 1 - corr]
 
     return pd.DataFrame.from_dict(
         results,
@@ -95,16 +98,21 @@ def top1_uncertainty(data: pd.DataFrame, threshold=0.5) -> pd.DataFrame:
     )(data["group"])
     rdata = np.stack((gnums, preds, maxvals), axis=1)
 
+    all_acc_dict = {"corr": 0, "all": 0}
     for i, name in enumerate(pdata.columns):
         group_data = rdata[rdata[:, 0] == i]
         correct = group_data[:, 1] == i
         certain = group_data[:, 2] >= threshold
 
+        all_acc_dict["corr"] += sum(correct)
+        all_acc_dict["all"] += group_data.shape[0]
+
         results[name] = [
-            sum(correct & certain)/group_data.shape[0],
-            sum(~certain)/group_data.shape[0],
-            sum((~correct) & certain)/group_data.shape[0],
+            sum(correct & certain) / group_data.shape[0],
+            sum(~certain) / group_data.shape[0],
+            sum((~correct) & certain) / group_data.shape[0],
         ]
+    print("Overall acc: {}".format(all_acc_dict["corr"] / all_acc_dict["all"]))
     return pd.DataFrame.from_dict(
         results, orient="index", columns=["correct", "uncertain", "incorrect"]
     )
@@ -169,3 +177,60 @@ def df_stats(data: pd.DataFrame) -> pd.DataFrame:
         [fun(data) for fun in testdict.values()], keys=testdict.keys()
     ).swaplevel(0, 1).sort_index()
     return result
+
+
+class Prediction(Reporter):
+    """Create prediction analysis results from classification."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def plot_experiment(self, row, path):
+        """Create plots for the given experiment."""
+
+        pname = "{}_{}_{}".format(*row.name)
+
+        plotpath = os.path.join(path, "predictions_{}".format(pname))
+        somiter_data = load_predictions(row["predictions"])
+        metadata = load_avg_metadata(row["path"])
+
+        rocpath = plotpath + "_auc.png"
+        if not os.path.exists(rocpath):
+            fig = plot_avg_roc_curves(somiter_data)
+            fig.savefig(rocpath, dpi=200)
+        else:
+            print("{} already exists. Not recreating".format(rocpath))
+
+        chartpath = plotpath + "_stats.png"
+        if not os.path.exists(chartpath):
+            chart = avg_stats_plot(somiter_data)
+            chart.save(chartpath)
+        else:
+            print("{} already exists. Not recreating".format(chartpath))
+
+        return pd.Series(
+            name=row.name,
+            data=[
+                metadata["note"],
+                ", ".join(metadata["group_names"]),
+            ],
+            index=[
+                "note",
+                "groups",
+            ]
+        )
+
+    def plot_experiments(self, path):
+        """Return statistics average over multiple iterations."""
+
+        prediction_data = add_prediction_info(self.classification_files)
+        meta = prediction_data.apply(
+            lambda x: self.plot_experiment(x, path), axis=1
+        )
+        return meta
+
+    def write(self, path):
+        # create plots for each experiment
+        metadata = self.plot_experiments(path)
+        # additionally save metadata as latex table
+        tpath = os.path.join(path, "prediction_meta.tex")
+        df_save_latex(metadata, tpath, "llllp{6cm}")

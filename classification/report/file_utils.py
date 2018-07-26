@@ -41,42 +41,34 @@ def load_experiments(path: str) -> pd.DataFrame:
     Returns:
         Information parsed from the directory names.
     """
-    exp_sets = [p for p in Path(path).iterdir() if p.is_dir()]
-
-    experiments = [
-        {
-            "set": expset.name,
-            "name": exp.name.replace("_selected", "").replace("_" + m[2], ""),
-            "time": datetime.strptime(m[2], "%Y%m%d_%H%M"),
-            "type": "Selected" if "selected" in k else "Random",
-            "path": os.path.join(path, k)
-        }
-        for expset in exp_sets
+    exp_sets = [
+        (expset, exp) for expset in Path(path).iterdir() if expset.is_dir()
         for exp in expset.iterdir() if exp.is_dir()
     ]
-    fdict = [
-        {
-            **k,
-            "name": k["name"].replace(k["set"] + "_", ""),
-        }
-        for k in
-        [
-            {
-                "set": m[1],
-            }
-            for k, m in
-            [
-                (
-                    k,
-                    re.match(r"([^\W_]+_[^\W_]+)_[^\W]+_(\d+_\d+)", k),
-                )
-                for k in filenames
-            ]
-            if m
-        ]
+    exp_sets += [
+        (expset, expset) for expset in Path(path).iterdir()
+        if expset.is_dir()
+        and any([f.name.endswith(".csv") for f in expset.iterdir()])
     ]
+    exp_dicts = []
+    for expset, exp in exp_sets:
+        match = re.match(r"(\w+?_)(\d+_)?(selected_)?(\d+_\d+)", exp.name)
+        if not match:
+            continue
+        name = match[1] or expset.name
+        iteration = int(match[2].strip("_")) if match[2] else 0
+        edict = {
+            "set": expset.name,
+            "name": name.strip("_"),
+            "iteration": iteration,
+            "time": datetime.strptime(match[4], "%Y%m%d_%H%M"),
+            "type": "selected" if match[3] else "random",
+            "path": str(exp),
+        }
+        exp_dicts.append(edict)
 
-    return pd.DataFrame.from_dict(fdict, orient="columns")
+    exp_df = pd.DataFrame.from_dict(exp_dicts, orient="columns")
+    return exp_df
 
 
 def get_prediction_paths(path: str) -> [str]:
@@ -99,6 +91,11 @@ def load_predictions(paths: [str]) -> dict:
         for p in paths
     }
     return loaded
+
+
+def filter_infiltration(prediction_df: pd.DataFrame) -> pd.DataFrame:
+    """Filter infiltration rate for other assessments."""
+
 
 
 def add_prediction_info(experiments: pd.DataFrame) -> pd.DataFrame:
@@ -124,6 +121,7 @@ def load_json(path: str):
         data = json.load(jsfile)
     return data
 
+
 def avg_meta(first, second):
     """Combine information from different runs for the same experiment."""
     averaged = ["note", "command", "group_names"]
@@ -136,11 +134,15 @@ def avg_meta(first, second):
         for k in averaged
     }
 
-def load_metadata(path: str) -> dict:
+
+def load_metadata(path: str) -> [dict]:
     """Load metadata into a dict structure."""
     paths = glob.glob("{}/*/*{}".format(path, "info.json"))
-    metadatas = [
+    return [
         load_json(p) for p in paths
     ]
-    metadata = reduce(avg_meta, metadatas)
-    return metadata
+
+
+def load_avg_metadata(path: str) -> dict:
+    """Return average reduced metadata."""
+    return reduce(avg_meta, load_metadata(path))

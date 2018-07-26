@@ -1,4 +1,5 @@
 from functools import reduce
+from contextlib import contextmanager
 
 import pandas as pd
 
@@ -8,7 +9,7 @@ from matplotlib.figure import Figure
 
 import altair as alt
 
-from .predictions import df_stats, roc, auc_one_vs_all
+from .prediction import df_stats, roc, auc_one_vs_all
 
 
 def avg_stats_plot(somiter_data: dict) -> alt.Chart:
@@ -17,7 +18,7 @@ def avg_stats_plot(somiter_data: dict) -> alt.Chart:
         [df_stats(d) for d in somiter_data.values()], keys=somiter_data.keys()
     )
     som_df["incorrect"] = 1.0 - (
-        som_df["correct"]+som_df["uncertain"]
+        som_df["correct"] + som_df["uncertain"]
     )
     mean = som_df.mean(level=[1, 2])
     # std = som_df.std(level=[1, 2])
@@ -44,20 +45,20 @@ def avg_stats_plot(somiter_data: dict) -> alt.Chart:
 
 
 def roc_plot(roc_data: dict, auc: dict, ax: "Axes") -> Figure:
-    colors = cm.tab20.colors #pylint: disable=no-member
+    colors = cm.tab20.colors  # pylint: disable=no-member
     for i, (name, data) in enumerate(roc_data.groupby(level=0)):
         ax.plot(
             data["fpr"],
             data["tpr"],
-            color=colors[i*2], lw=1,
+            color=colors[i * 2], lw=1,
             label="{} (AUC {:.2f})".format(name, auc[name])
         )
         ax.fill_between(
             data["fpr"],
-            data["tpr"]-data["std"],
-            data["tpr"]+data["std"],
-            color=colors[i*2+1],
-            alpha=1-(1/len(auc)*i),
+            data["tpr"] - data["std"],
+            data["tpr"] + data["std"],
+            color=colors[i * 2 + 1],
+            alpha=1 - (1 / len(auc) * i),
         )
 
     ax.plot([0, 1], [0, 1], color="navy", lw=1, linestyle="--")
@@ -87,8 +88,8 @@ def avg_roc_plot(somiter_data: dict, ax: "Axes") -> "Axes":
         level=["positive", "bin"]
     ).interpolate()
     auc_stats = {
-        k: v/len(somiter_data) for k, v in reduce(
-            lambda x, y: {k: v+y[k] for k, v in x.items()},
+        k: v / len(somiter_data) for k, v in reduce(
+            lambda x, y: {k: v + y[k] for k, v in x.items()},
             [auc_one_vs_all(d) for d in somiter_data.values()]
         ).items()
     }
