@@ -99,4 +99,13 @@
    \end{column}
 \end{frame}
 
+
+\begin{frame}
+   \frametitle{Merged classification}
+
+   Groups are merged based on shared similarities. HCL has been removedHierarchical clustering of SOMGated confusion matrix results.
+   Groups sharing similar misclassifications are grouped closer.
+
+   Inner groupings reflect known similarities in manual MFC analysis.
+
 \end{document}

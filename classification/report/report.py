@@ -14,6 +14,17 @@ from .prediction import top1_uncertainty, top2
 
 from .file_utils import load_predictions
 
+import scipy as sp
+import scipy.stats
+
+
+def mean_confidence_interval(data, confidence=0.95):
+    a = 1.0 * np.array(data)
+    n = len(a)
+    m, se = np.mean(a), sp.stats.sem(a)
+    h = se * sp.stats.t.ppf((1 + confidence) / 2.0, n - 1)
+    return m, m - h, m + h, h
+
 
 def generate_report(path):
     os.makedirs(path, exist_ok=True)
@@ -65,26 +76,48 @@ def generate_report(path):
     #     eset.apply(conf.calc_confusion_matrix, axis=1)
     # conf.get_confusion_matrices()
 
-    mis = Misclassifications()
+    mis = Misclassifications(
+        path_classification="../output/classification"
+    )
 
     infil_set = mis.data[
         (mis.data["set"] == "cd5_threeclass")
         # & (conf.classification_files["name"] == "normal_dedup")
         & (mis.data["name"] == "somcombined_dedup")
     ]
+    infil_set = mis.data.loc["cd5_threeclass", "somcombined_dedup"]
     misclass = mis.get_misclassifications(infil_set)
 
     labels = misclass.index.get_level_values("id")
 
     infiltrations = mis.get_infiltrations(infil_set).reset_index()
-    misclass_infil = infiltrations[infiltrations["label"].isin(labels)]
-    print(misclass_infil.mean())
+
+    infiltrations = infiltrations.loc[infiltrations["infiltration"] > 0]
+    misclass_infil = infiltrations.loc[
+        infiltrations["label"].isin(labels), "infiltration"
+    ]
+    print(
+        misclass_infil.mean(),
+        misclass_infil.min(),
+        misclass_infil.max(),
+        misclass_infil.std(),
+    )
+
+    non_misclass_infil = infiltrations.loc[
+        ~(infiltrations["label"].isin(labels)), "infiltration"
+    ]
+    print(
+        non_misclass_infil.mean(),
+        non_misclass_infil.min(),
+        non_misclass_infil.max(),
+        non_misclass_infil.std(),
+    )
+    print(mean_confidence_interval(misclass_infil))
+    print(mean_confidence_interval(non_misclass_infil))
 
     hi_infil_misclass = misclass_infil[misclass_infil["infiltration"] > 20.0]
     print(hi_infil_misclass)
 
-    non_misclass_infil = infiltrations[~infiltrations["label"].isin(labels)]
-    print(non_misclass_infil.mean())
 
     for _, row in infil_set.iterrows():
         preds = load_predictions(row["predictions"])

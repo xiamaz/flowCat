@@ -17,6 +17,15 @@ def merge_multi(self, df, on):
     ).set_index(self.index.names)
 
 
+def get_groups(data: pd.Series) -> pd.Series:
+    """Get group information on each id."""
+    predictions = load_predictions(data["predictions"])
+    groups = pd.concat([
+        p["group"] for p in predictions.values()
+    ])
+    return groups[~groups.index.duplicated(keep='first')]
+
+
 def get_infiltrations(data: pd.Series) -> pd.Series:
     """Get infiltration information on each id."""
     predictions = load_predictions(data["predictions"])
@@ -106,6 +115,14 @@ class Misclassifications(Reporter):
             keys=self.data.index
         )
         return mis_df
+
+    def get_groups(self, data):
+        groups = []
+        for _, row in data.iterrows():
+            groups.append(get_groups(row))
+
+        group_df = pd.concat(groups)
+        return group_df[~group_df.index.duplicated(keep='first')]
 
     def get_infiltrations(self, data):
         infils = []
