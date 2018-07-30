@@ -128,9 +128,11 @@ class Case:
 class CasePath:
     """Single path for a case."""
     def __init__(self, path, parent):
-        self.path = create_fcs_path(path["path"])
+        self.path = create_fcs_path(path["fcs"]["path"])
+        self.markers = path["fcs"]["markers"]
+        self.event_count = path["fcs"]["event_count"]
+
         self.tube = int(path["tube"])
-        self.markers = path["markers"]
         self.material = Material.from_str(path["material"])
 
         self.parent = parent

@@ -182,7 +182,7 @@ class CaseCollection(CaseIterable):
 
         data = load_json(get_file_path(path))
 
-        return [Case(d) for dd in data.values() for d in dd]
+        return [Case(d) for d in data]
 
     def create_view(
             self, labels=None, num=None, groups=None, infiltration=None,
