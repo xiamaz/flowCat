@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# flake8: noqa
+# pylint: skip-file
 """Visualization of separation in output data of classification."""
 from multiprocessing import Pool
 from pathlib import Path
@@ -120,6 +123,22 @@ def scatterplot(data, labels, uniques, ax):
     return ax
 
 
+def upsampling_histogram_plot(data, path="upsampling_histo", title=""):
+    groups = data.groupby("group")
+    fig = Figure()
+    for i, (group, gdata) in enumerate(groups):
+        mean_data = gdata.mean()
+        std_data = gdata.std()
+        ax = fig.add_subplot(5, 2, i + 1)
+        plot_histogram((mean_data, std_data), ax, title=group)
+
+    fig.set_size_inches(20, 10)
+    FigureCanvas(fig)
+    fig.suptitle(title)
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.savefig(path, dpi=100)
+
+
 def create_plot(transfun, title, path, index, data, label, unique):
     tdata = transfun(data)
 
@@ -129,19 +148,31 @@ def create_plot(transfun, title, path, index, data, label, unique):
         scatterplot(tdata, label, unique, ax)
 
 
+def create_histogram(title, path, index, data, label, unique):
+    combined_data = data.copy()
+    combined_data["group"] = label
+
+    plotpath = str(path) + "_{}".format(index)
+    upsampling_histogram_plot(combined_data, plotpath, title)
+
+
 def plot_creator(args):
     (path, method), items = args
     dimensions = 2
     if method == "pca":
         model = PCA(n_components=dimensions)
         title = "PCA in {} dimensions".format(dimensions)
+        create_plot(model.fit_transform, title, path, *items)
     elif method == "tsne":
         model = TSNE(n_components=dimensions)
         title = "tSNE in {} dimensions".format(dimensions)
+        create_plot(model.fit_transform, title, path, *items)
+    elif method == "histo":
+        title = "Histogram visualization with standard deviation"
+        create_histogram(title, *items)
     else:
         raise RuntimeError("Unknown method {}".format(method))
 
-    create_plot(model.fit_transform, title, path, *items)
 
 
 class Visualizer:
