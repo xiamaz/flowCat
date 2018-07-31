@@ -4,6 +4,9 @@ Classification of MFC data using self-organizing maps
 Folder structure
 ----------------
 
+preprocessing
+    Old R and flowSOM based upsampling
+
 clustering
     Transformation of FCS information into histrogram form with SOM
 
