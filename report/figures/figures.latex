@@ -16,5 +16,9 @@
 
 \input{numbers.latex}
 
+\input{clustering.latex}
+
+\input{classification.latex}
+
 
 \end{document}

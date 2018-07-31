@@ -1,0 +1,9 @@
+\begin{figure}
+   \includegraphics[width=\linewidth]{classification/cd5_misclassification_infiltration_per_group.png}
+   \caption{Binned histogram visualization of infiltration percentages for misclassified and non-misclassified cases for each cohort.}
+\end{figure}
+
+\begin{figure}
+   \includegraphics[width=\linewidth]{classification/testdendro.png}
+   \caption{Hierarchical clustered dendrogram of misclassifications. Groups that share misclassifications are grouped closer.}
+\end{figure}
