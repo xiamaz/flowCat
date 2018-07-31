@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
+# flake8: noqa
+# pylint: skip-file
+#
 # Small script to output usable numbers of cases after filtering for tubes and
 # marker identification
 #
 # Will also return marker composition
 import os
+import sys
+# adding clustering library into pythonpath
+sys.path.insert(0, "../clustering")
+
 from argparse import ArgumentParser
 
 from enum import IntEnum

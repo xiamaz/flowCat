@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # flake8: noqa
 # pylint: skip-file
 

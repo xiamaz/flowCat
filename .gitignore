@@ -16,8 +16,8 @@ __pycache__
 archive/*esults
 *.LMD
 *.html
-tags
+tags*
 /*/analysis
 
 # allow all files in abstract
-!/abstract/**
+!/report/abstract/**
