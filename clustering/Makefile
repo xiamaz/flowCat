@@ -61,19 +61,8 @@ run-local:
 	$(eval TEMP:=tmp)
 	$(BIN) $(OPTS) --output output/clustering
 
-tests:
-	python3 -m unittest discover
-
 $(REFCASES):
 	aws s3 cp $(BUCKET_URL)/$(REFCASES) .
 
-image:
-	docker build -t $(NAME) .
-
 run-image: image
 	docker run --runtime nvidia --mount type=bind,source=/data,target=/data $(NAME) EXP=experiments/miniseq.mk
-
-ecr: image
-	@eval $$(aws ecr get-login --no-include-email --region eu-central-1)
-	docker tag clustering:latest 463789428463.dkr.ecr.eu-central-1.amazonaws.com/clustering:latest
-	docker push 463789428463.dkr.ecr.eu-central-1.amazonaws.com/clustering:latest

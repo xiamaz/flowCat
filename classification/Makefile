@@ -42,18 +42,9 @@ run: download
 	# always use newest results
 	$(BIN) $(OPTIONS) $(TAG)/$(NAME)
 
-sync: # synchronize output folder containg all results
-	aws s3 sync s3://$(BUCKET) output
-	# aws s3 sync output s3://$(BUCKET)
-
 download:
 	mkdir -p $(DATA)/$(INPUT)
 	aws s3 sync --exclude "*" --include "*$(PATTERN)*" s3://$(BUCKET)/$(INPUT) $(DATA)/$(INPUT)
 
 upload:
 	aws s3 sync --exclude "*" --include "*$(NAME)*" $(DATA)/$(OUTPUT)/$(TAG) s3://$(BUCKET)/$(OUTPUT)/$(TAG)
-
-report: # regenerate all figures and tables
-	python3 -m report $(REPORT)
-	cp templates/report.tex $(REPORT)
-	cd $(REPORT) && latexmk -pdf report.tex && latexmk -c
