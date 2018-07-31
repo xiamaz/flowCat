@@ -1,6 +1,7 @@
 import os
 import logging
 from enum import Enum
+from datetime import datetime
 
 import fcsparser
 
@@ -51,6 +52,8 @@ class Case:
 
         # place to store result
         self._histogram = {}
+
+        self.date = datetime.strptime(data["date"], "%Y-%m-%d").date()
 
         self.infiltration = data["infiltration"]
         self.group = data["cohort"]

@@ -5,7 +5,21 @@
 # Will also return marker composition
 import os
 from argparse import ArgumentParser
-from urllib.parse import urlparse
+
+from enum import IntEnum
+
+from collections import defaultdict
+from contextlib import contextmanager
+
+import numpy as np
+
+from matplotlib import cm, dates
+from matplotlib.patches import Patch
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+import seaborn as sns
+
+from scipy.stats import gaussian_kde
 
 from clustering.collection import CaseCollection
 
@@ -31,6 +45,14 @@ parser.add_argument(
     "--tubes", help="Specify used tubes.",
     default="1,2",
     type=conv_tubes
+)
+parser.add_argument(
+    "--plotting", help="Enable plot generation.",
+    action="store_true"
+)
+parser.add_argument(
+    "--plotdir", help="Plotting directory",
+    default="output/cohort_numbers"
 )
 
 args = parser.parse_args()
@@ -82,3 +104,126 @@ print("\n".join([
         ])
     ) for d in dissimilar_tubes
 ]))
+
+
+# optional plotting
+@contextmanager
+def plot_figure(plotpath, *args, **kwargs):
+    """Provide context for plotting with automatic drawing and saving."""
+    fig = Figure(*args, **kwargs)
+    ax = fig.add_subplot(111)
+    yield ax
+    FigureCanvas(fig)
+    fig.savefig(plotpath)
+
+
+class Cohort(IntEnum):
+    IN = 1
+    CON = 2
+    OUT = 3
+
+    @classmethod
+    def from_cohort_name(cls, name):
+        if name == "normal":
+            return cls.CON
+        elif name in ["AML", "MM"]:
+            return cls.OUT
+        else:
+            return cls.IN
+
+    @classmethod
+    def to_string(cls, enum):
+        if enum == cls.IN:
+            return "B-Cell Lymphoma"
+        elif enum == cls.CON:
+            return "normal"
+        else:
+            return "Other disorders"
+
+
+def plot_cohorts(all_view, title="Cohort overview", path=""):
+    """Plot cohort numbers in the given cohort, with optional
+    coloring based on external groupings, such as ingroup, outgroup, control.
+    """
+    group_nums = {k: len(v) for k, v in all_view.groups.items()}
+
+    sorted_keys = sorted(list(group_nums.keys()), key=Cohort.from_cohort_name)
+
+    colors = [
+        cm.Set1(Cohort.from_cohort_name(group))
+        for group in sorted_keys
+    ]
+    plotpath = os.path.join(path, "cohorts_num")
+    with plot_figure(plotpath, figsize=(10, 10)) as axes:
+        bars = axes.bar(
+            x=sorted_keys,
+            height=[group_nums[v] for v in sorted_keys],
+            color=colors,
+        )
+        for sbar in bars:
+            height = sbar.get_height()
+            axes.text(
+                sbar.get_x() + sbar.get_width() / 2, height, str(height),
+                ha="center", color="black", fontsize=12
+            )
+
+        patches = [
+            Patch(facecolor=cm.Set1(n), label=Cohort.to_string(n))
+            for n in Cohort
+        ]
+        axes.spines['top'].set_visible(False)
+        axes.spines['right'].set_visible(False)
+        axes.spines['left'].set_visible(False)
+        axes.legend(handles=patches)
+        axes.set_title(title)
+        axes.set_ylabel("Case number")
+
+
+def plot_event_count(view, title="Event count plots", path=""):
+    """Distribution of event counts."""
+    all_event_counts = defaultdict(list)
+    for cpath in view.get_tube(1).data:
+        all_event_counts[cpath.parent.group].append(cpath.event_count)
+
+    for name, data in all_event_counts.items():
+        print("Counts {}".format(name))
+        for percentile in [20000, 30000, 40000, 50000]:
+            pdata = [d for d in data if d <= percentile]
+            print(
+                "<= {}: {} cases {} max".format(
+                    percentile, len(pdata), max(pdata) if pdata else 0
+                )
+            )
+
+    plotpath = os.path.join(path, "event_distribution")
+    with plot_figure(plotpath) as axes:
+        # event_histo = np.histogram(all_event_counts, bins=bins)
+        axes.boxplot(
+            all_event_counts.values(),
+            labels=all_event_counts.keys(),
+        )
+        axes.set_title(title)
+
+
+def plot_date(view, title="Date distribution in each cohort.", path=""):
+    """Plot the date distribution in each cohort as a
+    density plot."""
+
+    group_dates = defaultdict(list)
+    for case in view.data:
+        group_dates[case.group].append(dates.date2num(case.date))
+
+    plotpath = os.path.join(path, "time_distribution")
+    with plot_figure(plotpath, figsize=(20, 10)) as axes:
+        for group, data in group_dates.items():
+            axes.hist(data, bins=1000, label=group)
+            axes.xaxis.set_major_locator(dates.YearLocator())
+            axes.xaxis.set_major_formatter(dates.DateFormatter("%d.%m.%Y"))
+        axes.legend()
+
+
+if args.plotting:
+    os.makedirs(args.plotdir, exist_ok=True)
+    plot_cohorts(all_view, "Cohort sizes CLL-9F", args.plotdir)
+    plot_event_count(all_view, "Event count plots CLL-9F", args.plotdir)
+    plot_date(all_view, "Date distribution CLL-9F", args.plotdir)
