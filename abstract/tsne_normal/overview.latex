@@ -1,0 +1,55 @@
+\documentclass[11pt,a4paper,landscape]{article}
+\usepackage[margin=1cm]{geometry}
+
+%% adding graphics
+\usepackage{graphicx}
+%% nicer tables
+\usepackage{booktabs}
+%% rotate pages for landscape
+\usepackage{pdflscape}
+%% nice grid layouts for latex figures
+\usepackage{subcaption}
+
+\begin{document}
+
+\newcommand{\figcell}[1]{
+   \begin{subfigure}[t]{0.18\columnwidth}
+      \includegraphics[width=\columnwidth]{#1}
+   \end{subfigure}
+}
+
+\newcommand{\bigfig}[2]{
+   \begin{figure}
+      \centering
+      \caption{#1}
+      #2
+   \end{figure}
+}
+
+\bigfig{PCA analysis of histogram output from consensus SOM in normal analysis.}{
+   \figcell{normal_pca_1.png}
+   \figcell{normal_pca_2.png}
+   \figcell{normal_pca_3.png}
+   \figcell{normal_pca_4.png}
+   \figcell{normal_pca_5.png}
+   \figcell{normal_pca_6.png}
+   \figcell{normal_pca_7.png}
+   \figcell{normal_pca_8.png}
+   \figcell{normal_pca_9.png}
+   \figcell{normal_pca_10.png}
+}
+
+\bigfig{tSNE analysis of histogram output from consensus SOM in normal analysis.}{
+   \figcell{normal_tsne_1.png}
+   \figcell{normal_tsne_2.png}
+   \figcell{normal_tsne_3.png}
+   \figcell{normal_tsne_4.png}
+   \figcell{normal_tsne_5.png}
+   \figcell{normal_tsne_6.png}
+   \figcell{normal_tsne_7.png}
+   \figcell{normal_tsne_8.png}
+   \figcell{normal_tsne_9.png}
+   \figcell{normal_tsne_10.png}
+}
+
+\end{document}
