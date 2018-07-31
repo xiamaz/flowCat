@@ -56,7 +56,7 @@ class Case:
         self.group = data["cohort"]
         self.id = data["id"]
 
-        self.filepaths = data["destpaths"]
+        self.filepaths = data["filepaths"]
 
     @property
     def filepaths(self):
