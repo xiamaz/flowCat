@@ -1,0 +1,20 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2cm]{geometry}
+
+%% adding graphics
+\usepackage{graphicx}
+%% nicer tables
+\usepackage{booktabs}
+%% rotate pages for landscape
+\usepackage{pdflscape}
+%% nice grid layouts for latex figures
+\usepackage{subcaption}
+
+\begin{document}
+
+\title{Automatic Flow-based Classification of B-Cell Lymphoma}
+
+\input{numbers.latex}
+
+
+\end{document}

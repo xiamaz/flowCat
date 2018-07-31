@@ -1,23 +1,20 @@
 *.csv
 *.json
-env
-logs
-plots
-# directory containing old data
-data
+*.LMD
+*.rds
+
 # output directory for plots and other information
 /output
-*.rds
-*.pyc
-__pycache__
-*.png
-*.jpg
-*.pdf
-archive/*esults
-*.LMD
-*.html
-tags*
+/archive/*esults
 /*/analysis
 
 # allow all files in abstract
 !/report/abstract/**
+
+# python relevant files
+__pycache__
+*.pyc
+env
+
+# generated tags
+tags*

@@ -19,6 +19,7 @@ from collections import defaultdict
 from contextlib import contextmanager
 
 import numpy as np
+import pandas as pd
 
 from matplotlib import cm, dates
 from matplotlib.patches import Patch
@@ -192,8 +193,10 @@ def plot_event_count(view, title="Event count plots", path=""):
     for cpath in view.get_tube(1).data:
         all_event_counts[cpath.parent.group].append(cpath.event_count)
 
+    count_nums = []
     for name, data in all_event_counts.items():
         print("Counts {}".format(name))
+        ccount = {}
         for percentile in [20000, 30000, 40000, 50000]:
             pdata = [d for d in data if d <= percentile]
             print(
@@ -201,6 +204,17 @@ def plot_event_count(view, title="Event count plots", path=""):
                     percentile, len(pdata), max(pdata) if pdata else 0
                 )
             )
+
+            ccount["<= {}".format(percentile)] = "{} (max {})".format(
+                len(pdata), max(pdata) if pdata else 0
+            )
+        count_nums.append(ccount)
+
+    count_df = pd.DataFrame(
+        count_nums, index=all_event_counts.keys()
+    )
+    tablepath = os.path.join(path, "event_counts.latex")
+    count_df.to_latex(tablepath)
 
     plotpath = os.path.join(path, "event_distribution")
     with plot_figure(plotpath) as axes:
