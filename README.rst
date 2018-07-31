@@ -1,17 +1,23 @@
-# Classification of MFC data using self-organizing maps
+Classification of MFC data using self-organizing maps
+=====================================================
 
-## Folder structure
+Folder structure
+----------------
 
-* clustering
+clustering
     Transformation of FCS information into histrogram form with SOM
-* classification
+
+classification
     Prediction of cohort labels using histogram data
-* report
+
+report
     Analysis and presentation of information in the other stages
-* aws
+
+aws
     Convenience scripts for job submission into AWS Batch
 
 
-## Contributions
+Contributions
+-------------
 
 Logicle functions from fcm package by Jacob Frelinger licensed under simplified BSD
