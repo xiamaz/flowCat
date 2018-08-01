@@ -15,7 +15,8 @@ UPSAMPLING_NUM = 0
 # Select specific cohorts to be upsampled, otherwise all cohorts will be
 # processed
 # enable: --groups GROUPS
-GROUPS = ""
+FITGROUPS = ""
+TRANSGROUPS = ""
 
 # additional flags
 # possible flags:

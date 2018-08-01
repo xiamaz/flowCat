@@ -9,25 +9,24 @@ def create_parser():
         description="Clustering preprocessing of flow cytometry data."
     )
     parser.add_argument("-o", "--output", help="Output file directory")
+    parser.add_argument("-i", "--input", help="Input case directory.")
     parser.add_argument(
-        "--refcases", help="Json with list of reference cases."
+        "--refcases", help="List of reference cases."
     )
     parser.add_argument("--tubes", help="Selected tubes.")
     parser.add_argument(
-        "--groups", help="Semicolon separated list of groups"
+        "--fitgroups", help="Semicolon separated list of groups in fitting"
     )
     parser.add_argument(
-        "--refnormal", help="Exclude normal cohort in consensus generation.",
-        action="store_false"
+        "--transgroups", help="Semicolon separated list of groups in training"
     )
     parser.add_argument(
-        "--num", help="Number of selected cases", default=5, type=int
+        "--fitnum", help="Number of selected cases", default=5, type=int
     )
     parser.add_argument(
-        "--upsampled", help="Number of cases per cohort to be upsampled.",
+        "--transnum", help="Number of cases per cohort to be upsampled.",
         default=-1, type=int
     )
-    parser.add_argument("-i", "--input", help="Input case json file.")
     parser.add_argument("-t", "--temp", help="Temp path for file caching.")
     parser.add_argument(
         "--plotdir", help="Plotting directory", default="plots"
@@ -46,7 +45,6 @@ def create_parser():
         "--pretrans", help="Preprocessing for each case in transform.",
         default="normal"
     )
-    parser.add_argument("--bucketname", help="S3 Bucket with data.")
 
     return parser
 
@@ -67,7 +65,7 @@ class CmdArgs:
         )
         self.tubes = [int(t) for t in self.args.tubes.split(";")]
         self.collection_args = {
-            "infopath": self.args.input,
+            "inputpath": self.args.input,
             "tubes": self.tubes
         }
 
@@ -75,21 +73,18 @@ class CmdArgs:
 
         self.transform_args = {
             "labels": None,
-            "num": self.args.upsampled if self.args.upsampled > 0 else None,
+            "num": self.args.transnum if self.args.transnum > 0 else None,
             "groups": list(
-                map(lambda x: x.strip(), self.args.groups.split(";"))
-            ) if self.args.groups else self.collection.groups,
+                map(lambda x: x.strip(), self.args.transgroups.split(";"))
+            ) if self.args.transgroups else self.collection.groups,
         }
 
         self.train_args = {
-            "labels": [
-                case for cases in self.refcases.values() for case in cases
-            ] if self.args.refcases else None,
-            "num": self.args.num if self.args.num != -1 else None,
-            "groups": [
-                g for g in self.transform_args["groups"]
-                if g != "normal" or self.args.refnormal
-            ]
+            "labels": self.refcases,
+            "num": self.args.fitnum if self.args.fitnum != -1 else None,
+            "groups": list(
+                map(lambda x: x.strip(), self.args.fitgroups.split(";"))
+            ) if self.args.fitgroups else self.collection.groups,
         }
 
         self.pipeline_args = {
@@ -100,8 +95,13 @@ class CmdArgs:
 
     @property
     def refcases(self):
-        if self._refcases is None:
-            self._refcases = load_json(get_file_path(self.args.refcases))
+        """Return a list of ids or None if not specified. The latter will be
+        ignored in filtering."""
+        if self._refcases is None and self.args.refcases:
+            with open(get_file_path(self.args.refcases), "r") as fobj:
+                lines = [l.strip() for l in fobj.readlines()]
+                lines = [l for l in lines if l]
+            self._refcases = lines
         return self._refcases
 
     @property

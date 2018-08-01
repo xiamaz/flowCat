@@ -25,6 +25,8 @@ NO_INFILTRATION = ["normal"]
 
 LOGGER = logging.getLogger(__name__)
 
+INFONAME = "case_info.json"
+
 
 class SelectedMarkers:
 
@@ -84,6 +86,7 @@ class CaseIterable:
     """Iterable collection for cases. Base class."""
 
     def __init__(self):
+
         self._tubes = None
         self._groups = None
         self._current = None
@@ -154,10 +157,15 @@ class CaseCollection(CaseIterable):
     """Get case information from info file and remove errors and provide
     overview information."""
 
-    def __init__(self, infopath: str, tubes: list):
+    def __init__(self, inputpath: str, tubes: list):
         super().__init__()
 
-        data = self._read_info(infopath)
+        self._path = inputpath
+
+        data = [
+            Case(d, path=inputpath) for d in
+            load_json(get_file_path(os.path.join(inputpath, INFONAME)))
+        ]
 
         material_data = filter_materials(data)
 
@@ -175,14 +183,6 @@ class CaseCollection(CaseIterable):
         self._data = [
             d for d in self._data if d.same_material(tubes)
         ]
-
-    @staticmethod
-    def _read_info(path: str) -> list:
-        """Read case information and create a list of case objects."""
-
-        data = load_json(get_file_path(path))
-
-        return [Case(d) for d in data]
 
     def create_view(
             self, labels=None, num=None, groups=None, infiltration=None,

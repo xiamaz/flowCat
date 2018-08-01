@@ -6,9 +6,9 @@ BUCKET_URL = s3://$(BUCKET)
 
 TEMP = /data/tmp
 
-CASEINFO = $(BUCKET_URL)/case_info.json
+INPUT = $(BUCKET_URL)/CLL-9F
 
-REFCASES = selected_hashed_ids.json
+REFCASES = $(BUCKET_URL)/meta/selected_cases.txt
 
 PLOTDIR = plots
 
@@ -30,39 +30,38 @@ BIN = python3 -m clustering
 
 USROPTS = \
 	   --tubes $(TUBES) \
-	   --num $(NUM) \
-	   --upsampled $(UPSAMPLING_NUM) \
+	   --fitnum $(NUM) \
+	   --fitgroups $(FITGROUPS) \
+	   --transnum $(UPSAMPLING_NUM) \
+	   --transgroups $(TRANSGROUPS) \
 	   --pipeline $(METHOD) \
 	   --prefit $(PREMETHOD) \
 	   --pretrans $(TRANSMETHOD) \
-	   --groups $(GROUPS) \
 	   $(FLAGS)
 
 OPTS = \
 	   --temp $(TEMP) \
-	   --bucketname $(BUCKET) \
-	   --input $(CASEINFO) \
+	   --input $(INPUT) \
 	   --plotdir $(PLOTDIR) \
 	   $(USROPTS)
 
 OUTPUT = s3://mll-flow-classification/clustering/$(OUTNAME)
 
-.PHONY: run run-selected tests image
-
+.PHONY: run
 run:
 	$(BIN) $(OPTS) --output $(OUTPUT)
 
 # use selected cases provided in reference json file for consensus SOM
-run-selected: $(REFCASES)
+.PHONY: run-selected
+run-selected:
 	$(BIN) $(OPTS) --output $(OUTPUT)_selected --refcases $(REFCASES)
 
 # run the experiment locally and output to a local folder
+.PHONY: run-local
 run-local:
 	$(eval TEMP:=tmp)
-	$(BIN) $(OPTS) --output output/clustering
+	$(BIN) $(OPTS) --output output/clustering/$(OUTNAME)
 
-$(REFCASES):
-	aws s3 cp $(BUCKET_URL)/$(REFCASES) .
-
+.PHONY: run-image
 run-image: image
 	docker run --runtime nvidia --mount type=bind,source=/data,target=/data $(NAME) EXP=experiments/miniseq.mk

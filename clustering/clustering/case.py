@@ -11,11 +11,6 @@ from .utils import get_file_path
 LOGGER = logging.getLogger(__name__)
 
 
-def create_fcs_path(path: str):
-    """Add s3 prefix to fcs paths."""
-    return os.path.join("s3://mll-flowdata", path)
-
-
 def all_in(smaller, larger):
     """Check that all items in the smaller iterable is in the larger iterable.
     """
@@ -44,7 +39,9 @@ class Material(Enum):
 
 class Case:
     """Basic case object containing all metadata for a case."""
-    def __init__(self, data: dict):
+    def __init__(self, data: dict, path: str = ""):
+
+        self.path = path
 
         self._filepaths = None
         self._tubepaths = None
@@ -131,7 +128,7 @@ class Case:
 class CasePath:
     """Single path for a case."""
     def __init__(self, path, parent):
-        self.path = create_fcs_path(path["fcs"]["path"])
+        self.path = os.path.join(parent.path, path["fcs"]["path"])
         self.markers = path["fcs"]["markers"]
         self.event_count = path["fcs"]["event_count"]
 

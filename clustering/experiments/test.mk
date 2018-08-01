@@ -1,3 +1,4 @@
 UPSAMPLING_NUM = 5
 NUM = 2
-GROUPS = "CLL;MBL;normal"
+FITGROUPS = "CLL;MBL;normal"
+TRANSGROUPS = "CLL;MBL;normal"
