@@ -155,6 +155,17 @@ class BaseData:
         data = pd.concat(df_list)
         return self.__class__(data, name=self.name)
 
+    @staticmethod
+    def split_data_labels(
+            dataframe: pd.DataFrame,
+    ) -> (pd.DataFrame, pd.DataFrame):
+        '''Split dataframe into matrices with group labels as sparse matrix'''
+        data = dataframe.drop(
+            [c for c in dataframe.columns if not c.isdigit()], axis=1
+        )
+        labels = dataframe['group']
+        return data, labels
+
 
 class DataView(BaseData):
     '''Contains upsampling data with possiblity to apply filters, keeping
@@ -240,17 +251,6 @@ class DataView(BaseData):
         df_splits = [pd.concat(dfs) for dfs in zip(*df_list)]
         df_splits = [df.sample(frac=1) for df in df_splits]
         return df_splits
-
-    @staticmethod
-    def split_data_labels(
-            dataframe: pd.DataFrame,
-    ) -> (pd.DataFrame, pd.DataFrame):
-        '''Split dataframe into matrices with group labels as sparse matrix'''
-        data = dataframe.drop(
-            [c for c in dataframe.columns if not c.isdigit()], axis=1
-        )
-        labels = dataframe['group']
-        return data, labels
 
 
 class InputData(BaseData):

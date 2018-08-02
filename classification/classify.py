@@ -8,12 +8,12 @@ import sys
 
 from collections import defaultdict
 
-from lib.upsampling import DataCollection
-from lib.classification import Classifier, NeuralNet, Tree
-from lib.plotting import plot_combined
-from lib.stamper import create_stamp
-from lib.parser import CmdArgs
-# from lib import plotting
+from classification.upsampling import DataCollection
+from classification.classification import Classifier, NeuralNet, Tree
+from classification.plotting import plot_combined
+from classification.stamper import create_stamp
+from classification.parser import CmdArgs
+# from classification import plotting
 
 
 def preprocess_data(
