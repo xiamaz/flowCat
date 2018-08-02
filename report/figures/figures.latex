@@ -20,5 +20,7 @@
 
 \input{classification.latex}
 
+\input{exotic.latex}
+
 
 \end{document}

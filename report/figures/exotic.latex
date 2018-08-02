@@ -1,0 +1,6 @@
+\begin{figure}
+   \includegraphics[width=0.4\linewidth]{exotic/avg_confusion.png}
+   \includegraphics[width=0.59\linewidth]{exotic/pca.png}
+   \caption{Processing of diagnoses outside the scope of the CLL 9F panel, such as acute myeloic lymphoma (AML) and multiple myeloma (MM). Their pathogenic cell populations are not well captured by the panel itself, making them good targets to measure the effect of foreign cohorts on classification outcome. Clustering used pregating and prepressing into individual SOMs (somgated). The consensus SOM was generated using normal and B-Cell lymphoma cohorts. AML and MM were not used in the consensus SOM generation, but only utilized it for upsampling. Classification was done with the entire AML and MM cohorts vs 200 randomly sampled cases from the normal cohorts as a comparison.}
+\end{figure}
+
