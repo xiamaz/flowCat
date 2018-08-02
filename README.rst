@@ -1,6 +1,10 @@
 Classification of MFC data using self-organizing maps
 =====================================================
 
+Organization and general discussion at: Trello_.
+
+.. _Trello: https://trello.com/b/Krk9nkPg/flowcat
+
 Folder structure
 ----------------
 

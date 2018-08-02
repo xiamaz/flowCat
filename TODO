@@ -6,3 +6,32 @@ utilitze uncompensated data, just as a comparison
 neural heatmap back into the raw cell data eg generate neural heatmap for the 0-99 consensus map, afterwards map this into a 2d representation and show it!!!
 
 accuracy of hairy cell leukemia classification across different preprocessing steps
+
+# challenges
+
+classification accuracies and misclassifications both show substantial smearing, which can be explained by suboptimal population
+identification in the self-organizing map, step.
+
+Currently the self-organizing map is created through a very small subset of cases from all populations, much more preferable would a mechanism to train maps on eacho cohort individually and highlight the differences between cohorts.
+
+A way to look differently at the possibility for such an approach would be creation of SOM maps for each cohort and plot these maps against each other in for example a tSNE visualization. Were the differences in these maps usable, we should be able to differentiate them. This would be easy if we had a small number of populations, but the large number of populations call for other approaches.
+
+most importantly a feedback from classification back into the SOM is currently missing. after generation the map remains static, while we could for example leverage information about the importance of individual nodes
+
+
+# tasks at hand
+
+the current approach has not been optimized so far regarding the parameters used in SOM generation, size of the SOM, number of cases as well as other difficulties
+
+the classification process could be improved with experimentation in the classification itself, but since it is heavily dependent on the assumptions of the clustering step, advances in the former have more impact
+
+visualization of node importance can be done in a first approximation by taking the weights in the first layer for the input data in the classification. additionally we will need to save the weights in the som map, which we used previously. this combination can be used to create 2d plots with coloring/size for the varying importance of specific nodes.
+
+currently all cases are simply concatenated for the training process. this does eliminate some valuable information regarding relative population sizes in each sample. were unimportant populations of the same size for each sample, this should not be an issue, but because of varying degress of infiltration, this simple concatenation could prove itself detrimentatal to the SOM generation.
+
+
+# requirements
+
+currently data is saved in private s3 buckets. smaller size plots and report data is saved directly in the github repository
+
+usage of aws for computational usage and access to the s3 buckets will require accounts.
