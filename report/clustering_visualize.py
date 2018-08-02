@@ -2,6 +2,9 @@
 # flake8: noqa
 # pylint: skip-file
 """Visualization of separation in output data of classification."""
+import sys
+sys.path.insert(0, "../classification")
+
 from multiprocessing import Pool
 from pathlib import Path
 from argparse import ArgumentParser
@@ -15,6 +18,8 @@ from sklearn.manifold import TSNE
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib import cm
+
+from classification.upsampling import InputData
 
 
 def parse_arguments():
@@ -31,68 +36,6 @@ def parse_arguments():
 
     args = parser.parse_args()
     return args
-
-
-def load_data(path):
-    """Load csv data into a pandas dataframe."""
-    return pd.read_table(path, sep=",", index_col=0)
-
-
-class Dataset:
-    """Container for csv data."""
-
-    def __init__(self, path, output, tube=None, pattern=""):
-        self._outpath = output
-
-        self._current = 0
-        self._pattern = pattern
-        self._tube = tube
-        if path.is_dir():
-            self._rdata = self._load_dir(path)
-        else:
-            self._rdata = [load_data(path)]
-
-        self._data = [
-            d[[c for c in d.columns if c.isdigit()]] for d in self._rdata
-        ]
-        self._labels = []
-        self._uniques = None
-        for data in self._rdata:
-            label, unique = pd.factorize(data["group"], sort=True)
-            self._labels.append(label)
-            if self._uniques is None:
-                self._uniques = unique
-
-    @property
-    def concat(self):
-        return pd.concat(self._data) if len(self._data) > 1 else self._data[0]
-
-    def _load_dir(self, path):
-        files = path.glob("*{}*/tube{}.csv".format(self._pattern, self._tube))
-        return [load_data(f) for f in files]
-
-    def __iter__(self):
-        self._current = 0
-
-        # create the output directory
-        self._outpath.parent.mkdir(parents=True, exist_ok=True)
-
-        return self
-
-    def __next__(self):
-        if self._current >= len(self._data):
-            raise StopIteration
-        self._current += 1
-        return (
-            self._current,
-            self._data[self._current - 1],
-            self._labels[self._current - 1],
-            self._uniques,
-        )
-
-    def iter_add(self, *args):
-        for items in self:
-            yield args, items
 
 
 @contextmanager
@@ -174,24 +117,30 @@ def plot_creator(args):
         raise RuntimeError("Unknown method {}".format(method))
 
 
-
 class Visualizer:
     def __init__(self, inpath, outpath, pattern):
         self._inpath = Path(inpath)
         self._outpath = Path(outpath)
         self._pattern = pattern
 
-        self._data = Dataset(
-            self._inpath, self._outpath, tube=1, pattern=pattern
-        )
+        tubedict = {
+            tube: self._inpath / "tube{}.csv".format(tube) for tube in [1 ,2]
+        }
+
+        self._data = InputData.from_files(tubedict, name=inpath, tubes=[1, 2])
 
     def apply_visualization(self, method):
         """Apply visualization specified in string."""
         dataname = self._pattern or self._inpath.stem
         output = self._outpath / "{}_{}".format(dataname, method)
 
-        with Pool(processes=6) as pool:
-            pool.map(plot_creator, self._data.iter_add(output, method))
+        data, labels = self._data.split_data_labels(self._data.data)
+        label, unique = pd.factorize(labels, sort=True)
+
+        plot_creator(((output, method), (0, data, label, unique)))
+
+        # with Pool(processes=6) as pool:
+        #     pool.map(plot_creator, self._data.iter_add(output, method))
 
 
 def main():
