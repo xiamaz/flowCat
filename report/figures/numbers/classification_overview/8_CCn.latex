@@ -1,0 +1,11 @@
+\begin{tabular}{llllrr}
+\toprule
+             &     &        & count &    f1 &   std \\
+set & name & type &       &       &       \\
+\midrule
+cd5\_threeclass & normal\_dedup & random &     1 &  0.84 &  0.02 \\
+             & pregated\_dedup & random &     1 &  0.87 &  0.01 \\
+             & somcombined\_dedup & random &     1 &  0.89 &  0.00 \\
+hcl\_included & cd5 & random &     1 &  0.89 &  0.00 \\
+\bottomrule
+\end{tabular}

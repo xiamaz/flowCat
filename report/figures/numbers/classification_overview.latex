@@ -1,0 +1,77 @@
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{CLL, CLLPL, FL, HZL, HZLv, LPL, MBL, Mantel, Marginal, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/0_CCFHHLMMMn.latex}
+  }
+\end{subtable}
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{CLL, CLLPL, FL, HZL, LPL, MBL, Mantel, Marginal, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/1_CCFHLMMMn.latex}
+  }
+\end{subtable}
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{CLL, CLLPL, FL, LPL, MBL, Mantel, Marginal, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/2_CCFLMMMn.latex}
+  }
+\end{subtable}
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{CM, FL, HZL, HZLv, LMg, MtCp, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/3_CFHHLMn.latex}
+  }
+\end{subtable}
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{CM, FL, HZL, LMg, MtCp, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/4_CFHLMn.latex}
+  }
+\end{subtable}
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{CM, FL, LMg, MtCp, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/5_CFLMn.latex}
+  }
+\end{subtable}
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{CM, LMg, MtCp, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/6_CLMn.latex}
+  }
+\end{subtable}
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{AML, MM, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/7_AMn.latex}
+  }
+\end{subtable}
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{CD5neg, CD5pos, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/8_CCn.latex}
+  }
+\end{subtable}
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{CLL, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/9_Cn.latex}
+  }
+\end{subtable}
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{CM, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/10_Cn.latex}
+  }
+\end{subtable}

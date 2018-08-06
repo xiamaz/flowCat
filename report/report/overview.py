@@ -18,6 +18,17 @@ from .plotting import (
 
 from .base import Reporter
 
+from .pd_latex import df_save_latex
+
+
+SUBTABLE_TEMP = r"""\begin{{subtable}}{{.49\textwidth}}
+  \centering
+  \caption{{{}}}
+  \resizebox{{\columnwidth}}{{!}}{{
+    \input{{{}}}
+  }}
+\end{{subtable}}"""
+
 
 def group_avg_stat(data: pd.DataFrame) -> pd.Series:
     """Average statistics numbers in a single group."""
@@ -68,44 +79,61 @@ class Overview(Reporter):
     @property
     def classification(self):
         if self._classification is None:
-            self.classification_files
-            self._classification = add_avg_stats(self._classification)
+            data = add_avg_stats(self.classification_files)
+            data = self.extend_metadata(data)
+            self._classification = data
         return self._classification
 
-    def plot_clustering_experiments(
-            self,
-            path: str = "report",
-            filename: str = "experiment_overview.png"
-    ):
-        """Plot experiment information using altair."""
-        data = count_groups_filter(self.clustering_files)
-
-        chart = experiments_plot(data)
-
-        cpath = os.path.join(path, filename)
-        chart.save(cpath)
+    @property
+    def classification_by_groups(self):
+        grouped = list(self.classification.groupby("groups"))
+        for name, data in sorted(
+                grouped, key=lambda x: len(x[0].split(", ")), reverse=True
+        ):
+            yield name, data
 
     def write_classification_table(
             self,
-            path: str = "report",
-            filename: str = "result.tex"
+            path: "Path",
     ):
-        data = group_stats(self.classification).round(2)
+        output_folder = path / "classification_overview"
+        output_folder.mkdir(exist_ok=True, parents=True)
 
-        # remove uninteresting experiments
-        data = data.loc[
-            ~data.index.get_level_values(
-                "name"
-            ).str.contains("all_groups|more_merged")
+        part_tables = {}
+        for i, (name, data) in enumerate(self.classification_by_groups):
+            data = group_stats(data).round(2)
+
+            # remove uninteresting experiments
+            data = data.loc[
+                ~data.index.get_level_values(
+                    "name"
+                ).str.contains("all_groups|more_merged")
+            ]
+
+            # pretty print count information
+            data["count"] = data["count"].astype("int32").apply(str)
+
+            uniq = "".join(map(lambda x: x[0], name.split(", ")))
+            # save data to latex table
+            tpath = output_folder / "{}_{}.latex".format(i, uniq)
+            data.to_latex(tpath)
+            part_tables[name] = tpath.relative_to("figures")
+            # df_save_latex(data, tpath)
+
+        # generate combined figure
+        parts = [
+            SUBTABLE_TEMP.format(k, v)
+            for k, v in part_tables.items()
         ]
+        with open(str(path / "classification_overview.latex"), "w") as fobj:
+            fobj.write("\n".join(parts))
 
-        # pretty print count information
-        data["count"] = data["count"].astype("int32").apply(str)
-
-        # save data to latex table
-        tpath = os.path.join(path, filename)
-        df_save_latex(data, tpath)
+    def show(self):
+        """Printed output for the visualizer."""
+        for name, group in self.classification.groupby("groups"):
+            print(name)
+            print(group)
 
     def write(self, path):
-        self.plot_clustering_experiments(path)
+        """Written output such as tables and graphics for the visualizer."""
         self.write_classification_table(path)

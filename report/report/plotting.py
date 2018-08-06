@@ -7,41 +7,42 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib import cm
 from matplotlib.figure import Figure
 
-import altair as alt
+# import altair as alt
 
 from .prediction import df_stats, roc, auc_one_vs_all
 
 
-def avg_stats_plot(somiter_data: dict) -> alt.Chart:
-    """Average df results from multiple dataframes."""
-    som_df = pd.concat(
-        [df_stats(d) for d in somiter_data.values()], keys=somiter_data.keys()
-    )
-    som_df["incorrect"] = 1.0 - (
-        som_df["correct"] + som_df["uncertain"]
-    )
-    mean = som_df.mean(level=[1, 2])
-    # std = som_df.std(level=[1, 2])
-
-    alt_df = mean.stack().reset_index()
-    alt_df.columns = ["cohort", "stat", "type", "val"]
-    chart = alt.Chart(alt_df).mark_bar().encode(
-        x=alt.X("stat:N", axis=alt.Axis(title="")),
-        y=alt.Y("sum(val):Q", axis=alt.Axis(title="", grid=False)),
-        column=alt.Column("cohort:N"),
-        color=alt.Color(
-            "type:N",
-            sort=["incorrect", "uncertain", "correct"],
-            scale=alt.Scale(range=["#ff7e7e", "#FFB87E", "#77F277"]),
-        ),
-        order="ttype:N",
-    ).transform_calculate(
-        ttype=(
-            "if(datum.type == 'uncertain', 1, "
-            "if(datum.type == 'correct', 0, 2))"
-        )
-    )
-    return chart
+def avg_stats_plot(somiter_data: dict) -> "alt.Chart":
+    pass
+#     """Average df results from multiple dataframes."""
+#     som_df = pd.concat(
+#         [df_stats(d) for d in somiter_data.values()], keys=somiter_data.keys()
+#     )
+#     som_df["incorrect"] = 1.0 - (
+#         som_df["correct"] + som_df["uncertain"]
+#     )
+#     mean = som_df.mean(level=[1, 2])
+#     # std = som_df.std(level=[1, 2])
+# 
+#     alt_df = mean.stack().reset_index()
+#     alt_df.columns = ["cohort", "stat", "type", "val"]
+#     chart = alt.Chart(alt_df).mark_bar().encode(
+#         x=alt.X("stat:N", axis=alt.Axis(title="")),
+#         y=alt.Y("sum(val):Q", axis=alt.Axis(title="", grid=False)),
+#         column=alt.Column("cohort:N"),
+#         color=alt.Color(
+#             "type:N",
+#             sort=["incorrect", "uncertain", "correct"],
+#             scale=alt.Scale(range=["#ff7e7e", "#FFB87E", "#77F277"]),
+#         ),
+#         order="ttype:N",
+#     ).transform_calculate(
+#         ttype=(
+#             "if(datum.type == 'uncertain', 1, "
+#             "if(datum.type == 'correct', 0, 2))"
+#         )
+#     )
+#     return chart
 
 
 def roc_plot(roc_data: dict, auc: dict, ax: "Axes") -> Figure:
@@ -109,54 +110,56 @@ def plot_avg_roc_curves(somiter_data: dict) -> Figure:
     return fig
 
 
-def experiments_plot(data: pd.DataFrame) -> alt.Chart:
-    """Plot information on experiments into a bar chart.
-    Chart has to be multiindexed into set, name and type.
-    """
-    data.reset_index(inplace=True)
-
-    charts = []
-    for sname, sdata in data.groupby("set"):
-        parts = []
-        for ename, edata in sdata.groupby("name"):
-            base = alt.Chart(edata).mark_bar().encode(
-                y=alt.Y("type:N", axis=alt.Axis(title=ename)),
-                x=alt.X(
-                    "count:Q",
-                    axis=alt.Axis(title=""),
-                    scale=alt.Scale(domain=(0, 10))
-                ),
-                color="type:N",
-            )
-            parts.append(base)
-        part = alt.vconcat(*parts)
-        part.title = sname
-        charts.append(part)
-
-    chart = alt.hconcat(*charts).configure(
-        axis=alt.AxisConfig(
-            titleAngle=0,
-            titleLimit=0,
-            titleAlign="left",
-            titleX=0,
-            titleY=0,
-        ),
-        title=alt.VgTitleConfig(
-            offset=20
-        )
-    )
-    return chart
+def experiments_plot(data: pd.DataFrame) -> "alt.Chart":
+    pass
+#     """Plot information on experiments into a bar chart.
+#     Chart has to be multiindexed into set, name and type.
+#     """
+#     data.reset_index(inplace=True)
+# 
+#     charts = []
+#     for sname, sdata in data.groupby("set"):
+#         parts = []
+#         for ename, edata in sdata.groupby("name"):
+#             base = alt.Chart(edata).mark_bar().encode(
+#                 y=alt.Y("type:N", axis=alt.Axis(title=ename)),
+#                 x=alt.X(
+#                     "count:Q",
+#                     axis=alt.Axis(title=""),
+#                     scale=alt.Scale(domain=(0, 10))
+#                 ),
+#                 color="type:N",
+#             )
+#             parts.append(base)
+#         part = alt.vconcat(*parts)
+#         part.title = sname
+#         charts.append(part)
+# 
+#     chart = alt.hconcat(*charts).configure(
+#         axis=alt.AxisConfig(
+#             titleAngle=0,
+#             titleLimit=0,
+#             titleAlign="left",
+#             titleX=0,
+#             titleY=0,
+#         ),
+#         title=alt.VgTitleConfig(
+#             offset=20
+#         )
+#     )
+#     return chart
 
 
 def plot_frequency(data: pd.DataFrame, path: str):
-    """Set frequency of cases against certainty with standard deviation"""
-
-    plt_data = data.reset_index()
-    plt_data.sort_values("macro", inplace=True)
-
-    chart = alt.Chart(plt_data).mark_point().encode(
-        x="macro",
-        y="mean",
-        color="group",
-    )
-    chart.save(path)
+    pass
+#     """Set frequency of cases against certainty with standard deviation"""
+# 
+#     plt_data = data.reset_index()
+#     plt_data.sort_values("macro", inplace=True)
+# 
+#     chart = alt.Chart(plt_data).mark_point().encode(
+#         x="macro",
+#         y="mean",
+#         color="group",
+#     )
+#     chart.save(path)

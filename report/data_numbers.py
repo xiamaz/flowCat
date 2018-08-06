@@ -65,10 +65,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-infopath = args.path if "case_info.json" in args.path else \
-    os.path.join(args.path, "case_info.json")
-
-collection = CaseCollection(infopath, args.tubes)
+collection = CaseCollection(args.path, args.tubes)
 
 # simulate our clustering environment to get realistic numbers
 all_view = collection.create_view()

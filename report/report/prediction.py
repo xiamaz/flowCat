@@ -7,7 +7,7 @@ from sklearn.preprocessing import LabelBinarizer
 from sklearn.metrics import roc_auc_score, roc_curve
 
 from .base import Reporter
-from .file_utils import load_avg_metadata
+from .file_utils import load_metadata
 
 
 def df_prediction_cols(data: pd.DataFrame) -> np.matrix:
@@ -191,7 +191,7 @@ class Prediction(Reporter):
 
         plotpath = os.path.join(path, "predictions_{}".format(pname))
         somiter_data = load_predictions(row["predictions"])
-        metadata = load_avg_metadata(row["path"])
+        metadata = load_metadata(row["path"])[0]
 
         rocpath = plotpath + "_auc.png"
         if not os.path.exists(rocpath):

@@ -95,7 +95,7 @@ def load_predictions(paths: [str]) -> dict:
 
 def filter_infiltration(prediction_df: pd.DataFrame) -> pd.DataFrame:
     """Filter infiltration rate for other assessments."""
-
+    pass
 
 
 def add_prediction_info(experiments: pd.DataFrame) -> pd.DataFrame:
@@ -122,27 +122,9 @@ def load_json(path: str):
     return data
 
 
-def avg_meta(first, second):
-    """Combine information from different runs for the same experiment."""
-    averaged = ["note", "command", "group_names"]
-    # enforce sameness
-    for key in averaged:
-        assert str(first[key]) == str(second[key])
-
-    return {
-        k: first[k]
-        for k in averaged
-    }
-
-
 def load_metadata(path: str) -> [dict]:
     """Load metadata into a dict structure."""
     paths = glob.glob("{}/*/*{}".format(path, "info.json"))
     return [
         load_json(p) for p in paths
     ]
-
-
-def load_avg_metadata(path: str) -> dict:
-    """Return average reduced metadata."""
-    return reduce(avg_meta, load_metadata(path))

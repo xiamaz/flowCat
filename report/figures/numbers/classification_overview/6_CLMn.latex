@@ -1,0 +1,20 @@
+\begin{tabular}{llllrr}
+\toprule
+                      &                  &        & count &    f1 &   std \\
+set & name & type &       &       &       \\
+\midrule
+comp\_pregating & always\_som\_dedup & random &     1 &  0.83 &  0.01 \\
+                      & pregated\_combined\_dedup & random &     1 &  0.85 &  0.01 \\
+                      & som\_combined\_dedup & random &     1 &  0.87 &  0.00 \\
+                      & som\_dedup & random &     1 &  0.83 &  0.01 \\
+                      & somgated\_dedup & random &     1 &  0.87 &  0.00 \\
+initial\_comp & indiv\_pregating\_dedup & random &     3 &  0.85 &  0.01 \\
+                      & indiv\_pregating\_exc\_dedup & random &     3 &  0.84 &  0.01 \\
+                      & normal\_dedup & random &     3 &  0.80 &  0.03 \\
+                      & normal\_exc\_dedup & random &     3 &  0.81 &  0.02 \\
+initial\_comp\_selected & indiv\_pregating\_dedup & random &     1 &  0.84 &  0.01 \\
+                      & indiv\_pregating\_exc\_dedup & random &     1 &  0.85 &  0.02 \\
+                      & normal\_dedup & random &     1 &  0.83 &  0.02 \\
+                      & normal\_exc\_dedup & random &     1 &  0.82 &  0.02 \\
+\bottomrule
+\end{tabular}

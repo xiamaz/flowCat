@@ -17,3 +17,8 @@
    \caption{Detailed event count numbers per cohort with the maximum event number in the given cutoff written in brackets.}
    \input{numbers/event_counts.latex}
 \end{table}
+
+\begin{table}
+   \caption{Overview of classification runs so far and the different applied processing steps in clustering. The mean accuracy has been calculate counting single cases (micro-average), taking class-imbalances into account.}
+   \input{numbers/classification_overview.latex}
+\end{table}

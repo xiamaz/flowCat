@@ -1,0 +1,10 @@
+\begin{tabular}{llllrr}
+\toprule
+             &        &        & count &    f1 &   std \\
+set & name & type &       &       &       \\
+\midrule
+abstract\_merged\_hzl & somgated & random &     2 &  0.81 &  0.01 \\
+             & somgated\_equal & random &     1 &  0.74 &  0.01 \\
+hcl\_included & merged & random &     1 &  0.85 &  0.00 \\
+\bottomrule
+\end{tabular}

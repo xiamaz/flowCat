@@ -1,0 +1,9 @@
+\begin{tabular}{llllrr}
+\toprule
+            &             &        & count &    f1 &  std \\
+set & name & type &       &       &      \\
+\midrule
+exotic & exotic & random &     1 &  0.79 &  NaN \\
+exotic\_sqrt & exotic\_sqrt & random &     1 &  0.88 &  NaN \\
+\bottomrule
+\end{tabular}

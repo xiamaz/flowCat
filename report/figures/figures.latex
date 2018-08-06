@@ -1,5 +1,5 @@
 \documentclass[11pt,a4paper]{article}
-\usepackage[margin=2cm]{geometry}
+\usepackage[margin=0.5cm]{geometry}
 
 %% adding graphics
 \usepackage{graphicx}

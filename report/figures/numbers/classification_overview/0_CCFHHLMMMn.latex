@@ -1,0 +1,11 @@
+\begin{tabular}{llllrr}
+\toprule
+                        &                  &        & count &    f1 &   std \\
+set & name & type &       &       &       \\
+\midrule
+initial\_comp\_all\_groups & indiv\_pregating\_dedup & random &     1 &  0.71 &  0.01 \\
+                        & indiv\_pregating\_exc\_dedup & random &     1 &  0.70 &  0.01 \\
+                        & normal\_dedup & random &     1 &  0.68 &  0.02 \\
+                        & normal\_exc\_dedup & random &     1 &  0.68 &  0.01 \\
+\bottomrule
+\end{tabular}
