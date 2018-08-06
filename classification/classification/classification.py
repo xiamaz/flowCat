@@ -16,9 +16,9 @@ from sklearn.tree import DecisionTreeClassifier
 from keras.models import Sequential
 from keras.layers import Dense
 
-from lib.upsampling import DataView
-from lib.stamper import create_stamp
-from lib import plotting
+from .upsampling import DataView
+from .stamper import create_stamp
+from . import plotting
 
 
 def create_binarizers(names, create_matrix=True):
@@ -404,9 +404,12 @@ class Classifier:
             logging.info("Create confusion matrix plot.")
             plot_name = os.path.join(
                 self.output_path, tagged_name + "_confusion.png")
+            dendro_name = os.path.join(
+                self.output_path, tagged_name + "_dendro.png")
             plotting.plot_confusion_matrix(
-                confusion_data, self._data.group_names,
-                normalize=True, filename=plot_name)
+                confusion_data, self._data.group_names, normalize=True,
+                filename=plot_name, dendroname=dendro_name
+            )
         # save list of mismatched cases
         if mismatches is not None:
             logging.info("Creating text list from mismatch information.")

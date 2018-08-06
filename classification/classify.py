@@ -8,6 +8,8 @@ import sys
 
 from collections import defaultdict
 
+import numpy as np
+
 from classification.upsampling import DataCollection
 from classification.classification import Classifier, NeuralNet, Tree
 from classification.plotting import plot_combined
@@ -48,6 +50,10 @@ def evaluate(
     for i, view in preprocess_data(data, args):
 
         subname = "{}_{}".format(view.name, i)
+
+        if args.transform == "sqrt":
+            view = view.apply(np.sqrt)
+
         clas = Classifier(view, name=subname, output_path=output_path)
 
         for method_name, method_info in args.methods.items():

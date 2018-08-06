@@ -34,6 +34,7 @@ OPTIONS = --note "$(NOTE)" \
 		  $(MODIFIERS) \
 		  $(SIZE) \
 		  $(INFILTRATION) \
+		  $(EXTRA_ARGS)
 
 
 # Targets

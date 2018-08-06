@@ -16,10 +16,15 @@ import seaborn
 from scipy.cluster import hierarchy
 
 
-def plot_confusion_matrix(confusion_matrix: "numpy.matrix", classes: [str],
-                          normalize: bool = False,
-                          title: str = 'Confusion matrix',
-                          cmap=plt.cm.Blues, filename: str = 'confusion.png'):
+def plot_confusion_matrix(
+        confusion_matrix: "numpy.matrix",
+        classes: [str],
+        normalize: bool = False,
+        title: str = 'Confusion matrix',
+        cmap=plt.cm.Blues,
+        filename: str = 'confusion.png',
+        dendroname: str = "dendro.png",
+):
     """
     This function prints and plots the confusion matrix.
     Normalization can be applied by setting `normalize=True`.
@@ -60,9 +65,9 @@ def plot_confusion_matrix(confusion_matrix: "numpy.matrix", classes: [str],
     plt.figure()
     Y = hierarchy.distance.pdist(confusion_matrix, metric='euclidean')
     Z = hierarchy.linkage(Y, method='single')
-    ax = hierarchy.dendrogram(Z, show_contracted=True, labels=classes)
+    hierarchy.dendrogram(Z, show_contracted=True, labels=classes)
     plt.tight_layout()
-    plt.savefig("testdendro", dpi=300)
+    plt.savefig(dendroname, dpi=300)
 
 
 def plot_history(history: "History", path: str):
@@ -162,7 +167,7 @@ def plot_combined(results: list, path: str) -> None:
                     {
                         k: v for k, v in r["avg_result"].items()
                     }, **{
-                        "train_"+k: v for k, v in r["avg_training"].items()
+                        "train_" + k: v for k, v in r["avg_training"].items()
                     }
                 )
             )
@@ -181,10 +186,11 @@ def plot_combined(results: list, path: str) -> None:
     )
 
     plot_confusion_matrix(
-        confusion_matrix=reduce(lambda x, y: x+y, confusions),
+        confusion_matrix=reduce(lambda x, y: x + y, confusions),
         classes=groups[0],
         normalize=True,
-        filename=os.path.join(output_path, "avg_confusion.png")
+        filename=os.path.join(output_path, "avg_confusion.png"),
+        dendroname=os.path.join(output_path, "avg_dendro.png."),
     )
 
     avg_stats = pd.DataFrame(avg_stats)

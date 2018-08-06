@@ -166,11 +166,34 @@ class BaseData:
         labels = dataframe['group']
         return data, labels
 
+    @staticmethod
+    def split_data_meta(data):
+        """Split into number cols and metadata."""
+        num_data = data[
+            [c for c in data.columns if c.isdigit()]
+        ]
+        meta_data = data[
+            [c for c in data.columns if not c.isdigit()]
+        ]
+        return num_data, meta_data
+
+    @staticmethod
+    def join_data_meta(df_nums, df_labels):
+        """Join values and label dataframes."""
+        joined = df_nums.join(df_labels)
+        return joined
+
 
 class DataView(BaseData):
     '''Contains upsampling data with possiblity to apply filters, keeping
     state.
     '''
+
+    def apply(self, fun):
+        values, labels = self.split_data_meta(self.data)
+        trans = fun(values)
+        self.data = self.join_data_meta(trans, labels)
+        return self
 
     def get_test_train_split(
             self, ratio: float = None, abs_num: int = None,

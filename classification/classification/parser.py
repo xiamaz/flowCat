@@ -65,6 +65,10 @@ class CmdArgs:
             default="holdout:r0.8,kfold:10"
         )
         parser.add_argument(
+            "--transform",
+            help="Transformation of input data.",
+        )
+        parser.add_argument(
             "--group",
             help="Groups included in analysis. Eg g1:CLL,MBL;normal"
         )
@@ -122,6 +126,10 @@ class CmdArgs:
             for m in self.args.method.split(",")
         )
         return method
+
+    @property
+    def transform(self):
+        return self.args.transform
 
     @property
     def infiltration(self):
