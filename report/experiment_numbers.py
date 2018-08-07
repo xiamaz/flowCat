@@ -2,35 +2,23 @@
 """Experiment numbers."""
 from pathlib import Path
 from argparse import ArgumentParser
+
+from report.base import create_parser
 from report.overview import Overview
 
 
 def get_args():
-    parser = ArgumentParser()
-
-    parser.add_argument(
-        "--inpath",
-        help="Folder containing input data.",
-        default="../output",
-        type=Path
-    )
-
-    parser.add_argument(
-        "--outdir",
-        help="Output directory for plots and tables.",
-        default="figures/numbers",
-        type=Path
-    )
-
+    parser = create_parser()
     args = parser.parse_args()
     return args
 
 
 def main():
     args = get_args()
-    view = Overview(args.inpath)
+    view = Overview(args.indir)
     # view.show()
-    view.write(args.outdir)
+    outdir = args.outdir / "numbers"
+    view.write(outdir)
 
 
 if __name__ == "__main__":

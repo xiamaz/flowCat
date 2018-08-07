@@ -8,6 +8,7 @@ from math import sqrt
 from datetime import datetime
 from functools import reduce
 
+import numpy as np
 import pandas as pd
 
 
@@ -98,13 +99,20 @@ def filter_infiltration(prediction_df: pd.DataFrame) -> pd.DataFrame:
     pass
 
 
-def add_prediction_info(experiments: pd.DataFrame) -> pd.DataFrame:
+def add_prediction_info(
+        experiments: pd.DataFrame,
+        latest_only=True
+) -> pd.DataFrame:
     """Add prediction information to dataframe and drop rows without this
     info."""
     # only work on most recent version of experiment
-    most_recent = experiments.groupby(["set", "name", "type"]).apply(
-        lambda d: d.loc[d["time"].idxmax()]
-    )
+    if latest_only:
+        most_recent = experiments.groupby(["set", "name", "type"]).apply(
+            lambda d: d.loc[d["time"].idxmax()]
+        )
+    else:
+        most_recent = experiments.set_index(["set", "name", "type"])
+
     most_recent["predictions"] = most_recent["path"].apply(
         lambda p: get_prediction_paths(p)
     )
@@ -113,6 +121,13 @@ def add_prediction_info(experiments: pd.DataFrame) -> pd.DataFrame:
     ]
 
     return most_recent
+
+
+def df_prediction_cols(data: pd.DataFrame) -> np.matrix:
+    predictions = data.select_dtypes("number").drop(
+        "infiltration", axis=1
+    ).astype("float32")
+    return predictions
 
 
 def load_json(path: str):

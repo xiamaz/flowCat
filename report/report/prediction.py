@@ -1,236 +1,106 @@
-import typing
-
 import numpy as np
 import pandas as pd
 
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.metrics import roc_auc_score, roc_curve
 
-from .base import Reporter
-from .file_utils import load_metadata
+from . import base, file_utils
+from .stats import auc, accuracy, experiment
+from .base import Reporter, plot_figure
 
 
-def df_prediction_cols(data: pd.DataFrame) -> np.matrix:
-    predictions = data.select_dtypes("number").drop(
-        "infiltration", axis=1
-    ).astype("float32")
-    return predictions
+def name_diff(first, second):
+    """Create shorter name from difference."""
+    ftokens = {t for w in first for t in w.split("_")}
+    stokens = {t for w in second for t in w.split("_")}
 
+    uniq_tokens = ftokens ^ stokens
+    common_tokens = [
+        f for f in (ftokens & stokens) if f not in ["random", "dedup"]]
 
-def prediction_ranks(row: pd.Series) -> [str]:
-    """Get a list of predictions in descending order."""
-    labels = row.index[np.argsort(row)[::-1]]
-    return labels
-
-
-def predict(row: pd.Series, threshold=0):
-    """Get prediction or return uncertain if below threshold."""
-    pred = row.idxmax()
-    return pred if row[pred] >= threshold else "uncertain"
-
-
-def top2(data: pd.DataFrame, normal_t1=True) -> pd.Series:
-    """Get the top 2 classifications, while leaving normal as top 1."""
-    results = {}
-
-    pdata = df_prediction_cols(data)
-    group_names = list(pdata.columns)
-    groups = zip(list(range(len(pdata.columns))), group_names)
-
-    gnums = np.vectorize(lambda x: group_names.index(x))(data["group"])
-    preds = np.argsort(pdata.values, axis=1)
-
-    t1 = preds[:, -1] == gnums
-    t2 = preds[:, -2] == gnums
-
-    nnormal = list(pdata.columns).index("normal")
-    normal = preds[:, -1] == nnormal
-
-    if normal_t1:
-        groups = [(i, n) for i, n in groups if n != "normal"]
-        corr = sum(normal[gnums == nnormal]) / sum(gnums == nnormal)
-        results["normal"] = [corr, 0, 1 - corr]
-
-    for i, name in groups:
-        selection = gnums == i
-        group_size = sum(selection)
-        if normal_t1:
-            selection = selection & (~normal)
-
-        corr = sum(t1[selection] | t2[selection]) / group_size
-        results[name] = [corr, 0, 1 - corr]
-
-    return pd.DataFrame.from_dict(
-        results,
-        orient="index",
-        columns=["correct", "uncertain", "incorrect"]
-    ).sort_index()
-
-
-def df_get_predictions_t1(data: pd.DataFrame) -> pd.DataFrame:
-    """Get dataframe of prediction names with certainties for each case."""
-
-    pdata = df_prediction_cols(data)
-    preds = np.argmax(pdata.values, axis=1)
-    maxvals = pdata.values[np.arange(len(preds)), preds]
-    pred_names = np.vectorize(lambda x: pdata.columns[x])(preds)
-    rdata = pd.DataFrame(
-        {
-            "group": data["group"].values,
-            "prediction": pred_names,
-            "certainty": maxvals,
-        },
-        index=data.index
+    name = "{}_comp_{}".format(
+        "-".join(sorted(common_tokens)), "-".join(sorted(uniq_tokens))
     )
-    return rdata
+    return name
 
 
-def top1_uncertainty(data: pd.DataFrame, threshold=0.5) -> pd.DataFrame:
-    """Adding a threshold below which cases are sorted to uncertain class."""
-    results = {}
-
-    pdata = df_prediction_cols(data)
-
-    preds = np.argmax(pdata.values, axis=1)
-    maxvals = pdata.values[np.arange(len(preds)), preds]
-    gnums = np.vectorize(
-        lambda x: list(pdata.columns).index(x)
-    )(data["group"])
-    rdata = np.stack((gnums, preds, maxvals), axis=1)
-
-    all_acc_dict = {"corr": 0, "all": 0}
-    for i, name in enumerate(pdata.columns):
-        group_data = rdata[rdata[:, 0] == i]
-        correct = group_data[:, 1] == i
-        certain = group_data[:, 2] >= threshold
-
-        all_acc_dict["corr"] += sum(correct)
-        all_acc_dict["all"] += group_data.shape[0]
-
-        results[name] = [
-            sum(correct & certain) / group_data.shape[0],
-            sum(~certain) / group_data.shape[0],
-            sum((~correct) & certain) / group_data.shape[0],
-        ]
-    print("Overall acc: {}".format(all_acc_dict["corr"] / all_acc_dict["all"]))
-    return pd.DataFrame.from_dict(
-        results, orient="index", columns=["correct", "uncertain", "incorrect"]
-    )
-
-
-def auc(data: pd.DataFrame) -> pd.DataFrame:
-    """ROC and AUC calculations. This is done one-vs-all for each call.
-    macro - take for each group and average after
-    micro - count each sample
+class Prediction(base.Reporter):
+    """Create prediction analysis results from classification and analysis
+    using different statistical methods.
     """
-    scores = df_prediction_cols(data)
-    binarizer = LabelBinarizer()
-    true_labels = binarizer.fit(scores.columns).transform(data["group"].values)
 
-    auc = {
-        "macro": [roc_auc_score(true_labels, scores, average="macro")],
-        "micro": [roc_auc_score(true_labels, scores, average="micro")]
-    }
-    return pd.DataFrame.from_dict(auc, columns=["auc"], orient="index")
-
-
-def auc_one(data: pd.DataFrame, pos_label) -> float:
-    """Calculate ROC AUC in a one-vs-all manner."""
-    return roc_auc_score(data["group"] == pos_label, data[pos_label])
-
-
-def auc_one_vs_all(data: pd.DataFrame) -> dict:
-    """Calculate one-vs-all auc for all groups in dataframe."""
-    return {
-        group: auc_one(data, group)
-        for group in data["group"].unique()
-    }
-
-
-def roc(data: pd.DataFrame) -> dict:
-    """Calculate ROC curve. Initially only using macro approach.
-    """
-    results = {}
-    for name in data["group"].unique():
-        fpr, tpr, thres = roc_curve(
-            data["group"], data[name], pos_label=name
-        )
-        results[name] = pd.DataFrame.from_dict(
-            {"fpr": fpr, "tpr": tpr, "thres": thres}
-        )
-    result = pd.concat(results.values(), keys=results.keys())
-    result.index.rename("positive", level=0, inplace=True)
-    return result
-
-
-def df_stats(data: pd.DataFrame) -> pd.DataFrame:
-    """Create a dataframe containing different metrics in rows and df as
-    row."""
-    testdict = {
-        "top1_t04": lambda d: top1_uncertainty(d, threshold=0.4),
-        "top1_t06": lambda d: top1_uncertainty(d, threshold=0.6),
-        "top1_t08": lambda d: top1_uncertainty(d, threshold=0.8),
-        "top2_n+": lambda d: top2(d, normal_t1=False),
-        "top2_n-": lambda d: top2(d, normal_t1=True),
-    }
-    result = pd.concat(
-        [fun(data) for fun in testdict.values()], keys=testdict.keys()
-    ).swaplevel(0, 1).sort_index()
-    return result
-
-
-class Prediction(Reporter):
-    """Create prediction analysis results from classification."""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def plot_experiment(self, row, path):
-        """Create plots for the given experiment."""
+        self._classification = None
 
-        pname = "{}_{}_{}".format(*row.name)
-
-        plotpath = os.path.join(path, "predictions_{}".format(pname))
-        somiter_data = load_predictions(row["predictions"])
-        metadata = load_metadata(row["path"])[0]
-
-        rocpath = plotpath + "_auc.png"
-        if not os.path.exists(rocpath):
-            fig = plot_avg_roc_curves(somiter_data)
-            fig.savefig(rocpath, dpi=200)
-        else:
-            print("{} already exists. Not recreating".format(rocpath))
-
-        chartpath = plotpath + "_stats.png"
-        if not os.path.exists(chartpath):
-            chart = avg_stats_plot(somiter_data)
-            chart.save(chartpath)
-        else:
-            print("{} already exists. Not recreating".format(chartpath))
-
-        return pd.Series(
-            name=row.name,
-            data=[
-                metadata["note"],
-                ", ".join(metadata["group_names"]),
-            ],
-            index=[
-                "note",
-                "groups",
+    @property
+    def classification(self):
+        """Get relevant experiments."""
+        if self._classification is None:
+            filtered = self.classification_files.loc[
+                self.classification_files["set"] != "old"
             ]
-        )
+            pred = file_utils.add_prediction_info(filtered, latest_only=False)
+            self._classification = pred.sort_index()
+        return self._classification
 
-    def plot_experiments(self, path):
-        """Return statistics average over multiple iterations."""
+    def select_sets(self, seta, setb):
+        """Select data based on multiindex selection."""
+        data_a = self.classification.loc[seta]
+        if isinstance(data_a, pd.Series):
+            data_a = data_a.to_frame().transpose()
 
-        prediction_data = add_prediction_info(self.classification_files)
-        meta = prediction_data.apply(
-            lambda x: self.plot_experiment(x, path), axis=1
-        )
-        return meta
+        data_b = self.classification.loc[setb]
+        if isinstance(data_b, pd.Series):
+            data_b = data_b.to_frame().transpose()
+        return data_a, data_b
+
+    def compare(self, seta, setb, path):
+        """Create comparisons for the comparison."""
+        diff_name = name_diff(seta, setb)
+        outdir = path / diff_name
+        outdir.mkdir(exist_ok=True, parents=True)
+
+        exp_a, exp_b = self.select_sets(seta, setb)
+
+        def create_stat(exp):
+            res = {}
+            for name, row in exp.iterrows():
+                res[name] = self.experiment_stats(row, outdir)
+            stats_df = pd.concat(res.values(), keys=res.keys()).sort_index()
+            return stats_df
+
+        stat_a = create_stat(exp_a)
+        stat_b = create_stat(exp_b)
+
+        return experiment.ttest_exp_sets(stat_a, stat_b)
+
+
+    def experiment_stats(self, row, path):
+        """Create plots for the given experiment."""
+        # load prediction data
+        predictions = file_utils.load_predictions(row["predictions"])
+
+        # roc plot path
+        pname = "-".join(row.name)
+        roc_path = path / "{}_auc.png".format(pname)
+        if not roc_path.exists():
+            with base.plot_figure(roc_path, figsize=(8, 8), dpi=200) as ax:
+                auc.avg_roc_plot(predictions, ax)
+
+        # get list of average binary auc per experiment
+        auc_df = auc.auc_dfs(predictions)
+        acc_df = accuracy.acc_table_dfs(predictions)
+        stats_df = pd.concat([auc_df, acc_df])
+        stats_df.index.rename(["subexp", "method"], inplace=True)
+
+        return stats_df
 
     def write(self, path):
+        print(self.classification_files)
         # create plots for each experiment
-        metadata = self.plot_experiments(path)
+        # metadata = self.plot_experiments(path)
         # additionally save metadata as latex table
-        tpath = os.path.join(path, "prediction_meta.tex")
-        df_save_latex(metadata, tpath, "llllp{6cm}")
+        # tpath = os.path.join(path, "prediction_meta.tex")
+        # df_save_latex(metadata, tpath, "llllp{6cm}")

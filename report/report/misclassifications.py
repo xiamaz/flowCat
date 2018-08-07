@@ -202,8 +202,7 @@ class Misclassifications(Reporter):
             method="macro"
         )
         print(hi_freq)
-
-        df_save_latex(hi_freq, tpath)
+        hi_freq.to_latex(tpath)
         hi_freq.to_csv(csv_path)
 
         freq_plot_path = os.path.join(path, "missed_frequency.png")

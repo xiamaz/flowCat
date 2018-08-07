@@ -1,8 +1,13 @@
 """Base reporting objects."""
 from pathlib import Path
 from enum import Enum
+from argparse import ArgumentParser
+from contextlib import contextmanager
 
 import pandas as pd
+
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 from .file_utils import load_experiments, load_metadata
 
@@ -17,6 +22,35 @@ class SplitType(Enum):
     """Type of experiment split."""
     KFOLD = 1
     HOLDOUT = 2
+
+
+@contextmanager
+def plot_figure(plotpath, *args, **kwargs):
+    """Provide context for plotting with automatic drawing and saving."""
+    fig = Figure(*args, **kwargs)
+    ax = fig.add_subplot(111)
+    yield ax
+    FigureCanvas(fig)
+    fig.savefig(plotpath)
+
+
+def create_parser(description=""):
+    """Create basic parser defining input and output folder."""
+    parser = ArgumentParser(description=description)
+    parser.add_argument(
+        "--indir",
+        help="Folder containing input data.",
+        default="../output",
+        type=Path
+    )
+
+    parser.add_argument(
+        "--outdir",
+        help="Output directory for plots and tables.",
+        default="figures",
+        type=Path
+    )
+    return parser
 
 
 class Reporter:

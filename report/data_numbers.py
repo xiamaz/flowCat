@@ -16,7 +16,6 @@ from argparse import ArgumentParser
 from enum import IntEnum
 
 from collections import defaultdict
-from contextlib import contextmanager
 
 import numpy as np
 import pandas as pd
@@ -30,6 +29,7 @@ import seaborn as sns
 from scipy.stats import gaussian_kde
 
 from clustering.collection import CaseCollection
+from report.plotting import plot_figure
 
 DESC = """Overview numbers for the given case collection in the specified
 bucket.
@@ -109,17 +109,6 @@ print("\n".join([
         ])
     ) for d in dissimilar_tubes
 ]))
-
-
-# optional plotting
-@contextmanager
-def plot_figure(plotpath, *args, **kwargs):
-    """Provide context for plotting with automatic drawing and saving."""
-    fig = Figure(*args, **kwargs)
-    ax = fig.add_subplot(111)
-    yield ax
-    FigureCanvas(fig)
-    fig.savefig(plotpath)
 
 
 class Cohort(IntEnum):
@@ -202,7 +191,7 @@ def plot_event_count(view, title="Event count plots", path=""):
                 )
             )
 
-            ccount["<= {}".format(percentile)] = "{} (max {})".format(
+            ccount["$\\leq$ {}".format(percentile)] = "{} (max {})".format(
                 len(pdata), max(pdata) if pdata else 0
             )
         count_nums.append(ccount)
@@ -211,7 +200,7 @@ def plot_event_count(view, title="Event count plots", path=""):
         count_nums, index=all_event_counts.keys()
     )
     tablepath = os.path.join(path, "event_counts.latex")
-    count_df.to_latex(tablepath)
+    count_df.to_latex(tablepath, escape=False)
 
     plotpath = os.path.join(path, "event_distribution")
     with plot_figure(plotpath) as axes:

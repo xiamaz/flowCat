@@ -8,7 +8,6 @@ sys.path.insert(0, "../classification")
 from multiprocessing import Pool
 from pathlib import Path
 from argparse import ArgumentParser
-from contextlib import contextmanager
 
 import pandas as pd
 
@@ -20,7 +19,7 @@ from matplotlib.figure import Figure
 from matplotlib import cm
 
 from classification.upsampling import InputData
-
+from report.plotting import plot_figure
 
 def parse_arguments():
     """Get paths and desires processing method from command line arguments."""
@@ -36,18 +35,6 @@ def parse_arguments():
 
     args = parser.parse_args()
     return args
-
-
-@contextmanager
-def new_plot(path, title=""):
-    fig = Figure(figsize=(6, 6), dpi=100)
-    ax = fig.add_subplot(111)
-
-    yield ax
-
-    ax.set_title(title)
-    FigureCanvas(fig)
-    fig.savefig(path)
 
 
 def scatterplot(data, labels, uniques, ax):
@@ -87,8 +74,9 @@ def create_plot(transfun, title, path, index, data, label, unique):
 
     plotpath = str(path) + "_{}".format(index)
 
-    with new_plot(plotpath, title) as ax:
+    with plot_figure(plotpath, figsize=(6, 6), dpi=100) as ax:
         scatterplot(tdata, label, unique, ax)
+        ax.set_title(title)
 
 
 def create_histogram(title, path, index, data, label, unique):

@@ -7,3 +7,18 @@
    \includegraphics[width=\linewidth]{classification/testdendro.png}
    \caption{Hierarchical clustered dendrogram of misclassifications. Groups that share misclassifications are grouped closer.}
 \end{figure}
+
+\begin{table}
+   \caption{Significance tests for some implemented adaptations. Dataset a (normal) is always compared against b (with modifications) with the number of results used for analysis given. p-values are calculated using Welch's t-test. Primarily because of possible differences in variance depending on modifications to the consensus SOM generation. An unjoined 9-class analysis (without HCLv) is always used for analysis unless stated otherwise. Global top 1 accuracies counting single cases are used as the metric.}
+   \input{classification/comparisons.latex}
+\end{table}
+
+\begin{figure}
+   \begin{subfigure}{0.49\columnwidth}
+      \includegraphics[width=\columnwidth]{classification/abstract-groups-single_comp_dedup-normal-somgated/abstract_single_groups-normal_dedup-random_auc.png}
+   \end{subfigure}
+   \begin{subfigure}{0.49\columnwidth}
+      \includegraphics[width=\columnwidth]{classification/abstract-groups-single_comp_dedup-normal-somgated/abstract_single_groups-somgated-random_auc.png}
+   \end{subfigure}
+   \caption{ROC curve for one-vs-all comparisons between a 9-class classification with a normal pipeline (left) and a somgated pipeline (pregating and subsequent generation of consensus SOM using SOM node weights instead of raw fcs data --- right). Curves are averaged between all runs through binning. The colored area around a graph represents the standard deviation.}
+\end{figure}

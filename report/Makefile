@@ -14,5 +14,5 @@ numbers:
 	python3 ./experiment_numbers.py
 
 .PHONY: figures
-figures: numbers
+figures: # numbers
 	cd figures && latexmk -pdf $@.latex && latexmk -pdf -c $@.latex

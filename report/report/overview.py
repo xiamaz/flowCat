@@ -6,19 +6,10 @@ from math import sqrt
 import pandas as pd
 
 from .file_utils import (
-    load_experiments, load_predictions, load_metadata,
-    add_avg_stats, add_prediction_info
-)
-from .plotting import (
-    experiments_plot,
-    plot_avg_roc_curves,
-    avg_stats_plot,
-    plot_frequency
+    load_experiments, load_predictions, load_metadata, add_avg_stats
 )
 
 from .base import Reporter
-
-from .pd_latex import df_save_latex
 
 
 SUBTABLE_TEMP = r"""\begin{{subtable}}{{.49\textwidth}}
