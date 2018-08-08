@@ -86,7 +86,6 @@ class CaseIterable:
     """Iterable collection for cases. Base class."""
 
     def __init__(self):
-
         self._tubes = None
         self._groups = None
         self._current = None
@@ -124,6 +123,11 @@ class CaseIterable:
 
         return self._groups
 
+    @property
+    def json(self):
+        """Return dict represendation of content."""
+        return [c.json for c in self]
+
     def __getitem__(self, key):
         return self.data[key]
 
@@ -157,7 +161,11 @@ class CaseCollection(CaseIterable):
     """Get case information from info file and remove errors and provide
     overview information."""
 
-    def __init__(self, inputpath: str, tubes: list):
+    def __init__(self, inputpath: str, tubes: [int] = []):
+        """
+        :param inputpath: Input directory containing cohorts and a info file.
+        :param tubes: List of selected tubes.
+        """
         super().__init__()
 
         self._path = inputpath
@@ -223,17 +231,20 @@ class CaseCollection(CaseIterable):
                 ]
             ))
 
-        return CaseView(data, self.markers, **kwargs)
+        return CaseView(
+            data, self.markers, tubes=self.selected_tubes, **kwargs
+        )
 
 
 class CaseView(CaseIterable):
     """Filtered view into the base data. Perform all mutable
     actions on CaseView instead of CaseCollection."""
 
-    def __init__(self, data, markers):
+    def __init__(self, data, markers, tubes=[]):
         super().__init__()
         self.data = data
         self.markers = markers
+        self.selected_tubes = tubes
 
     def get_tube(self, tube: int) -> "TubeView":
         return TubeView(
@@ -242,6 +253,14 @@ class CaseView(CaseIterable):
             ],
             self.markers[tube]
         )
+
+    def download_all(self):
+        """Download selected tubes for cases into the download folder
+        location."""
+        for case in self:
+            for tube in self.selected_tubes:
+                # touch the data to load it
+                print("Loaded df with shape: ", case.get_tube(tube).data.shape)
 
 
 class TubeView:

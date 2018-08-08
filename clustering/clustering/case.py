@@ -40,6 +40,7 @@ class Material(Enum):
 class Case:
     """Basic case object containing all metadata for a case."""
     def __init__(self, data: dict, path: str = ""):
+        self._json = data
 
         self.path = path
 
@@ -57,6 +58,10 @@ class Case:
         self.id = data["id"]
 
         self.filepaths = data["filepaths"]
+
+    @property
+    def json(self):
+        return self._json
 
     @property
     def filepaths(self):
