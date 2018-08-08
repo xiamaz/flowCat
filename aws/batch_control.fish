@@ -1,5 +1,10 @@
 #!/usr/bin/fish
 
+set HELPTEXT "AWS Batch Queue operations.
+Possible commands:
+    ls <queue_name>? - list possbile queues or if given a queue list all jobs on the selected queue
+    rmall <queue_name> - remove all jobs on the selected queue"
+
 function list_queues
 	aws batch describe-job-queues --query 'jobQueues[*].[jobQueueName]' --output text
 end
@@ -43,6 +48,11 @@ function cancel_all_jobs
 			cancel_job $job "Batch cancellation."
 		end
 	end
+end
+
+if contains -- $argv[1] -h --help; or [ (count $argv) -eq 0 ]
+	echo $HELPTEXT
+	exit
 end
 
 switch $argv[1]

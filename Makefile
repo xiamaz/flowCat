@@ -14,7 +14,7 @@ ecr: clustering.ecr classification.ecr
 	docker build -t $(basename $@) ./$(basename $@)
 
 %.run: %.img
-	docker run --mount type=bind,source=$$HOME/.aws,target=/root/.aws $(basename $@) $(CMD)
+	docker run --mount type=bind,source=/home/max/.aws,target=/root/.aws $(basename $@) $(CMD)
 
 login:
 	@eval $$(sudo -u max aws ecr get-login --no-include-email --region eu-central-1)
