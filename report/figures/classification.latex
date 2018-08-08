@@ -4,8 +4,13 @@
 \end{figure}
 
 \begin{figure}
-   \includegraphics[width=\linewidth]{classification/testdendro.png}
-   \caption{Hierarchical clustered dendrogram of misclassifications. Groups that share misclassifications are grouped closer.}
+   \begin{subfigure}{0.49\columnwidth}
+      \includegraphics[width=\columnwidth]{classification/single_groups_with_hcl/avg_confusion.png}
+   \end{subfigure}
+   \begin{subfigure}{0.49\columnwidth}
+      \includegraphics[width=\columnwidth]{classification/single_groups_with_hcl/avg_dendro.png}
+   \end{subfigure}
+   \caption{Hierarchical clustering using pairwise distances in the normalized misclassification table for the 9-class classification using the somgated approach in consensus SOM generation and upsampling.}
 \end{figure}
 
 \begin{table}
