@@ -4,6 +4,7 @@ Neural network classification using keras
 import os
 import logging
 import json
+import enum
 from datetime import datetime
 from typing import Callable, List, Union
 from collections import defaultdict
@@ -14,7 +15,7 @@ import sklearn.metrics as skm
 from sklearn.tree import DecisionTreeClassifier
 
 from keras.models import Sequential
-from keras.layers import Dense
+from keras import layers
 
 from .upsampling import DataView
 from .stamper import create_stamp
@@ -113,6 +114,74 @@ class Tree:
         return result
 
 
+class ConvNet:
+    """Basic testing conv net."""
+    def __init__(self):
+        self.model = None
+        self.binarizer = None
+        self.debinarizer = None
+        self.groups = None
+        self.history = None
+
+    def _to_2d(self, Xmatrix):
+        """Reshape case x histo data into a 2d map, similar to the
+        initial SOM. Width needed for easier reshaping.
+        """
+        records, cols = Xmatrix.shape
+        width = int(np.sqrt(cols))
+        newshape = np.reshape(Xmatrix, (records, width, width, 1))
+        print(newshape.shape)
+        return newshape
+
+    def fit(self, X, *_):
+        xdata, ydata = DataView.split_data_labels(X)
+        x_matrix = self._to_2d(xdata.values)
+        self.binarizer, self.debinarizer, self.groups = \
+            create_binarizer_from_data(ydata)
+        y_matrix = ydata.apply(self.binarizer).values
+
+        # create convnet
+        model = Sequential()
+        model.add(layers.Conv2D(
+            32, kernel_size=(4, 4), strides=(1, 1),
+            activation="relu",
+            input_shape=(10, 10, 1)
+        ))
+        model.add(layers.MaxPooling2D(
+            pool_size=(2, 2), strides=(2, 2)
+        ))
+        model.add(layers.Flatten())
+        model.add(layers.Dense(
+            units=y_matrix.shape[1], activation="softmax"
+        ))
+        model.compile(loss='categorical_crossentropy', optimizer='adam',
+                      metrics=['acc'])
+        self.model = model
+
+        self.history = self.model.fit(
+            x_matrix, y_matrix, epochs=100, batch_size=32,
+        )
+        return self
+
+    def predict_classes(self, X, *_):
+        xdata, ydata = DataView.split_data_labels(X)
+        x_matrix = self._to_2d(xdata.values)
+        y_pred = self.model.predict_classes(
+            x_matrix, batch_size=128
+        )
+        result = [self.debinarizer(x, matrix=False) for x in y_pred]
+        return result
+
+    def predict(self, X, *_):
+        xdata, ydata = DataView.split_data_labels(X)
+        x_matrix = self._to_2d(xdata.values)
+        y_pred = self.model.predict(
+            x_matrix, batch_size=128
+        )
+        y_pred_df = pd.DataFrame(y_pred, columns=self.groups, index=X["label"])
+        return y_pred_df
+
+
 class NeuralNet:
     """Basic keras neural net."""
     def __init__(
@@ -136,14 +205,16 @@ class NeuralNet:
         why the binarizer is necessary)
         '''
         model = Sequential()
-        model.add(Dense(units=10,
-                        activation="elu",
-                        input_dim=xshape,
-                        kernel_initializer='uniform'))
-        # model.add(Dense(units=10,
-        #                 activation="elu"))
-        model.add(Dense(units=yshape,
-                        activation="softmax"))
+        model.add(layers.Dense(
+            units=10, activation="elu",
+            input_dim=xshape, kernel_initializer='uniform'
+        ))
+        model.add(layers.Dense(
+            units=10, activation="elu"
+        ))
+        model.add(layers.Dense(
+            units=yshape, activation="softmax"
+        ))
         model.compile(loss='categorical_crossentropy', optimizer='adadelta',
                       metrics=['acc'])
         return model
@@ -183,8 +254,21 @@ class NeuralNet:
         return y_pred_df
 
 
+class MODELS(enum.Enum):
+    """Enumeration for all current models."""
+    NeuralNet = NeuralNet
+    Tree = Tree
+    ConvNet = ConvNet
+
+    @classmethod
+    def from_str(cls, instr):
+        return cls[instr]
+
+    def get_model(self):
+        return self.value
+
+
 class Classifier:
-    '''Basic sequential dense classifier.'''
 
     def __init__(
             self,

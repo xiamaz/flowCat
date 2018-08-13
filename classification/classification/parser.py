@@ -6,6 +6,7 @@ from collections import defaultdict
 from argparse import ArgumentParser
 
 from .upsampling import ViewModifiers
+from . import classification
 
 RE_TUBE_NAME = re.compile(r"/tube(\d+)\.csv$")
 
@@ -63,6 +64,11 @@ class CmdArgs:
             "--method",
             help="Analysis method. Holdout or kfold. <name>:<prefix><num>",
             default="holdout:r0.8,kfold:10"
+        )
+        parser.add_argument(
+            "--model",
+            help="Model used for transformation.",
+            default="NeuralNet", type=classification.MODELS.from_str
         )
         parser.add_argument(
             "--transform",
@@ -130,6 +136,10 @@ class CmdArgs:
     @property
     def transform(self):
         return self.args.transform
+
+    @property
+    def model(self):
+        return self.args.model.get_model()
 
     @property
     def infiltration(self):

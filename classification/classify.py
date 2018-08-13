@@ -45,7 +45,7 @@ def evaluate(
 
     output_path = os.path.join(args.output, name)
 
-    modelfunc = NeuralNet
+    modelfunc = args.model
 
     for i, view in preprocess_data(data, args):
 
@@ -53,6 +53,10 @@ def evaluate(
 
         if args.transform == "sqrt":
             view = view.apply(np.sqrt)
+        elif args.transform == "cbrt":
+            view = view.apply(np.cbrt)
+        elif args.transform == "log1p":
+            view = view.apply(np.log1p)
 
         clas = Classifier(view, name=subname, output_path=output_path)
 
