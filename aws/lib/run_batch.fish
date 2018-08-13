@@ -1,17 +1,20 @@
 #!/usr/bin/fish
 # Define some convenience features for AWS Batch control
 
-set QUEUE "GPU-Queue"
-set DEFINITION "Clustering:11"
-
 set opt --output text
 
 set STATUS SUBMITTED PENDING RUNNABLE STARTING RUNNING
 
 # List all submitted jobs in any active status
 function batchjobs
+	if [ (count $argv) -ne 1 ]
+		echo "Usage:
+		1 - Job queue name"
+		exit
+	end
+	set queue $argv[1]
 	for stat in $STATUS
-		aws batch list-jobs --job-queue $QUEUE --job-status $stat $opt | awk '{print $4}'
+		aws batch list-jobs --job-queue $queue --job-status $stat $opt | awk '{print $4}'
 	end
 end
 
@@ -20,27 +23,39 @@ function batchls
 	aws batch describe-job-definitions --status ACTIVE $opt | awk 'BEGIN { FS = "[ \t]+" };/JOBDEFINITIONS/ {print $3 ":" $4}'
 end
 
-# Submit a job into the control system
-# Params:
-# $1 - Name of the job visible in AWS Batch
-# Optional Params:
-# $2 - Makefile target to run or Command to provide to the container
-# Optional Params for specific makefile setups
-# $3 - Experiment name
-# $4 - Experiment tag, multiple experiments can be organized into a set with
-# a distinct tag
-# $5 - Experiment suffix, mostly used as an iteration value with otherwise
-# identical setups
-function batchsub
+# Submit a clustering job
+function submit_clustering
+	if [ (count $argv) -ne 5 ]
+		echo "Usage:
+		1 - jobname
+		2 - make target name
+		3 - experiment name
+		4 - tag name
+		5 - experiment suffix"
+		exit
+	end
 	set jobname $argv[1]
-	if not contains $jobname (batchjobs)
-		if [ (count $argv) -ge 3 ]
-			aws batch submit-job --job-definition $DEFINITION --job-queue $QUEUE --job-name $jobname --parameters target=$argv[2] --container-overrides environment="[{name=EXP_NAME,value=$argv[3]},{name=TAG_NAME,value=$argv[4]},{name=SUFFIX,value=_$argv[5]}]"
-		else if [ (count $argv) -eq 2 ]
-			aws batch submit-job --job-definition $DEFINITION --job-queue $QUEUE --job-name $jobname --container-overrides command=$argv[2]
-		else
-			aws batch submit-job --job-definition $DEFINITION --job-queue $QUEUE --job-name $jobname
-		end
+	if not contains $jobname (batchjobs "GPU-Queue")
+		aws batch submit-job --job-definition "Clustering:11" --job-queue "GPU-Queue" --job-name $jobname --parameters target=$argv[2] --container-overrides environment="[{name=EXP_NAME,value=$argv[3]},{name=TAG_NAME,value=$argv[4]},{name=SUFFIX,value=_$argv[5]}]"
+	else
+		echo "$jobname already submitted"
+	end
+end
+
+# Submit a classification job
+function submit_classification
+	if [ (count $argv) -lt 3 ]
+		echo "Usage:
+		1 - jobname
+		2 - runscript target directory or makefile
+		3 - extra depends"
+		exit
+	end
+	set jobname $argv[1]
+	set command $argv[2]
+	set depends $argv[3]
+	if not contains $jobname (batchjobs "CPU-Queue")
+		aws batch submit-job --job-definition "Classification:3" --job-queue "CPU-Queue" --job-name $jobname --container-overrides command=$command --depends-on $argv[3..-1]
 	else
 		echo "$jobname already submitted"
 	end
@@ -60,7 +75,7 @@ function submit_jobs
 			for i in (seq 1 $RAND)
 				set expname $TAG"_"$experiment"_"$run"_"$i
 				echo "Creating $run $expname with $expfile"
-				batchsub $expname $run $expfile $TAG $i
+				submit_clustering $expname $run $expfile $TAG $i
 			end
 		end
 	end
