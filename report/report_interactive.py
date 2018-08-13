@@ -7,11 +7,32 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import bspline
 
-from report.misclassifications import Misclassifications, get_groups
-from report.report import mean_confidence_interval
+from report import prediction, file_utils
+from report.stats import accuracy
 
-from report.prediction import top1_uncertainty, top2
-from report.file_utils import load_predictions
+
+def experiment_accuracies(sel_exps):
+    """Get experiment accuracies."""
+    res = []
+    for _, sel_row in sel_exps.iterrows():
+        sel_row = sel_exps.iloc[0, :]
+        pdata = file_utils.load_predictions(sel_row["predictions"])
+        sel_accs = accuracy.acc_table_dfs(pdata)
+        # average values over all sets
+        res.append(sel_accs)
+
+    avg_accs = pd.concat(res)
+    return avg_accs.mean(level=1)
+
+
+# get different accuracies for the selected set of experiments
+pred = prediction.Prediction()
+sel_normal = pred.classification.loc["abstract_single_groups_sqrt", "normal", "random"]
+sel_somgated = pred.classification.loc["abstract_single_groups_sqrt", "somgated", "random"]
+
+print(experiment_accuracies(sel_normal))
+print(experiment_accuracies(sel_somgated))
+
 
 
 def add_infiltration(data, infiltrations):
