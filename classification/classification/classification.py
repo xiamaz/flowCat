@@ -14,8 +14,7 @@ import numpy as np
 import sklearn.metrics as skm
 from sklearn.tree import DecisionTreeClassifier
 
-from keras.models import Sequential
-from keras import layers
+from keras import layers, models
 
 from .upsampling import DataView
 from .stamper import create_stamp
@@ -85,8 +84,8 @@ def t2_accuracy_score(truth: list, t2pred: pd.DataFrame):
     return sum(tall) / len(truth)
 
 
-class Tree:
-    """A normal tree."""
+class BaseClassifier:
+    """Basic classifier model."""
     def __init__(self):
         self.model = None
         self.binarizer = None
@@ -94,34 +93,78 @@ class Tree:
         self.history = None
         self.groups = None
 
-    def fit(self, X, *_):
+    def _fit_input(self, X, matrix=True):
         xdata, ydata = DataView.split_data_labels(X)
         x_matrix = xdata.values
         self.binarizer, self.debinarizer, self.groups = \
-            create_binarizer_from_data(ydata, matrix=False)
+            create_binarizer_from_data(ydata, matrix=matrix)
         y_matrix = ydata.apply(self.binarizer).values
+        return x_matrix, y_matrix
+
+    def _pred_input(self, X):
+        xdata, ydata = DataView.split_data_labels(X)
+        return xdata.values
+
+
+class Tree(BaseClassifier):
+    """A normal tree."""
+
+    def fit(self, X, *_):
+        x_matrix, y_matrix = self._fit_input(X, matrix=False)
 
         self.model = DecisionTreeClassifier()
         self.model.fit(x_matrix, y_matrix)
         return self
 
     def predict(self, X, *_):
-        xdata, _ = DataView.split_data_labels(X)
-        x_matrix = xdata.values
+        x_matrix = self._pred_input(X)
 
         y_pred = self.model.predict(x_matrix)
         result = [self.debinarizer(x, matrix=False) for x in y_pred]
         return result
 
 
-class ConvNet:
+class BaseMultiTube(BaseClassifier):
+    """Classification with individual tubes split into multiple
+    inputs for neural network classification."""
+
+    def _split_tubes(self, Xmatrix, length=100):
+        """Split the matrix containing joined tubes into individual segments.
+        Joining and splitting again is reasonable to keep the rowwise relation
+        of individual cases."""
+        _, width = Xmatrix.shape
+        chunks = int(width / length)
+
+        splits = np.hsplit(Xmatrix, chunks)
+        return splits
+
+    def predict_classes(self, X, *_):
+        y_pred = self.predict(X).values
+        if y_pred.shape[-1] > 1:
+            preds = np.argmax(y_pred, axis=-1)
+        else:
+            preds = (y_pred > 0.5).astype('int32')
+
+        result = [self.debinarizer(x, matrix=False) for x in preds]
+        return result
+
+    def _tube_pred_input(self, X):
+        y_pred = self._split_tubes(self._pred_input(X))
+        return y_pred
+
+    def predict(self, X, *_):
+        x_tubes = self._tube_pred_input(X)
+
+        y_pred = self.model.predict(
+            x_tubes, batch_size=128
+        )
+        y_pred_df = pd.DataFrame(y_pred, columns=self.groups, index=X["label"])
+        return y_pred_df
+        raise RuntimeError("Implement me")
+
+
+class ConvNet(BaseMultiTube):
     """Basic testing conv net."""
-    def __init__(self):
-        self.model = None
-        self.binarizer = None
-        self.debinarizer = None
-        self.groups = None
-        self.history = None
 
     def _to_2d(self, Xmatrix):
         """Reshape case x histo data into a 2d map, similar to the
@@ -134,77 +177,128 @@ class ConvNet:
         return newshape
 
     def fit(self, X, *_):
-        xdata, ydata = DataView.split_data_labels(X)
-        x_matrix = self._to_2d(xdata.values)
-        self.binarizer, self.debinarizer, self.groups = \
-            create_binarizer_from_data(ydata)
-        y_matrix = ydata.apply(self.binarizer).values
+        x_matrix, y_matrix = self._fit_input(X)
+        x_tubes = [self._to_2d(t) for t in self._split_tubes(x_matrix)]
 
-        # create convnet
-        model = Sequential()
-        model.add(layers.Conv2D(
-            32, kernel_size=(4, 4), strides=(1, 1),
-            activation="relu",
-            input_shape=(10, 10, 1)
-        ))
-        model.add(layers.MaxPooling2D(
-            pool_size=(2, 2), strides=(2, 2)
-        ))
-        model.add(layers.Flatten())
-        model.add(layers.Dense(
+        inputs = []
+        parts = []
+        for i in range(len(x_tubes)):
+            tinput = layers.Input(shape=(10, 10, 1))
+            inputs.append(tinput)
+
+            inlayer = layers.Conv2D(
+                32, kernel_size=(4, 4), strides=(1, 1),
+                activation="relu",
+                input_shape=(10, 10, 1)
+            )(tinput)
+            pooling = layers.MaxPooling2D(
+                pool_size=(2, 2), strides=(2, 2)
+            )(inlayer)
+            flattened = layers.Flatten()(pooling)
+            parts.append(flattened)
+
+        concat = layers.concatenate(parts)
+        output = layers.Dense(
             units=y_matrix.shape[1], activation="softmax"
-        ))
+        )(concat)
+
+        model = models.Model(inputs=inputs, outputs=output)
         model.compile(loss='categorical_crossentropy', optimizer='adam',
                       metrics=['acc'])
+
         self.model = model
 
         self.history = self.model.fit(
-            x_matrix, y_matrix, epochs=100, batch_size=32,
+            x_tubes, y_matrix, epochs=100, batch_size=32,
         )
         return self
 
-    def predict_classes(self, X, *_):
-        xdata, ydata = DataView.split_data_labels(X)
-        x_matrix = self._to_2d(xdata.values)
-        y_pred = self.model.predict_classes(
-            x_matrix, batch_size=128
-        )
-        result = [self.debinarizer(x, matrix=False) for x in y_pred]
-        return result
-
     def predict(self, X, *_):
-        xdata, ydata = DataView.split_data_labels(X)
-        x_matrix = self._to_2d(xdata.values)
+        x_tubes = [self._to_2d(t) for t in self._tube_pred_input(X)]
+
         y_pred = self.model.predict(
-            x_matrix, batch_size=128
+            x_tubes, batch_size=128
         )
         y_pred_df = pd.DataFrame(y_pred, columns=self.groups, index=X["label"])
         return y_pred_df
 
 
-class NeuralNet:
+class MINet(BaseMultiTube):
+    """Multiple input neural network with each tube as a separate input and
+    later in network joining."""
+
+    def fit(self, X, *_):
+        tube_len = 100
+
+        x_matrix, y_matrix = self._fit_input(X)
+        x_tubes = self._split_tubes(x_matrix, length=tube_len)
+
+        inputs = []
+        parts = []
+        for i in range(len(x_tubes)):
+            tinput = layers.Input(shape=(tube_len, ))
+            inputs.append(tinput)
+
+            initial = layers.Dense(
+                units=10, activation="elu", kernel_initializer='uniform'
+            )(tinput)
+            partend = layers.Dense(
+                units=10, activation="elu"
+            )(initial)
+
+            parts.append(partend)
+
+        concat = layers.concatenate(parts)
+
+        output = layers.Dense(
+            units=y_matrix.shape[1], activation="softmax"
+        )(concat)
+
+        model = models.Model(inputs=inputs, outputs=output)
+        model.compile(
+            loss='categorical_crossentropy',
+            optimizer='adadelta',
+            metrics=['acc'],
+        )
+        class_weight = {
+            i: 4.0 if g == "normal" else 1.0 for i, g in enumerate(self.groups)
+        }
+        self.model = model
+        self.history = self.model.fit(
+            x_tubes, y_matrix, epochs=100, batch_size=32,
+            class_weight=class_weight
+        )
+
+        return self
+
+    def predict(self, X, *_):
+        x_tubes = self._tube_pred_input(X)
+        y_pred = self.model.predict(
+            x_tubes, batch_size=128
+        )
+        y_pred_df = pd.DataFrame(y_pred, columns=self.groups, index=X["label"])
+        return y_pred_df
+
+
+class NeuralNet(BaseClassifier):
     """Basic keras neural net."""
     def __init__(
             self, val_split: float = 0.0
     ):
-        self.model = None
-        self.binarizer = None
-        self.debinarizer = None
+        super().__init__()
         self.val_split = val_split
-        self.history = None
-        self.groups = None
 
     @staticmethod
     def create_sequential(
             xshape: int, yshape: int,
             binarizer: Callable,
-    ) -> Sequential:
+    ) -> models.Sequential:
         '''Create a sequential neural network with specified hidden layers.
         The input and output dimensions are inferred from the given
         data and labels. (Labels are converted to binary matrix, which is
         why the binarizer is necessary)
         '''
-        model = Sequential()
+        model = models.Sequential()
         model.add(layers.Dense(
             units=10, activation="elu",
             input_dim=xshape, kernel_initializer='uniform'
@@ -220,11 +314,7 @@ class NeuralNet:
         return model
 
     def fit(self, X, *_):
-        xdata, ydata = DataView.split_data_labels(X)
-        x_matrix = xdata.values
-        self.binarizer, self.debinarizer, self.groups = \
-            create_binarizer_from_data(ydata)
-        y_matrix = ydata.apply(self.binarizer).values
+        x_matrix, y_matrix = self._fit_input(X)
 
         self.model = self.create_sequential(
             x_matrix.shape[1], y_matrix.shape[1], self.binarizer
@@ -236,8 +326,8 @@ class NeuralNet:
         return self
 
     def predict_classes(self, X, *_):
-        xdata, ydata = DataView.split_data_labels(X)
-        x_matrix = xdata.values
+        x_matrix = self._pred_input(X)
+
         y_pred = self.model.predict_classes(
             x_matrix, batch_size=128
         )
@@ -245,8 +335,8 @@ class NeuralNet:
         return result
 
     def predict(self, X, *_):
-        xdata, ydata = DataView.split_data_labels(X)
-        x_matrix = xdata.values
+        x_matrix = self._pred_input(X)
+
         y_pred = self.model.predict(
             x_matrix, batch_size=128
         )
@@ -259,6 +349,7 @@ class MODELS(enum.Enum):
     NeuralNet = NeuralNet
     Tree = Tree
     ConvNet = ConvNet
+    MINet = MINet
 
     @classmethod
     def from_str(cls, instr):
@@ -427,7 +518,7 @@ class Classifier:
 
         prediction_df.to_csv(
             os.path.join(
-                self.output_path, name_tag+"_predictions" + ".csv"
+                self.output_path, name_tag + "_predictions" + ".csv"
             )
         )
 
