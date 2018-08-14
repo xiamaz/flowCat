@@ -10,9 +10,12 @@ report: # regenerate all figures and tables
 
 .PHONY: numbers
 numbers:
-	python3 ./data_numbers.py --tubes 1,2 --plotting --plotdir figures/numbers s3://mll-flowdata/CLL-9F
+	# mostly static
+	# python3 ./data_numbers.py --tubes 1,2 --plotting --plotdir figures/numbers s3://mll-flowdata/CLL-9F
+	# python3 ./classification_comparison.py
+	# dynamically generated
 	python3 ./experiment_numbers.py
 
 .PHONY: figures
-figures: # numbers
+figures: numbers
 	cd figures && latexmk -pdf $@.latex && latexmk -pdf -c $@.latex

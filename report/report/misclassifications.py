@@ -1,14 +1,8 @@
 import os
 
 import pandas as pd
-from .file_utils import (
-    load_experiments, load_predictions, load_metadata,
-    add_avg_stats, add_prediction_info
-)
-
-from .prediction import df_get_predictions_t1
-
-from .base import Reporter
+from . import file_utils, base
+from .stats import accuracy
 
 
 def merge_multi(self, df, on):
@@ -19,7 +13,7 @@ def merge_multi(self, df, on):
 
 def get_groups(data: pd.Series) -> pd.Series:
     """Get group information on each id."""
-    predictions = load_predictions(data["predictions"])
+    predictions = file_utils.load_predictions(data["predictions"])
     groups = pd.concat([
         p["group"] for p in predictions.values()
     ])
@@ -28,7 +22,7 @@ def get_groups(data: pd.Series) -> pd.Series:
 
 def get_infiltrations(data: pd.Series) -> pd.Series:
     """Get infiltration information on each id."""
-    predictions = load_predictions(data["predictions"])
+    predictions = file_utils.load_predictions(data["predictions"])
     infiltrations = pd.concat([
         p["infiltration"] for p in predictions.values()
     ])
@@ -38,7 +32,7 @@ def get_infiltrations(data: pd.Series) -> pd.Series:
 def get_misclassifications(data: pd.Series) -> pd.Series:
     """Get misclassifications for given slice of experiments with each
     misclassification tagged with direction and number of occurences"""
-    predictions = load_predictions(data["predictions"])
+    predictions = file_utils.load_predictions(data["predictions"])
 
     pdatas = {
         k: df_get_predictions_t1(v)

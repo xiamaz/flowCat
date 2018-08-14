@@ -1,10 +1,25 @@
 \begin{tabular}{llllrr}
 \toprule
-             &        &        & count &    f1 &   std \\
+                   &                    &        & count &    f1 &   std \\
 set & name & type &       &       &       \\
 \midrule
-abstract\_merged\_hzl & somgated & random &     2 &  0.81 &  0.01 \\
-             & somgated\_equal & random &     1 &  0.74 &  0.01 \\
+abstract\_merged\_hzl & somgated & random &     3 &  0.83 &  0.01 \\
+                   & somgated\_equal & random &     1 &  0.74 &  0.01 \\
+abstract\_merged\_hzl\_cbrt & normal & random &     1 &  0.84 &  0.03 \\
+                   & pregated & random &     1 &  0.85 &  0.01 \\
+                   & somgated & random &     1 &  0.87 &  0.00 \\
+abstract\_merged\_hzl\_log1p & normal & random &     1 &  0.80 &  0.02 \\
+                   & pregated & random &     1 &  0.83 &  0.01 \\
+                   & somgated & random &     1 &  0.86 &  0.01 \\
+abstract\_merged\_hzl\_sqrt & normal & random &     1 &  0.84 &  0.03 \\
+                   & pregated & random &     1 &  0.86 &  0.01 \\
+                   & somgated & random &     1 &  0.87 &  0.00 \\
 hcl\_included & merged & random &     1 &  0.85 &  0.00 \\
+somgated\_fast & somgated\_fast & random &     2 &  0.88 &   NaN \\
+somgated\_fast\_cnn & somgated\_fast\_cnn & random &     2 &  0.76 &   NaN \\
+somgated\_fast\_nn & somgated\_fast\_nn & random &     2 &  0.76 &   NaN \\
+somgated\_fastcbrt & somgated\_fastcbrt & random &     1 &  0.87 &   NaN \\
+somgated\_fastconv & somgated\_fastconv & random &     3 &  0.81 &   NaN \\
+somgated\_fastlog1p & somgated\_fastlog1p & random &     1 &  0.82 &   NaN \\
 \bottomrule
 \end{tabular}

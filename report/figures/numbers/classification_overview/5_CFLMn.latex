@@ -1,13 +1,8 @@
 \begin{tabular}{llllrr}
 \toprule
-             &                &        & count &    f1 &   std \\
-set & name & type &       &       &       \\
+                 &    &        & count &    f1 &  std \\
+set & name & type &       &       &      \\
 \midrule
-abstract\_merged & normal & random &     1 &  0.80 &  0.02 \\
-             & pregated & random &     1 &  0.84 &  0.01 \\
-             & somgated & random &     1 &  0.86 &  0.00 \\
-infiltration & normal\_dedup & random &     1 &  0.52 &  0.02 \\
-             & pregated\_dedup & random &     1 &  0.59 &  0.02 \\
-             & somgated\_dedup & random &     1 &  0.63 &  0.01 \\
+num\_cases\_single & c1 & random &     1 &  0.89 &  0.0 \\
 \bottomrule
 \end{tabular}

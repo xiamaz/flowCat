@@ -1,0 +1,11 @@
+\begin{tabular}{lrrrrr}
+\toprule
+{} &  Acc normal &  \textnumero normal &  Acc sqrt &  \textnumero Acc &       p-Value \\
+\midrule
+6-class merged somgated &    0.763560 &                  10 &  0.856735 &               10 &  1.920800e-11 \\
+9-class normal          &    0.675281 &                  10 &  0.728775 &               10 &  8.376453e-04 \\
+9-class somgated        &    0.738160 &                  10 &  0.768655 &               10 &  6.777480e-12 \\
+CD5 - normal            &    0.826008 &                  10 &  0.852931 &               10 &  1.890037e-02 \\
+CD5 - somgated          &    0.878850 &                   5 &  0.884197 &               10 &  1.978170e-03 \\
+\bottomrule
+\end{tabular}

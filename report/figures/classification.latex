@@ -18,6 +18,11 @@
    \input{classification/comparisons.latex}
 \end{table}
 
+\begin{table}
+   \caption{Comparison of histogram transformations. This table contains informations on sqrt transformations in our different group configurations. When using sqrt Transformation, the root of each number in the histogram is taken.}
+   \input{classification/transform_comparisons.latex}
+\end{table}
+
 \begin{figure}
    \begin{subfigure}{0.49\columnwidth}
       \includegraphics[width=\columnwidth]{classification/abstract-groups-single_comp_dedup-normal-somgated/abstract_single_groups-normal_dedup-random_auc.png}

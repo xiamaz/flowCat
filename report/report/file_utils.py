@@ -60,7 +60,7 @@ def load_experiments(path: str) -> pd.DataFrame:
         iteration = int(match[2].strip("_")) if match[2] else 0
         edict = {
             "set": expset.name,
-            "name": name.strip("_"),
+            "name": name.replace("_dedup", "").strip("_"),
             "iteration": iteration,
             "time": datetime.strptime(match[4], "%Y%m%d_%H%M"),
             "type": "selected" if match[3] else "random",
