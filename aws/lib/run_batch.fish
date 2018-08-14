@@ -44,18 +44,16 @@ end
 
 # Submit a classification job
 function submit_classification
-	if [ (count $argv) -lt 3 ]
+	if [ (count $argv) -lt 2 ]
 		echo "Usage:
 		1 - jobname
 		2 - runscript target directory or makefile
-		3 - extra depends"
-		exit
+		"
 	end
 	set jobname $argv[1]
 	set command $argv[2]
-	set depends $argv[3]
 	if not contains $jobname (batchjobs "CPU-Queue")
-		aws batch submit-job --job-definition "Classification:3" --job-queue "CPU-Queue" --job-name $jobname --container-overrides command=$command --depends-on $argv[3..-1]
+		aws batch submit-job --job-definition "Classification:3" --job-queue "CPU-Queue" --job-name $jobname --container-overrides command=$command
 	else
 		echo "$jobname already submitted"
 	end
