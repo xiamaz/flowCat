@@ -28,10 +28,11 @@ class DistanceClassifier(TransformerMixin, BaseEstimator):
                 m=10,
                 n=10,
                 max_epochs=10,
+                softmax_activity=False
             )
             casedata = pd.concat([
                 self._premodel.fit_transform(c.data[X.markers]) for c in cases
-                if c.data.shape[0] > 1000
+                if c.data.shape[0] > 10000
             ])
             self._models[name].train(casedata)
 

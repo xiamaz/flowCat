@@ -33,19 +33,21 @@ class GatingFilter(BaseEstimator, TransformerMixin):
         self._merge_dist = merge_dist
 
     def _select_position(self, X, predictions):
-        (xchan, ychan) = self._channels
-        (xpos, ypos) = self._positions
-        xref = 1023 if xpos == "+" else 0
-        yref = 1023 if ypos == "+" else 0
+        pos = [p == "+" for p in self._positions]
+        refpoint = np.zeros(len(pos))
+        refpoint[pos] = 1023
+
         closest = None
         cdist = None
+
         for cl_num in np.unique(predictions):
             if cl_num == -1:
                 continue
-            means = X.loc[predictions == cl_num, self._channels].mean(axis=0)
-            dist = math.sqrt(
-                (xref - means[xchan])**2 + (yref - means[ychan])**2
-            )
+            node_means = X.loc[
+                predictions == cl_num, self._channels
+            ].mean(axis=0)
+            dist = np.sqrt(np.sum((node_means - refpoint) ** 2))
+
             if closest is None or cdist > dist:
                 closest, cdist = cl_num, dist
 
@@ -55,10 +57,11 @@ class GatingFilter(BaseEstimator, TransformerMixin):
             # skip background and selected cluster
             if cl_num == -1 or cl_num == closest:
                 continue
-            means = X.loc[predictions == cl_num, self._channels].mean(axis=0)
-            dist = math.sqrt(
-                (xref - means[xchan])**2 + (yref - means[ychan])**2
-            )
+            node_means = X.loc[
+                predictions == cl_num, self._channels
+            ].mean(axis=0)
+            dist = np.sqrt(np.sum((node_means - refpoint) ** 2))
+
             if abs(cdist - dist) < self._merge_dist:
                 LOGGER.debug(
                     "Merging %d because dist diff %d",

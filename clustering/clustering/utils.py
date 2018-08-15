@@ -22,7 +22,6 @@ def resolve_s3(path):
     s3file = s3url.path.lstrip("/")
 
     dest = pathlib.Path(TMP_PATH, s3file)
-    print(dest)
 
     # create all folders as needed
     os.makedirs(str(dest.parent), exist_ok=True)

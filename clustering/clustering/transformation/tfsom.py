@@ -675,6 +675,15 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
     ):
         """Expose a subset of tested parameters for external tuning."""
         self._model = TFSom(m=m, n=n, max_epochs=max_epochs)
+        self._columns = None
+
+    @property
+    def weights(self):
+        """Return the list of weights."""
+        weight_df = pd.DataFrame(
+            self._model.output_weights, columns=self._columns
+        )
+        return weight_df
 
     @classmethod
     def load(cls, path):
@@ -689,6 +698,7 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
         """Fit the data using a matrix containing the data. The input
         can be either a numpy matrix or a pandas dataframe."""
         self._model.train(data)
+        self._columns = data.columns
         return self
 
     def predict(self, data):

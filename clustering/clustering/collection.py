@@ -85,11 +85,16 @@ class SelectedMarkers:
 class CaseIterable:
     """Iterable collection for cases. Base class."""
 
-    def __init__(self):
+    def __init__(self, tubes=None):
         self._tubes = None
         self._groups = None
         self._current = None
         self._data = []
+
+        if tubes is not None:
+            self.selected_tubes = tubes
+        else:
+            self.selected_tubes = self.tubes
 
     @property
     def data(self) -> list:
@@ -161,12 +166,12 @@ class CaseCollection(CaseIterable):
     """Get case information from info file and remove errors and provide
     overview information."""
 
-    def __init__(self, inputpath: str, tubes: [int] = []):
+    def __init__(self, inputpath: str, *args, **kwargs):
         """
         :param inputpath: Input directory containing cohorts and a info file.
         :param tubes: List of selected tubes.
         """
-        super().__init__()
+        super().__init__(*args, **kwargs)
 
         self._path = inputpath
 
@@ -181,15 +186,13 @@ class CaseCollection(CaseIterable):
         self._data = markers.fit_transform(material_data)
         self.markers = markers.selected_markers
 
-        # either use selected provided tubes or use all tubes
-        self.selected_tubes = tubes or self.tubes
         self._data = [
-            d for d in self._data if d.has_tubes(tubes)
+            d for d in self._data if d.has_tubes(self.selected_tubes)
         ]
 
         # ensure that data uses same material
         self._data = [
-            d for d in self._data if d.same_material(tubes)
+            d for d in self._data if d.same_material(self.selected_tubes)
         ]
 
     def create_view(
@@ -240,11 +243,10 @@ class CaseView(CaseIterable):
     """Filtered view into the base data. Perform all mutable
     actions on CaseView instead of CaseCollection."""
 
-    def __init__(self, data, markers, tubes=[]):
-        super().__init__()
+    def __init__(self, data, markers, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.data = data
         self.markers = markers
-        self.selected_tubes = tubes
 
     def get_tube(self, tube: int) -> "TubeView":
         return TubeView(
