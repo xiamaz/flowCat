@@ -349,7 +349,6 @@ class InputData(BaseData):
 
         csv_data.drop_duplicates(subset="label", keep=False, inplace=True)
         csv_data["group"] = csv_data["group"].replace(GROUP_NAME_MAP)
-        print(csv_data["group"].unique())
         return csv_data
 
     @staticmethod
