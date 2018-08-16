@@ -260,9 +260,15 @@ class MINet(BaseMultiTube):
             optimizer='adadelta',
             metrics=['acc'],
         )
+
+        # weight smaller cohorts higher with largest cohort having weight of 1
+        class_weight = dict(zip(
+            *np.unique(np.argmax(y_matrix, axis=1), return_counts=True)
+        ))
         class_weight = {
-            i: 4.0 if g == "normal" else 1.0 for i, g in enumerate(self.groups)
+            k: max(class_weight.values()) / v for k, v in class_weight.items()
         }
+
         self.model = model
         self.history = self.model.fit(
             x_tubes, y_matrix, epochs=100, batch_size=32,
