@@ -97,6 +97,11 @@ class CmdArgs:
             default=0.0
         )
         parser.add_argument(
+            "--weighting",
+            help="Class weightings. Possible: invsize, normal.",
+            default="normal"
+        )
+        parser.add_argument(
             "--size",
             help=("Add size information. In a semicolon delimited list. "
                   "Format: <group?>:(min-)max;... "
@@ -221,3 +226,9 @@ class CmdArgs:
         else:
             tubes = []
         return tubes
+
+    @property
+    def modelargs(self):
+        return {
+            "weighting": self.args.weighting,
+        }

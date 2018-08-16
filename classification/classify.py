@@ -67,14 +67,16 @@ def evaluate(
                     clas.holdout_validation(
                         modelfunc,
                         abs_num=abs_num,
-                        infiltration=args.infiltration
+                        infiltration=args.infiltration,
+                        modelargs=args.modelargs
                     )
                 elif method_info.startswith("r"):
                     ratio = float(method_info.strip("r"))
                     clas.holdout_validation(
                         modelfunc,
                         ratio=ratio,
-                        infiltration=args.infiltration
+                        infiltration=args.infiltration,
+                        modelargs=args.modelargs
                     )
             elif method_name == "kfold":
                 clas.k_fold_validation(modelfunc, int(method_info))

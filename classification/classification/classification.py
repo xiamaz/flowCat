@@ -86,12 +86,14 @@ def t2_accuracy_score(truth: list, t2pred: pd.DataFrame):
 
 class BaseClassifier:
     """Basic classifier model."""
-    def __init__(self):
+    def __init__(self, weighting="normal"):
         self.model = None
         self.binarizer = None
         self.debinarizer = None
         self.history = None
         self.groups = None
+
+        self._weighting = weighting
 
     def _fit_input(self, X, matrix=True):
         xdata, ydata = DataView.split_data_labels(X)
@@ -262,12 +264,15 @@ class MINet(BaseMultiTube):
         )
 
         # weight smaller cohorts higher with largest cohort having weight of 1
-        class_weight = dict(zip(
-            *np.unique(np.argmax(y_matrix, axis=1), return_counts=True)
-        ))
-        class_weight = {
-            k: max(class_weight.values()) / v for k, v in class_weight.items()
-        }
+        if self._weighting == "invsize":
+            class_weight = dict(zip(
+                *np.unique(np.argmax(y_matrix, axis=1), return_counts=True)
+            ))
+            class_weight = {
+                k: max(class_weight.values()) / v for k, v in class_weight.items()
+            }
+        else:
+            class_weight = None
 
         self.model = model
         self.history = self.model.fit(
@@ -289,9 +294,10 @@ class MINet(BaseMultiTube):
 class NeuralNet(BaseClassifier):
     """Basic keras neural net."""
     def __init__(
-            self, val_split: float = 0.0
+            self, val_split: float = 0.0,
+            *args, **kwargs
     ):
-        super().__init__()
+        super().__init__(*args, **kwargs)
         self.val_split = val_split
 
     @staticmethod
@@ -438,6 +444,7 @@ class Classifier:
             save_weights: bool = True,
             val_split: float = 0.2,
             infiltration: float = 0.0,
+            **kwargs
     ) -> None:
         '''Simple holdout validation. If given abs_num, then each test cohort
         will contain the absolute number of cases.'''
@@ -460,7 +467,8 @@ class Classifier:
             save_weights=save_weights,
             save_individual_results=True,
             plot_history=True,
-            val_split=val_split
+            val_split=val_split,
+            **kwargs
         )
 
         experiment_info["config_param"] = abs_num or ratio
@@ -475,13 +483,15 @@ class Classifier:
             save_individual_results: bool = False,
             plot_history: bool = False,
             val_split: float = 0.0,
+            modelargs=None,
     ) -> dict:
         '''Build models and create statistics for a list of train, test sets.
         '''
+        modelargs = modelargs if modelargs is not None else {}
         eval_results = []
         prediction_dfs = []
         for i, (train, test) in enumerate(train_test_sets):
-            model = modelfunc()
+            model = modelfunc(**modelargs)
             model.fit(train)
 
             if save_weights:
