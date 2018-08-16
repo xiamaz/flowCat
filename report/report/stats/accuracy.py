@@ -126,7 +126,7 @@ def top2(data: pd.DataFrame, normal_t1=True) -> pd.Series:
     ).sort_index()
 
 
-def top1_uncertainty(data: pd.DataFrame, threshold=0.5) -> pd.DataFrame:
+def top1_uncertainty(data: pd.DataFrame, threshold=0.0) -> pd.DataFrame:
     """Adding a threshold below which cases are sorted to uncertain class."""
     results = {}
 

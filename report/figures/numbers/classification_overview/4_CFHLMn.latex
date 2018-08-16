@@ -17,6 +17,8 @@ abstract\_merged\_hzl\_sqrt & normal & random &     1 &  0.84 &  0.03 \\
 hcl\_included & merged & random &     1 &  0.85 &  0.00 \\
 somgated\_fast & somgated\_fast & random &     2 &  0.88 &   NaN \\
 somgated\_fast\_cnn & somgated\_fast\_cnn & random &     2 &  0.76 &   NaN \\
+somgated\_fast\_mi & somgated\_fast\_mi & random &     3 &  0.88 &   NaN \\
+somgated\_fast\_micl & somgated\_fast\_micl & random &     2 &  0.85 &   NaN \\
 somgated\_fast\_nn & somgated\_fast\_nn & random &     2 &  0.76 &   NaN \\
 somgated\_fastcbrt & somgated\_fastcbrt & random &     1 &  0.87 &   NaN \\
 somgated\_fastconv & somgated\_fastconv & random &     3 &  0.81 &   NaN \\

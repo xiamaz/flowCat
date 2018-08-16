@@ -10,6 +10,8 @@
 %% nice grid layouts for latex figures
 \usepackage{subcaption}
 
+\usepackage{textcomp}
+
 \begin{document}
 
 \title{Automatic Flow-based Classification of B-Cell Lymphoma}

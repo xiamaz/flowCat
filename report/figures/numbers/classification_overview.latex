@@ -1,34 +1,34 @@
 \begin{subtable}{.49\textwidth}
   \centering
-  \caption{CLL, CLLPL, FL, HZL, HZLv, LPL, MBL, Mantel, Marginal, normal}
+  \caption{CLL, PL, FL, HCL, HCLv, LPL, MBL, MCL, MZL, normal}
   \resizebox{\columnwidth}{!}{
-    \input{numbers/classification_overview/0_CCFHHLMMMn.latex}
+    \input{numbers/classification_overview/0_CPFHHLMMMn.latex}
   }
 \end{subtable}
 \begin{subtable}{.49\textwidth}
   \centering
-  \caption{CLL, CLLPL, FL, HZL, LPL, MBL, Mantel, Marginal, normal}
+  \caption{CLL, PL, FL, HCL, LPL, MBL, MCL, MZL, normal}
   \resizebox{\columnwidth}{!}{
-    \input{numbers/classification_overview/1_CCFHLMMMn.latex}
+    \input{numbers/classification_overview/1_CPFHLMMMn.latex}
   }
 \end{subtable}
 \begin{subtable}{.49\textwidth}
   \centering
-  \caption{CLL, CLLPL, FL, LPL, MBL, Mantel, Marginal, normal}
+  \caption{CLL, PL, FL, LPL, MBL, MCL, MZL, normal}
   \resizebox{\columnwidth}{!}{
-    \input{numbers/classification_overview/2_CCFLMMMn.latex}
+    \input{numbers/classification_overview/2_CPFLMMMn.latex}
   }
 \end{subtable}
 \begin{subtable}{.49\textwidth}
   \centering
-  \caption{CM, FL, HZL, HZLv, LMg, MtCp, normal}
+  \caption{CM, FL, HCL, HCLv, LMg, MtCp, normal}
   \resizebox{\columnwidth}{!}{
     \input{numbers/classification_overview/3_CFHHLMn.latex}
   }
 \end{subtable}
 \begin{subtable}{.49\textwidth}
   \centering
-  \caption{CM, FL, HZL, LMg, MtCp, normal}
+  \caption{CM, FL, HCL, LMg, MtCp, normal}
   \resizebox{\columnwidth}{!}{
     \input{numbers/classification_overview/4_CFHLMn.latex}
   }

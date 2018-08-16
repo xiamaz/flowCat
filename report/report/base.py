@@ -1,4 +1,5 @@
 """Base reporting objects."""
+import sys
 from pathlib import Path
 from enum import Enum
 from argparse import ArgumentParser
@@ -10,6 +11,15 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from .file_utils import load_experiments, load_metadata
+
+
+GROUP_NAME_MAP = {
+    "CLLPL": "PL",
+    "HZL": "HCL",
+    "HZLv": "HCLv",
+    "Mantel": "MCL",
+    "Marginal": "MZL",
+}
 
 
 class ExpType(Enum):
@@ -112,9 +122,13 @@ class Reporter:
         max_size = max(group_sizes.values())
         min_size = min(group_sizes.values())
 
+        groups = [
+            GROUP_NAME_MAP.get(g, g) for g in group_sizes.keys()
+        ]
+
         return pd.Series(
             {
-                "groups": ", ".join(group_sizes.keys()),
+                "groups": ", ".join(groups),
                 "num": len(splits),
                 "max_size": max_size,
                 "min_size": min_size
