@@ -4,5 +4,5 @@ PATTERN = initial_comp_normal_2018
 METHOD = kfold:5
 TUBES = 1;2
 
-GROUPS = --group "HZL;FL;LPL;Marginal;Mantel;CLLPL;CLL;MBL;normal"
+GROUPS = --group "HCL;FL;LPL;MZL;MCL;PL;CLL;MBL;normal"
 SIZE = --size 1000

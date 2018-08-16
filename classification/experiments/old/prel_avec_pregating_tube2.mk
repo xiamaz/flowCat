@@ -6,7 +6,7 @@ NOTE = Only tube 2 with pregating, but only small normal cohort, why we exclude 
 # Names of groups to be included
 #   different groups can be merged by assigning multiple comma separated groups
 #   to a single custom label, such as example:normal,CLL
-GROUPS = LMg:LPL,Marginal;MtCp:Mantel,CLLPL;CM:CLL,MBL
+GROUPS = LMg:LPL,MZL;MtCp:MCL,PL;CM:CLL,MBL
 
 # Validation method to be used. Both holdout and kfold are possible here.
 METHOD = kfold:5

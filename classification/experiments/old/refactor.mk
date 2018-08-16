@@ -9,7 +9,7 @@ INPUT_TYPE = avec_pregating_selected
 # Names of groups to be included
 #   different groups can be merged by assigning multiple comma separated groups
 #   to a single custom label, such as example:normal,CLL
-GROUPS = CLLMBL:CLL,MBL;CLLPL;LPLMar:LPL,Marginal;FL;normal
+GROUPS = CLLMBL:CLL,MBL;PL;LPLMar:LPL,MZL;FL;normal
 
 # Validation method to be used. Both holdout and kfold are possible here.
 METHOD = kfold:3

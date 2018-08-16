@@ -1,5 +1,5 @@
 NOTE = Test run using very simple parameters
-GROUPS = --group "LMg:LPL,Marginal;MtCp:Mantel,CLLPL;CM:CLL,MBL;FL;normal"
+GROUPS = --group "LMg:LPL,MZL;MtCp:MCL,PL;CM:CLL,MBL;FL;normal"
 METHOD = holdout:r0.8
 
 TUBES = 1;2

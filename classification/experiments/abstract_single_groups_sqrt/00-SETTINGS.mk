@@ -2,7 +2,7 @@ TAG := $(shell basename $(dir $(lastword $(MAKEFILE_LIST))))
 METHOD = kfold:10
 TUBES = 1;2
 
-GROUPS = --group "HZL;FL;LPL;Marginal;Mantel;CLLPL;CLL;MBL;normal"
+GROUPS = --group "HCL;FL;LPL;MZL;MCL;PL;CLL;MBL;normal"
 SIZE = --size 3000
 
 SET = abstract

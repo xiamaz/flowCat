@@ -18,7 +18,7 @@ METHOD = kfold:5
 # Names of groups to be included
 #   different groups can be merged by assigning multiple comma separated groups
 #   to a single custom label, such as example:normal,CLL
-# GROUPS = --group "LMg:LPL,Marginal;MtCp:Mantel,CLLPL;CM:CLL,MBL;normal"
+# GROUPS = --group "LMg:LPL,MZL;MtCp:MCL,PL;CM:CLL,MBL;normal"
 GROUPS = 
 
 # Set a size for the content

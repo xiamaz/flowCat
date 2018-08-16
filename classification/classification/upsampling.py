@@ -34,6 +34,15 @@ RE_TUBE = re.compile(r"tube(\d+)\.csv")
 LOGGER = logging.getLogger(__name__)
 
 
+GROUP_NAME_MAP = {
+    "CLLPL": "PL",
+    "HZL": "HCL",
+    "HZLv": "HCLv",
+    "Mantel": "MCL",
+    "Marginal": "MZL",
+}
+
+
 def merge_on_label(left_df: pd.DataFrame, right_df: pd.DataFrame, metacols) \
         -> pd.DataFrame:
     '''Merge two dataframes on label column and drop additional replicated
@@ -339,6 +348,8 @@ class InputData(BaseData):
             raise RuntimeError("Unknown csv format {}".format(csv_format))
 
         csv_data.drop_duplicates(subset="label", keep=False, inplace=True)
+        csv_data["group"] = csv_data["group"].replace(GROUP_NAME_MAP)
+        print(csv_data["group"].unique())
         return csv_data
 
     @staticmethod
