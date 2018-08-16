@@ -15,7 +15,6 @@ def experiment_accuracies(sel_exps):
     """Get experiment accuracies."""
     res = []
     for _, sel_row in sel_exps.iterrows():
-        sel_row = sel_exps.iloc[0, :]
         pdata = file_utils.load_predictions(sel_row["predictions"])
         sel_accs = accuracy.acc_table_dfs(pdata)
         # average values over all sets
