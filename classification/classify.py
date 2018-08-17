@@ -38,15 +38,12 @@ def evaluate(
     '''Evaluate upsampling data.'''
 
     name = "{}_{}".format(args.name, create_stamp())
-
-    data = DataCollection(args.files, args.pattern, args.tubes)
-
-    results = []
-
     output_path = os.path.join(args.output, name)
 
+    data = DataCollection(args.files, args.pattern, args.tubes)
     modelfunc = args.model
 
+    results = []
     for i, view in preprocess_data(data, args):
 
         subname = "{}_{}".format(view.name, i)

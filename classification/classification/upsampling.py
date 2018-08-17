@@ -359,6 +359,12 @@ class InputData(BaseData):
         # filter which tubes to read
         if not tubes:
             tubes = list(files.keys())
+        else:
+            missing_tubes = [str(t) for t in tubes if t not in files]
+            if missing_tubes:
+                raise RuntimeError(
+                    "Missing tube {}.".format(", ".join(missing_tubes))
+                )
 
         # ensure that the tube list is properly sorted
         tubes = sorted(tubes)
@@ -415,7 +421,14 @@ class DataCollection:
             raise StopIteration
 
         self._current_key += 1
-        return self[self._names[key]]
+        try:
+            data = self[self._names[key]]
+        except RuntimeError as error:
+            # get the next item if the current one is faulty
+            LOGGER.warning("%s: %s", key, error)
+            return self.__next__()
+
+        return data
 
     def __getitem__(self, value):
         return InputData.from_files(
