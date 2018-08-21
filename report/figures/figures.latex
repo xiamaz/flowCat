@@ -1,6 +1,12 @@
 \documentclass[11pt,a4paper]{article}
 \usepackage[margin=0.5cm]{geometry}
 
+%% clickable toc
+\usepackage[hidelinks]{hyperref}
+
+%% place floats in the section
+\usepackage[section]{placeins}
+
 %% adding graphics
 \usepackage{graphicx}
 %% nicer tables
@@ -16,11 +22,24 @@
 
 \title{Automatic Flow-based Classification of B-Cell Lymphoma}
 
+\listoffigures
+\listoftables
+
+\FloatBarrier
+
+% \section{Numbers}
+
 \input{numbers.latex}
+
+% \section{Clustering}
 
 \input{clustering.latex}
 
+% \section{Classification}
+
 \input{classification.latex}
+
+% \section{Exotic}
 
 \input{exotic.latex}
 

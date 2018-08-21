@@ -32,5 +32,5 @@
       \caption{Five cases per cohort.}
    \end{subfigure}
 
-   \caption{Grid visualization of consensus SOM after two training iterations. Using cases in CLL, MBL and normal.}
+   \caption[SOM Grid visualization]{Grid visualization of consensus SOM after two training iterations. Using cases in CLL, MBL and normal.}
 \end{figure}

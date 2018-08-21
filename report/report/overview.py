@@ -60,6 +60,19 @@ def count_groups_filter(
     return counts
 
 
+def filter_relevant(data: pd.DataFrame):
+    """Remove some older experiments missing cohorts, such as HCL or containing already excluded cohorts such as HCLv"""
+    def group_filter(group_list):
+        """Create boolean mask of series of group list."""
+        has_hclv = group_list.apply(lambda x: "HCLv" in x)
+        has_hcl = group_list.apply(lambda x: "HCL" in x)
+        small = group_list.apply(lambda x: len(x) <= 3)
+        return ((~has_hclv) & has_hcl) | small
+
+    data = data.loc[group_filter(data["grouplist"])]
+    return data
+
+
 class Overview(Reporter):
     """Create an overview of a clustering and classification projects."""
 
@@ -72,6 +85,7 @@ class Overview(Reporter):
         if self._classification is None:
             data = add_avg_stats(self.classification_files)
             data = self.extend_metadata(data)
+            data = filter_relevant(data)
             self._classification = data
         return self._classification
 
