@@ -122,13 +122,14 @@ class Reporter:
         max_size = max(group_sizes.values())
         min_size = min(group_sizes.values())
 
-        groups = [
+        groups = sorted([
             GROUP_NAME_MAP.get(g, g) for g in group_sizes.keys()
-        ]
+        ])
 
         return pd.Series(
             {
                 "groups": ", ".join(groups),
+                "grouplist": groups,
                 "num": len(splits),
                 "max_size": max_size,
                 "min_size": min_size
@@ -138,7 +139,7 @@ class Reporter:
     @classmethod
     def extend_metadata(cls, experiments):
         experiments[
-            ["groups", "num", "max_size", "min_size"]
+            ["groups", "grouplist", "num", "max_size", "min_size"]
         ] = experiments.apply(
             cls.get_merged_metadata, axis=1
         )
