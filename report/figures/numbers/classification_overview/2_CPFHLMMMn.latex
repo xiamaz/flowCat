@@ -1,0 +1,16 @@
+\begin{tabular}{llllrr}
+\toprule
+                            &          &        & count &    f1 &   std \\
+set & name & type &       &       &       \\
+\midrule
+abstract\_single\_groups & normal & random &     1 &  0.72 &  0.02 \\
+                            & pregated & random &     1 &  0.74 &  0.01 \\
+                            & somgated & random &     1 &  0.77 &  0.00 \\
+abstract\_single\_groups\_cbrt & normal & random &     1 &  0.77 &  0.03 \\
+                            & somgated & random &     1 &  0.79 &  0.00 \\
+abstract\_single\_groups\_log1p & normal & random &     1 &  0.72 &  0.02 \\
+                            & somgated & random &     1 &  0.77 &  0.00 \\
+abstract\_single\_groups\_sqrt & normal & random &     3 &  0.77 &  0.03 \\
+                            & somgated & random &     3 &  0.79 &  0.00 \\
+\bottomrule
+\end{tabular}

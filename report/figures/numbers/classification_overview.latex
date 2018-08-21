@@ -1,84 +1,35 @@
 \begin{subtable}{.49\textwidth}
   \centering
-  \caption{CLL, PL, FL, HCL, HCLv, LPL, MBL, MCL, MZL, normal}
+  \caption{CLL, FL, HCL, LPL, MBL, MCL, MZL, PL, normal}
   \resizebox{\columnwidth}{!}{
-    \input{numbers/classification_overview/0_CPFHHLMMMn.latex}
-  }
-\end{subtable}
-\begin{subtable}{.49\textwidth}
-  \centering
-  \caption{CLL, PL, FL, HCL, LPL, MBL, MCL, MZL, normal}
-  \resizebox{\columnwidth}{!}{
-    \input{numbers/classification_overview/1_CPFHLMMMn.latex}
-  }
-\end{subtable}
-\begin{subtable}{.49\textwidth}
-  \centering
-  \caption{CLL, PL, FL, LPL, MBL, MCL, MZL, normal}
-  \resizebox{\columnwidth}{!}{
-    \input{numbers/classification_overview/2_CPFLMMMn.latex}
-  }
-\end{subtable}
-\begin{subtable}{.49\textwidth}
-  \centering
-  \caption{CM, FL, HCL, HCLv, LMg, MtCp, normal}
-  \resizebox{\columnwidth}{!}{
-    \input{numbers/classification_overview/3_CFHHLMn.latex}
+    \input{numbers/classification_overview/0_CFHLMMMPn.latex}
   }
 \end{subtable}
 \begin{subtable}{.49\textwidth}
   \centering
   \caption{CM, FL, HCL, LMg, MtCp, normal}
   \resizebox{\columnwidth}{!}{
-    \input{numbers/classification_overview/4_CFHLMn.latex}
-  }
-\end{subtable}
-\begin{subtable}{.49\textwidth}
-  \centering
-  \caption{CLL, FL, LPL, MBL, normal}
-  \resizebox{\columnwidth}{!}{
-    \input{numbers/classification_overview/5_CFLMn.latex}
-  }
-\end{subtable}
-\begin{subtable}{.49\textwidth}
-  \centering
-  \caption{CM, FL, LMg, MtCp, normal}
-  \resizebox{\columnwidth}{!}{
-    \input{numbers/classification_overview/6_CFLMn.latex}
-  }
-\end{subtable}
-\begin{subtable}{.49\textwidth}
-  \centering
-  \caption{CM, LMg, MtCp, normal}
-  \resizebox{\columnwidth}{!}{
-    \input{numbers/classification_overview/7_CLMn.latex}
-  }
-\end{subtable}
-\begin{subtable}{.49\textwidth}
-  \centering
-  \caption{AML, MM, normal}
-  \resizebox{\columnwidth}{!}{
-    \input{numbers/classification_overview/8_AMn.latex}
+    \input{numbers/classification_overview/1_CFHLMn.latex}
   }
 \end{subtable}
 \begin{subtable}{.49\textwidth}
   \centering
   \caption{CD5neg, CD5pos, normal}
   \resizebox{\columnwidth}{!}{
-    \input{numbers/classification_overview/9_CCn.latex}
+    \input{numbers/classification_overview/2_CCn.latex}
   }
 \end{subtable}
 \begin{subtable}{.49\textwidth}
   \centering
   \caption{CLL, normal}
   \resizebox{\columnwidth}{!}{
-    \input{numbers/classification_overview/10_Cn.latex}
+    \input{numbers/classification_overview/3_Cn.latex}
   }
 \end{subtable}
 \begin{subtable}{.49\textwidth}
   \centering
   \caption{CM, normal}
   \resizebox{\columnwidth}{!}{
-    \input{numbers/classification_overview/11_Cn.latex}
+    \input{numbers/classification_overview/4_Cn.latex}
   }
 \end{subtable}

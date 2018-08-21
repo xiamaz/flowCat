@@ -1,16 +1,8 @@
 \begin{tabular}{llllrr}
 \toprule
-               &                   &        & count &    f1 &   std \\
-set & name & type &       &       &       \\
+       &        &        & count &    f1 &  std \\
+set & name & type &       &       &      \\
 \midrule
-cll\_normal & normal\_dedup & random &     1 &  1.00 &  0.00 \\
-               & pregated\_dedup & random &     1 &  0.99 &  0.01 \\
-               & somcombined\_dedup & random &     1 &  1.00 &  0.00 \\
-cll\_normal\_all & normal\_dedup & random &     1 &  1.00 &  0.00 \\
-               & pregated\_dedup & random &     1 &  1.00 &  0.00 \\
-               & somcombined\_dedup & random &     1 &  1.00 &  0.00 \\
-cll\_normal\_max & normal\_dedup & random &     1 &  1.00 &  0.00 \\
-               & pregated\_dedup & random &     1 &  1.00 &  0.00 \\
-               & somcombined\_dedup & random &     1 &  1.00 &  0.00 \\
+mblcll & mblcll & random &     1 &  0.97 &  0.0 \\
 \bottomrule
 \end{tabular}
