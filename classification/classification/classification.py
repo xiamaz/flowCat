@@ -413,7 +413,6 @@ class Classifier:
             self,
             modelfunc: Callable,
             k_num: int = 5,
-            save_weights: bool = True,
             **kwargs
     ) -> None:
         '''Do k-fold validation on data set.
@@ -431,7 +430,6 @@ class Classifier:
             modelfunc,
             train_test_sets,
             name_tag=name_tag,
-            save_weights=save_weights,
             **kwargs
         )
         experiment_info["config_param"] = k_num
@@ -495,6 +493,7 @@ class Classifier:
         for i, (train, test) in enumerate(train_test_sets):
             model = modelfunc(**modelargs)
             model.fit(train)
+
             if save_weights:
                 weight_file = os.path.join(
                     self.output_path, "weights_{}_{}.hdf5".format(name_tag, i)

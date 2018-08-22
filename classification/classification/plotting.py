@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 import seaborn
 from scipy.cluster import hierarchy
-import h5py
+
 
 def plot_confusion_matrix(
         confusion_matrix: "numpy.matrix",
@@ -148,12 +148,6 @@ def plot_change(data, path, xlabel="Size change"):
 
     plt.close(fig)
 
-def convert_first_layer_hdf5(path: str):
-    '''Returns the weights of the first layer'''
-    saved_weights = h5py.File(path,'r')
-    first_layer = saved_weights['dense_1']['dense_1']
-    first_weights = first_layer['kernel:0']
-    return first_weights
 
 def plot_combined(results: list, path: str) -> None:
     '''Plot results to path directory.'''
