@@ -1,4 +1,5 @@
 import sys
+import pathlib
 
 import logging
 
@@ -7,24 +8,21 @@ import networkx as nx
 import scipy as sp
 
 from sklearn.metrics import confusion_matrix
-import matplotlib.pyplot as plt
+from sklearn.pipeline import Pipeline
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
 
-from clustering.transformation import tfsom
+from clustering.transformation import tfsom, fcs, pregating
 from clustering.collection import CaseCollection
-
-sys.path.append("../report")
-from report import base as rbase
 
 
 GROUPS = [
-    # "CLL", "CLLPL", "FL", "HZL", "LPL", "MBL", "Mantel", "Marginal", "normal"
-    "CLL", "MBL", "normal"
+    "CLL", "PL", "FL", "HCL", "LPL", "MBL", "MCL", "MZL", "normal"
 ]
 
 
-def plot_node_weights(weights, gridwidth=10):
+def plot_node_weights(weights, gridwidth=10, path="gridplot"):
     """Create 2d plot of node weights."""
-    print(weights)
     nodenum, channels = weights.shape
 
     gridheight = int(nodenum / gridwidth)
@@ -44,29 +42,46 @@ def plot_node_weights(weights, gridwidth=10):
         euc_dist = sp.spatial.distance.euclidean(fromdata.values, todata.values)
         grid.edges[edge]["weight"] = euc_dist
 
-    plt.figure()
-    nx.draw_kamada_kawai(grid, with_labels=True)
-    plt.savefig("grid_euc_5")
+    fig = Figure()
+    axes = fig.add_subplot(111)
+    nx.draw_kamada_kawai(grid, with_labels=True, ax=axes)
+    FigureCanvas(fig)
+    fig.savefig(path)
 
 
-def plot_weight_2d_labeled(weights):
+def plot_weight_2d_labeled(
+        weights, selection=None, path="2dplot", annot=False
+):
     """Create 2d scatterplots with labels."""
     views = [
         ("CD45-KrOr", "SS INT LIN"),
         ("Kappa-FITC", "Lambda-PE"),
     ]
-    fig = plt.figure(figsize=(10, 5))
+    fig = Figure(figsize=(10, 5))
+
+    if annot:
+        scargs = {"s": 1, "marker": "o"}
+    else:
+        scargs = {"s": 1, "marker": "."}
+
     for i, (x, y) in enumerate(views):
         ax = fig.add_subplot(1, 2, i + 1)
-        ax.scatter(weights[x], weights[y])
+        if selection is None:
+            ax.scatter(weights[x], weights[y], **scargs)
+        else:
+            unsel = weights.drop(selection)
+            ax.scatter(unsel[x], unsel[y], color="g", **scargs)
+            ax.scatter(selection[x], selection[y], color="r", **scargs)
 
-        for name, row in weights.iterrows():
-            ax.annotate(name, (row[x], row[y]))
+        if annot:
+            for name, row in weights.iterrows():
+                ax.annotate(name, (row[x], row[y]))
 
         ax.set_xlabel(x)
         ax.set_ylabel(y)
 
-    plt.savefig("grid_scatter_5")
+    FigureCanvas(fig)
+    fig.savefig(path)
 
 
 def configure_print_logging(rootname="clustering"):
@@ -80,23 +95,139 @@ def configure_print_logging(rootname="clustering"):
     rootlogger.addHandler(handler)
 
 
+def train_plot_data(tubedata, classifier, path, gridwidth, transargs):
+    """Plot the tube data using the instantiated classification model."""
+    preprocess = Pipeline(
+        steps=[
+            ("pregate", pregating.SOMGatingFilter(
+                **(transargs if transargs is not None else {})
+            ))
+        ]
+    )
+    transdata = []
+
+    transplot = path / "gates"
+    transplot.mkdir(parents=True, exist_ok=True)
+
+    for case in tubedata.data:
+        transformed = preprocess.fit_transform(case.data)
+        transdata.append(transformed)
+        plot_weight_2d_labeled(
+            case.data,
+            transformed,
+            path=transplot / "{}_{}_diff".format(
+                case.parent.group, case.parent.id
+            )
+        )
+
+    fitdata = pd.concat(
+        transdata
+    )
+
+    classifier.fit(fitdata)
+
+    # plot_node_weights(
+    #     classifier.weights,
+    #     path=str(path) + "_weights",
+    #     gridwidth=gridwidth
+    # )
+    plot_weight_2d_labeled(classifier.weights, path=str(path) + "_2d_scatter")
+
+
+def model_gradient(path, cases, *args, **kwargs):
+    """Vary parameters in the classifier and generate different plots."""
+    base_params = {
+        "m": 10,
+        "n": 10,
+        "max_epochs": 3
+    }
+
+    modelclass= tfsom.SelfOrganizingMap
+
+
+    param = "pregatingsize"
+    for val in [3, 5, 10]:
+        cur_params = base_params
+        # cur_params = {
+        #     **base_params, **{
+        #         "m": val,
+        #         "n": val,
+        #     }
+        # }
+        model = modelclass(**cur_params)
+
+        basic_train = cases.create_view(
+            groups=GROUPS, num=val, infiltration=10.0
+        )
+
+        tubedata = basic_train.get_tube(2)
+
+        plotpath = path / "{}_{}".format(param, val)
+        train_plot_data(
+            classifier=model,
+            path=plotpath,
+            gridwidth=cur_params["n"],
+            tubedata=tubedata,
+            transargs={
+                "somargs": {"m": val, "n": val}
+            }
+        )
+
+
+def simple_run(path, data, reference):
+    """Very simple SOM run for tensorflow testing."""
+    # only use data from the second tube
+    tubedata = data.get_tube(2)
+
+    marker_list = tubedata.data[0].markers
+
+    def data_generator():
+        for tdata in tubedata.data:
+            lmddata = tdata.data[marker_list]
+            yield lmddata
+
+    print(reference)
+
+    model = tfsom.TFSom(
+        m=10,
+        n=10,
+        dim=len(marker_list),
+        batch_size=5,
+        max_epochs=5,
+        reference=reference,
+        initialization_method="reference",
+    )
+
+    print(len(tubedata.data))
+
+    model.train(data_generator, num_inputs=len(tubedata.data))
+
+    weights = model.output_weights
+    print(weights.shape)
+    # weights.to_csv("somweights.csv")
+
+
 def main():
     configure_print_logging()
 
     cases = CaseCollection(inputpath="s3://mll-flowdata/CLL-9F", tubes=[1, 2])
 
-    basic_train = cases.create_view(groups=GROUPS, num=5, infiltration=10.0)
+    with open("labels.txt") as lfile:
+        # remove newline character from each line
+        simple_labels = [l.strip() for l in lfile]
 
-    t_data = basic_train.get_tube(2)
+    reference_weights = pd.read_csv("somweights.csv", index_col=0)
 
-    # basic_test = cases.create_view(groups=GROUPS, num=100)
+    plotpath = pathlib.Path("somplots/pregated")
 
-    fitdata = pd.concat([t.data for t in t_data.data])
+    plotpath.mkdir(parents=True, exist_ok=True)
 
-    classifier = tfsom.SelfOrganizingMap(10, 10, max_epochs=2)
-    classifier.fit(fitdata)
 
-    plot_node_weights(classifier.weights)
+    simple_data = cases.create_view(labels=simple_labels)
+
+    simple_run(path=plotpath, data=simple_data, reference=reference_weights)
+
+    # model_gradient(cases=cases, path=plotpath)
 
 
 if __name__ == "__main__":

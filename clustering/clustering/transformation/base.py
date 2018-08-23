@@ -74,7 +74,7 @@ def get_main(name: str, pipeline_name: str = "", *_) -> Pipeline:
     builder = PipelineBuilder(name=pipeline_name)
     if name == "normal":
         builder.append(
-            "clust",
+            "clustering",
             "SelfOrganizingMap",
             m=10, n=10
         )
@@ -90,7 +90,7 @@ def get_main(name: str, pipeline_name: str = "", *_) -> Pipeline:
             positions
         )
         builder.append(
-            "somcluster",
+            "clustering",
             "SelfOrganizingMap",
             m=10,
             n=10,
@@ -176,32 +176,6 @@ def add_history(fun):
     return inner
 
 
-class ApplySingle(BaseEstimator, TransformerMixin):
-    """Wrap case information in the transformer."""
-
-    def __init__(self, transformer):
-        self._model = transformer
-
-    def fit(self, X, *_):
-        if self._model:
-            self._model.fit(X)
-        return self
-
-    @property
-    def history(self):
-        if "out" in self._model.named_steps:
-            return self._model.named_steps["out"].history
-        return []
-
-    def transform(self, X, *_):
-        if self._model:
-            X = self._model.transform(X)
-        return X
-
-    def predict(self, X, *_):
-        return self._model.predict(X)
-
-
 class Merge(BaseEstimator, TransformerMixin):
     """Merge different cases into a single dataframe for further analysis.
     Apply specific functions to each case before transforming and
@@ -261,6 +235,14 @@ class Merge(BaseEstimator, TransformerMixin):
         # save stateful and stateless models
         # for stateful steps save the trained weights in an individual manner
 
+    def to_csv(self, path: "PosixPath"):
+        """Save the current model into the given directory."""
+        # save clustering weights
+        path.mkdir(parent=True, exist_ok=True)
+        self.model.named_steps["clustering"].weights.to_csv(
+            path / "clustering.csv"
+        )
+
     def _trans_requirements(self, fcs_data):
         """Check whether requirements for further processing have been
         fulfilled."""
@@ -277,13 +259,17 @@ class Merge(BaseEstimator, TransformerMixin):
     def fit(self, X: list, *_):
         """Fit model using a list a case paths."""
 
-        processed_data = []
-        for case in X:
-            preprocessed = self.eachfit.fit_transform(case.data)
-            processed_data.append(preprocessed)
+        # processed_data = []
+        # for case in X:
+        #     preprocessed = self.eachfit.fit_transform(case.data)
+        #     processed_data.append(preprocessed)
 
-        data = pd.concat(processed_data)
-        self.model.fit(data)
+        # data = pd.concat(processed_data)
+        def preprocess():
+            for case in X:
+                data = self.eachfit.fit_transform(case.data)
+                yield data.values
+        self.model.fit(preprocess)
         return self
 
     @add_history

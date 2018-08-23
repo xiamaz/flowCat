@@ -105,14 +105,30 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
 
     def __init__(
             self,
-            channels=["CD45-KrOr", "SS INT LIN"],
-            positions=["+", "-"],
+            somargs=None,
+            gatingargs=None
     ):
         # self._pre = ClusteringTransform(10, 10, 2048)
-        self._pre = SOMNodes(10, 10, 2048)
-        self._clust = GatingFilter(channels, positions, min_samples=4, eps=50)
+        somargs = {
+            **{
+                "m": 10,
+                "n": 10,
+                "batch_size": 2048,
+            }, **({} if somargs is None else somargs)
+        }
+        gatingargs = {
+            **{
+                "channels": ["CD45-KrOr", "SS INT LIN"],
+                "positions": ["+", "-"],
+                "min_samples": 4,
+                "eps": 50,
+            }, **({} if gatingargs is None else gatingargs)
+        }
 
-        self._channels = channels
+        self._pre = SOMNodes(**somargs)
+        self._clust = GatingFilter(**gatingargs)
+
+        self._channels = gatingargs["channels"]
 
         self.history = []
 
@@ -142,5 +158,6 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
 
     def transform(self, X, *_):
         selection = self.predict(X, *_)
-        result = X.loc[selection == 1, ~X.columns.isin(self._channels)]
+        # result = X.loc[selection == 1, ~X.columns.isin(self._channels)]
+        result = X.loc[selection == 1, :]
         return result

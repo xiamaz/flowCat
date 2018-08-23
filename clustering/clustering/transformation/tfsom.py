@@ -43,6 +43,32 @@ https://codesachin.wordpress.com/2015/11/28/self-organizing-maps-with-googles-te
 LOGGER = logging.getLogger(__name__)
 
 
+def create_batched_generator(data_generator, batch_size):
+    def batch_generator():
+        buf = []
+        cache = []
+
+        for i, data in enumerate(data_generator()):
+            if i % batch_size == 0 and buf:
+                concat = np.concatenate(buf, axis=0)
+                yield concat
+                cache.append(concat)
+                buf = []
+
+            buf.append(data)
+
+        if buf:
+            concat = np.concatenate(buf, axis=0)
+            cache.append(concat)
+
+        while True:
+            for concat in cache:
+                yield concat
+
+    return batch_generator
+
+
+
 class TFSom:
     """Tensorflow Model of a self-organizing map, without assumptions about
     usage.
@@ -53,13 +79,15 @@ class TFSom:
     def __init__(
             self,
             m, n,
+            dim,
             max_epochs=10,
-            batch_size=4096, test_batch_size=8192,
+            batch_size=1, test_batch_size=1,
             initial_radius=None,
             initial_learning_rate=0.1,
             std_coeff=0.5,
             softmax_activity=False,
             output_sensitivity=-1.0,
+            reference=None,
             initialization_method="sample",
             model_name="Self-Organizing-Map"
     ):
@@ -89,11 +117,16 @@ class TFSom:
 
         self._m = abs(int(m))
         self._n = abs(int(n))
+        self._dim = abs(int(dim))
 
         if initial_radius is None:
             self._initial_radius = max(m, n) / 2.0
         else:
             self._initial_radius = float(initial_radius)
+
+        # optional reference data that will be used as initial weights or for
+        # random sampling as initial node weights
+        self._reference = reference
 
         self._max_epochs = abs(int(max_epochs))
         self._batch_size = abs(int(batch_size))
@@ -120,12 +153,11 @@ class TFSom:
         self._gpus = [
             d.name for d in device_lib.list_local_devices()
             if d.device_type == "GPU"
-        ][0:1]
+        ]
 
         # Initialized later, just declaring up here for neatness and to avoid
         # warnings
         self._iter_input = None
-        self._dim = None  # dimensionality is inferred from fit input
         self._weights = None
         self._location_vects = None
         self._input = None
@@ -203,16 +235,14 @@ class TFSom:
             with tf.name_scope('Iteration'):
                 self._iter_input = tf.placeholder("float", [], name="iter")
 
+            # always use the first gpu
             if self._gpus:
-                for i, gpu_name in enumerate(self._gpus):
-                    with tf.device(gpu_name):
-                        with tf.name_scope('Tower_{}'.format(i)):
-                            # Create the model on this tower and add the
-                            # (numerator, denominator) tensors to the list
-                            tower_updates.append(self._tower_som())
-                            tf.get_variable_scope().reuse_variables()
+                with tf.device(self._gpus[0]), tf.name_scope('Tower_0'):
+                    # Create the model on this tower and add the
+                    # (numerator, denominator) tensors to the list
+                    tower_updates.append(self._tower_som())
+                    tf.get_variable_scope().reuse_variables()
 
-                with tf.device(self._gpus[-1]):
                     # Put the activity op on the last GPU
                     self._activity_op = self._make_activity_op(
                         self._input_tensor
@@ -284,18 +314,18 @@ class TFSom:
             # the towers are constructed sequentially, the handle to the
             # Tensors will be different for each tower even if we reference
             # "self"
+            shape = [self._m * self._n, self._dim]
             if self._initialization_method == "random":
-                initializer = tf.random_uniform_initializer(maxval=1)
-                shape = [self._m * self._n, self._dim]
-            elif self._initialization_method == "sample":
+                initializer = tf.random_uniform_initializer(maxval=1023)
+            elif self._initialization_method in ["sample", "reference"]:
                 initializer = self._init_samples
-                shape = None
             else:
                 raise TypeError("Initialization method not supported.")
+
             self._weights = tf.get_variable(
                 name='weights',
                 shape=shape,
-                initializer=initializer,
+                initializer=initializer
             )
 
         # Matrix of size [m*n, 2] for SOM grid locations of neurons.
@@ -497,14 +527,10 @@ class TFSom:
 
                 return tf.identity(activity, name="Output")
 
-    def train(self, data, step_offset=0):
+    def train(self, data_generator, num_inputs, step_offset=0):
         """ Train the network on the data provided by the input tensor.
         :param num_inputs: The total number of inputs in the data-set. Used to
                             determine batches per epoch
-        :param writer: The summary writer to add summaries to. This is created
-                        by the caller so when we stack layers we don't end up
-                        with duplicate outputs. If `None` then no summaries
-                        will be written.
         :param step_offset: The offset for the global step variable so I don't
                             accidentally overwrite my summaries
         """
@@ -513,31 +539,35 @@ class TFSom:
         if self._trained:
             LOGGER.warning("Model is already trained.")
 
+        batched_generator = create_batched_generator(
+            data_generator, self._batch_size
+        )
+
         # initialize the input fitting dataset
         # the fitting input tensor is directly integrated into the
         # graph, which is why graph creation is postponed until fitting,
         # when we know the actual data of our input
         with self._graph.as_default():
-            dataset = tf.data.Dataset.from_tensor_slices(
-                data.astype(np.float32)
+            dataset = tf.data.Dataset.from_generator(
+                data_generator, tf.float32
             )
-            # number of samples and number of dimensions in our data
-            num_inputs, self._dim = data.shape
 
             if self._initialization_method == "sample":
-                samples = data.values[np.random.choice(
-                    data.shape[0], self._m * self._n, replace=False
+                samples = self._reference.values[np.random.choice(
+                    self._reference.shape[0], self._m * self._n, replace=False
                 ), :]
                 self._init_samples = tf.convert_to_tensor(
                     samples, dtype=tf.float32
                 )
+            # load initial weights from given reference weights
+            elif self._initialization_method == "reference":
+                self._init_samples = tf.convert_to_tensor(
+                    self._reference.values, dtype=tf.float32
+                )
 
             dataset = dataset.repeat()
-            dataset = dataset.batch(self._batch_size)
-            iterator = dataset.make_one_shot_iterator()
-            next_element = iterator.get_next()
-
-            self._input_tensor = next_element
+            # dataset = dataset.batch(self._batch_size)
+            self._input_tensor = dataset.make_one_shot_iterator().get_next()
 
             # Create the ops and put them on the graph
             self._initialize_tf_graph()
@@ -547,13 +577,11 @@ class TFSom:
 
         # Divide by num_gpus to avoid accidentally training on the same data a
         # bunch of times
-        batches_per_epoch = (
-            num_inputs // self._batch_size // max(len(self._gpus), 1)
+        batches_per_epoch = int(
+            num_inputs / self._batch_size / max(len(self._gpus), 1) + 0.5
         )
 
         total_batches = batches_per_epoch * self._max_epochs
-        # Get how many batches constitute roughly 10 percent of the total for
-        # recording summaries
         global_step = step_offset
 
         LOGGER.info("Training self-organizing Map")
@@ -569,14 +597,13 @@ class TFSom:
                     batches_per_epoch,
                     percent_complete * 100
                 )
-                # Only do summaries when a SummaryWriter has been provided
                 self._sess.run(
                     self._training_op,
                     feed_dict={self._epoch: epoch}
                 )
 
         self._trained = True
-        return global_step
+        return self
 
     @property
     def output_weights(self):
@@ -665,16 +692,9 @@ class TFSom:
 class SelfOrganizingMap(BaseEstimator, TransformerMixin):
     """SOM abstraction for usage as a scikit learn transformer."""
 
-    def __init__(
-            self,
-            m, n,
-            max_epochs=10,
-            checkpoint_dir="checkpoints",
-            initialization_method="sample",
-            restore_path=None,
-    ):
+    def __init__(self, *args, **kwargs):
         """Expose a subset of tested parameters for external tuning."""
-        self._model = TFSom(m=m, n=n, max_epochs=max_epochs)
+        self._model = TFSom(*args, **kwargs)
         self._columns = None
 
     @property
@@ -698,7 +718,7 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
         """Fit the data using a matrix containing the data. The input
         can be either a numpy matrix or a pandas dataframe."""
         self._model.train(data)
-        self._columns = data.columns
+        # self._columns = data.columns
         return self
 
     def predict(self, data):
@@ -722,16 +742,16 @@ class SOMNodes(BaseEstimator, TransformerMixin):
     dimensions.
     """
 
-    def __init__(self, m=10, n=10, batch_size=1024):
-        self._m = m
-        self._n = n
-        self._batch_size = batch_size
+    def __init__(self, *args, **kwargs):
+        self._args = args
+        self._kwargs = kwargs
+
         self._model = None
         self.history = []
 
-    def fit(self, X, *args, **kwargs):
+    def fit(self, X, *_):
         """Always retrain model, if fit is called."""
-        self._model = TFSom(self._m, self._n, batch_size=self._batch_size)
+        self._model = TFSom(*self._args, **self._kwargs)
         self._model.train(X)
         return self
 
@@ -742,8 +762,4 @@ class SOMNodes(BaseEstimator, TransformerMixin):
         weights = pd.DataFrame(
             self._model.output_weights, columns=X.columns
         )
-        self.history.append({
-            "data": weights,
-            "mod": weights.index,
-        })
         return weights
