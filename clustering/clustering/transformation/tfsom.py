@@ -314,11 +314,12 @@ class TFSom:
             # the towers are constructed sequentially, the handle to the
             # Tensors will be different for each tower even if we reference
             # "self"
-            shape = [self._m * self._n, self._dim]
             if self._initialization_method == "random":
                 initializer = tf.random_uniform_initializer(maxval=1023)
+                shape = [self._m * self._n, self._dim]
             elif self._initialization_method in ["sample", "reference"]:
                 initializer = self._init_samples
+                shape = None
             else:
                 raise TypeError("Initialization method not supported.")
 
@@ -752,7 +753,11 @@ class SOMNodes(BaseEstimator, TransformerMixin):
     def fit(self, X, *_):
         """Always retrain model, if fit is called."""
         self._model = TFSom(*self._args, **self._kwargs)
-        self._model.train(X)
+
+        def genx():
+            yield X
+
+        self._model.train(genx, num_inputs=1)
         return self
 
     def predict(self, X, *_):

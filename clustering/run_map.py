@@ -69,14 +69,16 @@ def simple_run(path, data, reference):
 def case_to_map(path, data, references):
     """Transform cases to map representation of their data."""
 
-    model = tfsom.SOMNodes(
-        m=10, n=10, dim=reference.shape[0],
-        batch_size=5,
-        initialization_method="reference", reference=reference
-    )
-
     for tube in [1, 2]:
         tubedata = data.get_tube(tube)
+
+        reference = references[tube]
+
+        model = tfsom.SOMNodes(
+            m=10, n=10, dim=reference.shape[0],
+            batch_size=1,
+            initialization_method="reference", reference=reference
+        )
 
         for case in tubedata.data:
             print(f"Transforming {case.parent.id}")
@@ -121,27 +123,32 @@ def main():
 
     cases = CaseCollection(inputpath="s3://mll-flowdata/CLL-9F", tubes=[1, 2])
 
-    with open("labels.txt") as fobj:
-        selected = [l.strip() for l in fobj]
+    # with open("labels.txt") as fobj:
+    #     selected = [l.strip() for l in fobj]
 
-    reference_cases = cases.create_view(labels=selected)
-    print(len(reference_cases.data))
+    # reference_cases = cases.create_view(labels=selected)
+    # print(len(reference_cases.data))
 
-    refpath = pathlib.Path("sommaps/reference")
-    generate_reference(refpath, reference_cases)
+    # refpath = pathlib.Path("sommaps/reference")
+    # generate_reference(refpath, reference_cases)
 
-    return
+    # return
 
     reference_weights = {
         t: pd.read_csv(f"sommaps/reference/t{t}.csv", index_col=0)
         for t in [1, 2]
     }
 
-    mappath = pathlib.Path("sommaps/initial")
+    mappath = pathlib.Path("sommaps/lotta")
     mappath.mkdir(parents=True, exist_ok=True)
 
-    transdata = cases.create_view(num=20, groups=GROUPS)
+    transdata = cases.create_view(num=200, groups=GROUPS)
 
+    metadata = pd.DataFrame({
+        "label": [c.id for c in transdata.data],
+        "group": [c.group for c in transdata.data]
+    })
+    metadata.to_csv(f"{mappath}.csv")
     case_to_map(mappath, transdata, reference_weights)
 
 
