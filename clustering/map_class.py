@@ -6,10 +6,14 @@ from sklearn import manifold, model_selection, preprocessing
 from sklearn import naive_bayes
 from sklearn import metrics
 
-from keras import layers, models
+from keras import layers, models, regularizers
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+
+import sys
+sys.path.append("../classification")
+from classification import plotting
 
 
 COLS = "grcmyk"
@@ -74,6 +78,23 @@ def reshape_dataset(loaded):
     return t1_data, t2_data, loaded["group"]
 
 
+def reshape_dataset_2d(dataset, m=10, n=10):
+    """Reshape dataset into numpy matrix."""
+
+    t1_data = dataset["data"].apply(
+        lambda t: np.reshape(
+            t[0].values if isinstance(t[0], pd.DataFrame) else t[0], (m, n, -1)
+        )
+    )
+    t2_data = dataset["data"].apply(
+        lambda t: np.reshape(
+            t[1].values if isinstance(t[1], pd.DataFrame) else t[1], (m, n, -1)
+        )
+    )
+
+    return np.stack(t1_data), np.stack(t2_data), dataset["group"]
+
+
 def decomposition(dataset):
     """Non-linear decompositions of the data for visualization purposes."""
     t1, t2, y = reshape_dataset(dataset)
@@ -87,42 +108,113 @@ def decomposition(dataset):
     return tf1, tf2, y
 
 
-def create_model(xshape, yshape):
-    """Create a simple sequential neural network with multiple inputs."""
+def create_model_convolutional(xshape, yshape, num_inputs=2):
+    """Create a convnet model. The data will be feeded as a 3d matrix."""
+    inputs = []
+    input_ends = []
+    for i in range(num_inputs):
+        t_input = layers.Input(shape=xshape)
 
-    t1input = layers.Input(shape=xshape)
-    t1_a = layers.Dense(
-        units=512, activation="relu", kernel_initializer="uniform"
-    )(t1input)
-    t1_end = layers.Dense(
-        units=256, activation="relu", kernel_initializer="uniform"
-    )(t1_a)
+        t_c1 = layers.Conv2D(
+            filters=32,
+            kernel_size=2,
+            strides=1,
+        )(t_input)
 
-    t2input = layers.Input(shape=xshape)
-    t2_a = layers.Dense(
-        units=512, activation="relu", kernel_initializer="uniform"
-    )(t2input)
-    t2_end = layers.Dense(
-        units=256, activation="relu", kernel_initializer="uniform"
-    )(t2_a)
+        t_p1 = layers.MaxPooling2D(
+            pool_size=2, strides=1
+        )(t_c1)
 
-    concat = layers.concatenate([t1_end, t2_end])
+        t_end = layers.Flatten()(t_p1)
+
+        input_ends.append(t_end)
+        inputs.append(t_input)
+
+    concat = layers.concatenate(input_ends)
 
     m_a = layers.Dense(
-        units=1024, activation="relu", kernel_initializer="uniform"
+        units=128, activation="relu", kernel_initializer="uniform"
     )(concat)
-    m_b = layers.Dense(
-        units=256, activation="relu", kernel_initializer="uniform"
-    )(m_a)
     m_end = layers.Dense(
         units=64, activation="relu", kernel_initializer="uniform"
-    )(m_b)
+    )(m_a)
 
     final = layers.Dense(
         units=yshape, activation="softmax"
     )(m_end)
 
-    model = models.Model(inputs=[t1input, t2input], outputs=final)
+    model = models.Model(inputs=inputs, outputs=final)
+
+    model.compile(
+        loss="categorical_crossentropy", optimizer="adam", metrics=["acc"]
+    )
+
+    return model
+
+
+def create_model(xshape, yshape, num_inputs=2):
+    """Create a simple sequential neural network with multiple inputs."""
+
+    inputs = []
+    input_ends = []
+    for i in range(num_inputs):
+        t_input = layers.Input(shape=xshape)
+
+        t_attention = layers.Dense(
+            units=xshape[0], activation="softmax",
+            kernel_regularizer=regularizers.l2(.01)
+        )(t_input)
+        t_multatt = layers.multiply([t_input, t_attention])
+
+        t_a = layers.Dense(
+            units=128, activation="relu", kernel_initializer="uniform",
+            # kernel_regularizer=regularizers.l1(.01)
+        )(t_multatt)
+        t_ad = layers.Dropout(rate=0.01)(t_a)
+
+        t_b = layers.Dense(
+            units=64, activation="relu", kernel_initializer="uniform",
+            kernel_regularizer=regularizers.l1(.01)
+        )(t_ad)
+        t_bd = layers.Dropout(rate=0.01)(t_b)
+
+        t_end = layers.BatchNormalization(
+        )(t_b)
+
+        input_ends.append(t_end)
+        inputs.append(t_input)
+
+    # t1_a = layers.Dense(
+    #     units=128, activation="relu", kernel_initializer="uniform"
+    # )(t1input)
+    # t1_end = layers.Dense(
+    #     units=64, activation="relu", kernel_initializer="uniform"
+    # )(t1_a)
+
+    # t2_a = layers.Dense(
+    #     units=128, activation="relu", kernel_initializer="uniform"
+    # )(t2input)
+    # t2_end = layers.Dense(
+    #     units=64, activation="relu", kernel_initializer="uniform"
+    # )(t2_a)
+
+    concat = layers.concatenate(input_ends)
+
+    # m_a = layers.Dense(
+    #     units=256, activation="relu", kernel_initializer="uniform"
+    # )(concat)
+    # m_b = layers.Dense(
+    #     units=128, activation="relu", kernel_initializer="uniform"
+    # )(m_a)
+    m_end = layers.Dense(
+        units=64, activation="relu", kernel_initializer="uniform"
+    )(concat)
+
+    final = layers.Dense(
+        units=yshape, activation="softmax"
+    )(m_end)
+
+    model = models.Model(inputs=inputs, outputs=final)
 
     model.compile(
         loss="categorical_crossentropy", optimizer="adam", metrics=["acc"]
@@ -163,6 +255,28 @@ def classify(data):
     return confusion, binarizer.classes_
 
 
+def classify_convolutional(data):
+    train, test = model_selection.train_test_split(data, train_size=0.8)
+
+    tr1, tr2, ytrain = reshape_dataset_2d(train)
+
+    binarizer = preprocessing.LabelBinarizer()
+    ytrain_mat = binarizer.fit_transform(ytrain)
+
+    te1, te2, ytest = reshape_dataset_2d(test)
+    ytest_mat = binarizer.transform(ytest)
+
+    model = create_model_convolutional(tr1[0].shape, ytrain_mat.shape[1])
+    model.fit([tr1, tr2], ytrain_mat, epochs=20, batch_size=16)
+    pred = model.predict([te1, te2], batch_size=128)
+    pred = binarizer.inverse_transform(pred)
+
+    print("F1: ", metrics.f1_score(ytest, pred, average="micro"))
+
+    confusion = metrics.confusion_matrix(ytest, pred, binarizer.classes_,)
+    return confusion, binarizer.classes_
+
+
 def subtract_ref_data(data, references):
     data["data"] = data["data"].apply(
         lambda t: [r - a for r, a in zip(references, t)]
@@ -182,7 +296,7 @@ def main():
     ref_maps = [
         pd.read_csv(f"sommaps/reference/t{t}.csv", index_col=0) for t in [1, 2]
     ]
-    inputpath = pathlib.Path("sommaps/lotta")
+    inputpath = pathlib.Path("sommaps/huge")
 
     indata = load_dataset(inputpath)
 
@@ -194,7 +308,16 @@ def main():
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
 
-    classify(normdata)
+    confusion, groups = classify(normdata)
+    confusion, groups = classify_convolutional(normdata)
+
+    outpath = pathlib.Path("sommaps/output/huge")
+    outpath.mkdir(parents=True, exist_ok=True)
+
+    plotting.plot_confusion_matrix(
+        confusion, groups, normalize=True,
+        filename=outpath / "confusion", dendroname=outpath / "dendro"
+    )
 
 
 if __name__ == "__main__":

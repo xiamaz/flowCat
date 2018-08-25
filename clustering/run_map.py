@@ -17,8 +17,8 @@ from clustering.collection import CaseCollection
 
 
 GROUPS = [
-    # "CLL", "PL", "FL", "HCL", "LPL", "MBL", "MCL", "MZL", "normal"
-    "CLL", "MCL", "MBL", "normal"
+    "CLL", "PL", "FL", "HCL", "LPL", "MBL", "MCL", "MZL", "normal"
+    # "CLL", "MCL", "MBL", "normal"
 ]
 
 
@@ -139,10 +139,10 @@ def main():
         for t in [1, 2]
     }
 
-    mappath = pathlib.Path("sommaps/lotta")
+    mappath = pathlib.Path("sommaps/huge")
     mappath.mkdir(parents=True, exist_ok=True)
 
-    transdata = cases.create_view(num=200, groups=GROUPS)
+    transdata = cases.create_view(num=1000, groups=GROUPS)
 
     metadata = pd.DataFrame({
         "label": [c.id for c in transdata.data],

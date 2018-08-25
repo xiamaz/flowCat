@@ -8,9 +8,9 @@ from functools import reduce
 
 import numpy as np
 import pandas as pd
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+from matplotlib import cm
 
 import seaborn
 from scipy.cluster import hierarchy
@@ -21,7 +21,7 @@ def plot_confusion_matrix(
         classes: [str],
         normalize: bool = False,
         title: str = 'Confusion matrix',
-        cmap=plt.cm.Blues,
+        cmap=cm.Blues,
         filename: str = 'confusion.png',
         dendroname: str = "dendro.png",
 ):
@@ -38,36 +38,41 @@ def plot_confusion_matrix(
     else:
         print('Confusion matrix, without normalization')
 
-    plt.close('all')
-    plt.figure()
+    fig = Figure()
+    axes = fig.add_subplot(111)
 
-    plt.imshow(confusion_matrix, interpolation='nearest', cmap=cmap)
-    plt.title(title)
-    plt.colorbar()
+    img = axes.imshow(confusion_matrix, interpolation='nearest', cmap=cmap)
+    fig.colorbar(img)
+
+    axes.set_title(title)
     tick_marks = np.arange(len(classes))
-    plt.xticks(tick_marks, classes, rotation=45)
-    plt.yticks(tick_marks, classes)
+    axes.set_xticks(tick_marks)
+    axes.set_xticklabels(classes)
+    axes.set_yticks(tick_marks)
+    axes.set_xticklabels(classes)
 
     fmt = '.2f' if normalize else 'd'
     thresh = confusion_matrix.max() / 2.
     for i, j in itertools.product(range(confusion_matrix.shape[0]),
                                   range(confusion_matrix.shape[1])):
-        plt.text(j, i, format(confusion_matrix[i, j], fmt),
+        axes.text(j, i, format(confusion_matrix[i, j], fmt),
                  horizontalalignment="center",
                  color="white" if confusion_matrix[i, j] > thresh else "black")
 
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
-    plt.tight_layout()
-    plt.savefig(filename, dpi=300)
+    axes.set_ylabel('True label')
+    axes.set_xlabel('Predicted label')
+    fig.tight_layout()
+    FigureCanvas(fig)
+    fig.savefig(filename, dpi=300)
 
-    plt.close("all")
-    plt.figure()
+    fig = Figure()
     Y = hierarchy.distance.pdist(confusion_matrix, metric='euclidean')
     Z = hierarchy.linkage(Y, method='single')
-    hierarchy.dendrogram(Z, show_contracted=True, labels=classes)
-    plt.tight_layout()
-    plt.savefig(dendroname, dpi=300)
+    axes = fig.add_subplot(111)
+    hierarchy.dendrogram(Z, show_contracted=True, labels=classes, ax=axes)
+    fig.tight_layout()
+    FigureCanvas(fig)
+    fig.savefig(dendroname, dpi=300)
 
 
 def plot_history(history: "History", path: str):
@@ -104,14 +109,18 @@ def plot_splits(splits, path):
     ]
     df_data = pd.DataFrame(df_data)
 
+    grouped = Figure()
+
     grouped = seaborn.factorplot(
         x="type", hue="group", y="size", data=df_data, col="i",
-        size=6, kind="bar", palette="muted"
+        size=6, kind="bar", palette="muted", fig=grouped
     )
 
     grouped.despine(left=True)
     grouped.set_ylabels("Group size.")
     grouped.set_titles("Split group sizes.")
+
+    FigureCanvas(grouped)
 
     grouped.savefig(path)
 
@@ -135,18 +144,19 @@ def plot_change(data, path, xlabel="Size change"):
         return
 
     output = os.path.join(path, "stat_combined.png")
-    plt.close('all')
 
-    axes = data.plot(x="set", ylim=(0, 1))
+    fig = Figure()
+
+    axes = fig.add_subplot(111)
+
+    data.plot(x="set", ylim=(0, 1), ax=axes)
 
     axes.set_xlabel(xlabel)
     axes.set_title("Metrics change with size.")
-    fig = axes.get_figure()
 
-    plt.tight_layout()
+    fig.tight_layout()
+    FigureCanvas(fig)
     fig.savefig(output, dpi=300)
-
-    plt.close(fig)
 
 
 def plot_combined(results: list, path: str) -> None:
