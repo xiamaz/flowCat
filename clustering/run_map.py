@@ -91,7 +91,7 @@ def case_to_map(path, data, references, gridsize=10):
 
 
 def generate_reference(path, data, gridsize=10):
-    """Create and save reference som maps using consensus soms."""
+    """Create and save consensus som maps."""
 
     for tube in [1, 2]:
         tubedata = data.get_tube(tube)
