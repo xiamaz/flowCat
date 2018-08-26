@@ -33,7 +33,7 @@ def configure_print_logging(rootname="clustering"):
     rootlogger.addHandler(handler)
 
 
-def simple_run(path, data, reference):
+def simple_run(path, data, reference, gridsize=10):
     """Very simple SOM run for tensorflow testing."""
     # only use data from the second tube
     tubedata = data.get_tube(2)
@@ -48,8 +48,8 @@ def simple_run(path, data, reference):
     print(reference)
 
     model = tfsom.TFSom(
-        m=10,
-        n=10,
+        m=gridsize,
+        n=gridsize,
         dim=len(marker_list),
         batch_size=10,
         max_epochs=5,
@@ -66,7 +66,7 @@ def simple_run(path, data, reference):
     # weights.to_csv("somweights.csv")
 
 
-def case_to_map(path, data, references):
+def case_to_map(path, data, references, gridsize=10):
     """Transform cases to map representation of their data."""
 
     for tube in [1, 2]:
@@ -75,7 +75,7 @@ def case_to_map(path, data, references):
         reference = references[tube]
 
         model = tfsom.SOMNodes(
-            m=10, n=10, dim=reference.shape[0],
+            m=gridsize, n=gridsize, dim=reference.shape[0],
             batch_size=1,
             initialization_method="reference", reference=reference
         )
@@ -90,15 +90,15 @@ def case_to_map(path, data, references):
             tubeweights.to_csv(filepath)
 
 
-def generate_reference(path, data):
+def generate_reference(path, data, gridsize=10):
     """Create and save reference som maps using consensus soms."""
 
     for tube in [1, 2]:
         tubedata = data.get_tube(tube)
         marker_list = tubedata.data[0].markers
         model = tfsom.TFSom(
-            m=10,
-            n=10,
+            m=gridsize,
+            n=gridsize,
             dim=len(marker_list),
             batch_size=5,
             max_epochs=20,
@@ -115,31 +115,36 @@ def generate_reference(path, data):
 
         path.mkdir(parents=True, exist_ok=True)
         df_weights = pd.DataFrame(weights, columns=marker_list)
-        df_weights.to_csv(path / f"t{tube}.csv")
+        df_weights.to_csv(path / f"t{tube}_s{gridsize}.csv")
 
 
 def main():
+    gridsize = 30
+    generate_reference = False
+
     configure_print_logging()
 
     cases = CaseCollection(inputpath="s3://mll-flowdata/CLL-9F", tubes=[1, 2])
 
-    # with open("labels.txt") as fobj:
-    #     selected = [l.strip() for l in fobj]
+    # generate consensus reference and exit
+    if generate_reference:
+        with open("labels.txt") as fobj:
+            selected = [l.strip() for l in fobj]
 
-    # reference_cases = cases.create_view(labels=selected)
-    # print(len(reference_cases.data))
+        reference_cases = cases.create_view(labels=selected)
+        print(len(reference_cases.data))
 
-    # refpath = pathlib.Path("sommaps/reference")
-    # generate_reference(refpath, reference_cases)
+        refpath = pathlib.Path("sommaps/reference")
+        generate_reference(refpath, reference_cases, gridsize=gridsize)
 
-    # return
+        return
 
     reference_weights = {
-        t: pd.read_csv(f"sommaps/reference/t{t}.csv", index_col=0)
+        t: pd.read_csv(f"sommaps/reference/t{t}_s{gridsize}.csv", index_col=0)
         for t in [1, 2]
     }
 
-    mappath = pathlib.Path("sommaps/huge")
+    mappath = pathlib.Path("sommaps/huge_s{gridsize}")
     mappath.mkdir(parents=True, exist_ok=True)
 
     transdata = cases.create_view(num=1000, groups=GROUPS)
@@ -149,7 +154,7 @@ def main():
         "group": [c.group for c in transdata.data]
     })
     metadata.to_csv(f"{mappath}.csv")
-    case_to_map(mappath, transdata, reference_weights)
+    case_to_map(mappath, transdata, reference_weights, gridsize=gridsize)
 
 
 if __name__ == "__main__":
