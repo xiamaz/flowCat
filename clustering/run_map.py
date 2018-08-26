@@ -13,7 +13,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from clustering.transformation import tfsom, fcs, pregating
-from clustering.collection import CaseCollection
+from clustering.collection import CaseCollection, CaseView
 
 
 GROUPS = [
@@ -33,7 +33,7 @@ def configure_print_logging(rootname="clustering"):
     rootlogger.addHandler(handler)
 
 
-def simple_run(path, data, reference, gridsize=10):
+def simple_run(data, gridsize=10):
     """Very simple SOM run for tensorflow testing."""
     # only use data from the second tube
     tubedata = data.get_tube(2)
@@ -45,7 +45,7 @@ def simple_run(path, data, reference, gridsize=10):
             lmddata = tdata.data[marker_list]
             yield lmddata
 
-    print(reference)
+    # print(reference)
 
     model = tfsom.TFSom(
         m=gridsize,
@@ -53,13 +53,14 @@ def simple_run(path, data, reference, gridsize=10):
         dim=len(marker_list),
         batch_size=10,
         max_epochs=5,
-        reference=reference,
-        initialization_method="reference",
+        initialization_method="random",
+        checkpoint_dir='checkpoints',
+        summary_dir='summaries'
     )
 
     print(len(tubedata.data))
 
-    model.train(data_generator, num_inputs=len(tubedata.data))
+    model.train(data_generator, num_inputs=len(tubedata.data), tensorboard=True)
 
     weights = model.output_weights
     print(weights.shape)
@@ -158,4 +159,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    cases = (CaseCollection(inputpath="s3://mll-flowdata/CLL-9F", tubes=[1, 2]))
+    data = cases.create_view(num=10)
+    simple_run(data = data)

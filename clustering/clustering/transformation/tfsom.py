@@ -89,7 +89,9 @@ class TFSom:
             output_sensitivity=-1.0,
             reference=None,
             initialization_method="sample",
-            model_name="Self-Organizing-Map"
+            model_name="Self-Organizing-Map",
+            checkpoint_dir=None,
+            summary_dir=None
     ):
         """
         Initialize a self-organizing map on the tensorflow graph
@@ -176,6 +178,12 @@ class TFSom:
         self._prediction_distance = None
         self._transform_output = None
 
+        # checkpoint & save
+        self._checkpoint_dir = checkpoint_dir
+        self._saver = None
+        self._summary_list = list()
+        self._summary_dir = summary_dir
+
         # optional for alternative initialization
         self._init_samples = None
 
@@ -193,7 +201,12 @@ class TFSom:
             )
         )
 
+        # Initialize the summary writer after the session has been initialized
+
+        self.writer = tf.summary.FileWriter(str(Path.cwd() / self._summary_dir / 'train'), self._sess.graph)
+
         self._initial_learning_rate = initial_learning_rate
+
 
     def save(self, location):
         """Save the current model into the specified location."""
@@ -207,6 +220,16 @@ class TFSom:
                 "histogram": self._transform_output,
             },
         )
+
+    def _save_checkpoint(self, global_step):
+        """Save a checkpoint file"""
+
+        if self._saver is None:
+            # Create the saver object
+            self._saver = tf.train.Saver()
+        if self._checkpoint_dir is not None:
+            output_name = Path.cwr() / (self._checkpoint_dir) / self._model_name
+            self._saver.save(self._sess, output_name, global_step=global_step)
 
     def _neuron_locations(self):
         """ Maps an absolute neuron index to a 2d vector for calculating the
@@ -328,6 +351,19 @@ class TFSom:
                 shape=shape,
                 initializer=initializer
             )
+
+            with tf.name_scope('summaries'):
+                # All summary ops are added to a list and then the merge() function is called at the end of
+                # this method
+                mean = tf.reduce_mean(self._weights)
+                self._summary_list.append(tf.summary.scalar('mean', mean))
+                with tf.name_scope('stdev'):
+                    stdev = tf.sqrt(tf.reduce_mean(tf.squared_difference(self._weights, mean)))
+                self._summary_list.append(tf.summary.scalar('stdev', stdev))
+                self._summary_list.append(tf.summary.scalar('max', tf.reduce_max(self._weights)))
+                self._summary_list.append(tf.summary.scalar('min', tf.reduce_min(self._weights)))
+                self._summary_list.append(tf.summary.histogram('histogram', self._weights))
+
 
         # Matrix of size [m*n, 2] for SOM grid locations of neurons.
         # Maps an index to an (x,y) coordinate of a neuron in the map for
@@ -481,10 +517,10 @@ class TFSom:
                 axis=-1
             )
 
-        # We on;y really care about summaries from one of the tower SOMs, so
+        # We only really care about summaries from one of the tower SOMs, so
         # assign the merge op to the last tower we make. Otherwise there's way
         # too many on Tensorboard.
-        # self._merged = tf.summary.merge(self._summary_list)
+        self._merged = tf.summary.merge(self._summary_list)
 
         # With multi-gpu training we collect the results and do the weight
         # assignment on the CPU
@@ -528,7 +564,7 @@ class TFSom:
 
                 return tf.identity(activity, name="Output")
 
-    def train(self, data_generator, num_inputs, step_offset=0):
+    def train(self, data_generator, num_inputs, step_offset=0, tensorboard = False):
         """ Train the network on the data provided by the input tensor.
         :param num_inputs: The total number of inputs in the data-set. Used to
                             determine batches per epoch
@@ -578,14 +614,24 @@ class TFSom:
 
         # Divide by num_gpus to avoid accidentally training on the same data a
         # bunch of times
-        batches_per_epoch = int(num_inputs / self._batch_size + 0.5)
+        batches_per_epoch = int(
+            num_inputs / self._batch_size / max(len(self._gpus), 1) + 0.5
+        )
 
         total_batches = batches_per_epoch * self._max_epochs
         global_step = step_offset
 
+
+
         LOGGER.info("Training self-organizing Map")
         for epoch in range(self._max_epochs):
             LOGGER.info("Epoch: %d/%d", epoch, self._max_epochs)
+
+            # if the tensorboard flag has been provided (for outputting the summaries)
+            if tensorboard:
+                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                run_metadata = tf.RunMetadata()
+
             for batch in range(batches_per_epoch):
                 current_batch = batch + (batches_per_epoch * epoch)
                 global_step = current_batch + step_offset
@@ -596,10 +642,31 @@ class TFSom:
                     batches_per_epoch,
                     percent_complete * 100
                 )
-                self._sess.run(
-                    self._training_op,
-                    feed_dict={self._epoch: epoch}
-                )
+
+                # if recording summaries; initialize a run while recording, save after batch is done
+                if tensorboard:
+                    summary, _, _, = self._sess.run([self._merged, self._training_op,
+                                                     self._activity_op],
+                                                    feed_dict={self._epoch: epoch},
+                                                    options=run_options,
+                                                    run_metadata=run_metadata)
+
+                # run plain run if not, save checkpoint regardless
+                else:
+                    self._sess.run(
+                        self._training_op,
+                        feed_dict={self._epoch: epoch}
+                    )
+
+            # save the summary if it has been tracked
+            if tensorboard:
+
+                writer.add_run_metadata(run_metadata, "step_{}".format(global_step))
+                writer.add_summary(summary, global_step)
+
+            # save checkpoint after the batch
+
+            self._save_checkpoint(global_step)
 
         self._trained = True
         return self
