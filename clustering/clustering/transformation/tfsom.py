@@ -578,9 +578,7 @@ class TFSom:
 
         # Divide by num_gpus to avoid accidentally training on the same data a
         # bunch of times
-        batches_per_epoch = int(
-            num_inputs / self._batch_size / max(len(self._gpus), 1) + 0.5
-        )
+        batches_per_epoch = int(num_inputs / self._batch_size + 0.5)
 
         total_batches = batches_per_epoch * self._max_epochs
         global_step = step_offset
