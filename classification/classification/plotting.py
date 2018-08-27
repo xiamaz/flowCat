@@ -49,7 +49,7 @@ def plot_confusion_matrix(
     axes.set_xticks(tick_marks)
     axes.set_xticklabels(classes)
     axes.set_yticks(tick_marks)
-    axes.set_xticklabels(classes)
+    axes.set_yticklabels(classes)
 
     fmt = '.2f' if normalize else 'd'
     thresh = confusion_matrix.max() / 2.
