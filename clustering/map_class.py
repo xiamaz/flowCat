@@ -116,16 +116,28 @@ def create_model_convolutional(xshape, yshape, num_inputs=2):
         t_input = layers.Input(shape=xshape)
 
         t_c1 = layers.Conv2D(
-            filters=32,
-            kernel_size=2,
+            filters=64,
+            kernel_size=3,
+            activation="relu",
             strides=1,
         )(t_input)
 
-        t_p1 = layers.MaxPooling2D(
-            pool_size=2, strides=1
+        t_c2 = layers.Conv2D(
+            filters=64,
+            kernel_size=3,
+            activation="relu",
+            strides=1,
         )(t_c1)
 
-        t_end = layers.Flatten()(t_p1)
+        t_p1 = layers.MaxPooling2D(
+            pool_size=2, strides=1
+        )(t_c2)
+
+        t_d = layers.Dropout(0.25)(t_p1)
+
+        t_f = layers.Flatten()(t_p1)
+
+        t_end = t_f
 
         input_ends.append(t_end)
         inputs.append(t_input)
@@ -133,11 +145,14 @@ def create_model_convolutional(xshape, yshape, num_inputs=2):
     concat = layers.concatenate(input_ends)
 
     m_a = layers.Dense(
-        units=128, activation="relu", kernel_initializer="uniform"
+        units=256, activation="relu", kernel_initializer="uniform",
+        kernel_regularizer=regularizers.l2(0.01)
     )(concat)
-    m_end = layers.Dense(
-        units=64, activation="relu", kernel_initializer="uniform"
-    )(m_a)
+    # m_end = layers.Dense(
+    #     units=64, activation="relu", kernel_initializer="uniform",
+    #     kernel_regularizer=regularizers.l2(0.01)
+    # )(m_a)
+    m_end = layers.Dropout(0.5)(m_a)
 
     final = layers.Dense(
         units=yshape, activation="softmax"
@@ -223,9 +238,12 @@ def create_model(xshape, yshape, num_inputs=2):
     return model
 
 
-def classify(data):
+def classify(data, m=10, n=10):
     """Extremely simple sequential neural network with two
-    inputs for the 10x10x12 data"""
+    inputs for the 10x10x12 data
+
+    m, n - denote the shape of the input
+    """
 
     train, test = model_selection.train_test_split(data, train_size=0.8)
 
@@ -255,19 +273,19 @@ def classify(data):
     return confusion, binarizer.classes_
 
 
-def classify_convolutional(data):
+def classify_convolutional(data, m=10, n=10):
     train, test = model_selection.train_test_split(data, train_size=0.8)
 
-    tr1, tr2, ytrain = reshape_dataset_2d(train)
+    tr1, tr2, ytrain = reshape_dataset_2d(train, m=m, n=n)
 
     binarizer = preprocessing.LabelBinarizer()
     ytrain_mat = binarizer.fit_transform(ytrain)
 
-    te1, te2, ytest = reshape_dataset_2d(test)
+    te1, te2, ytest = reshape_dataset_2d(test, m=m, n=n)
     ytest_mat = binarizer.transform(ytest)
 
     model = create_model_convolutional(tr1[0].shape, ytrain_mat.shape[1])
-    model.fit([tr1, tr2], ytrain_mat, epochs=20, batch_size=16)
+    model.fit([tr1, tr2], ytrain_mat, epochs=30, batch_size=16)
     pred = model.predict([te1, te2], batch_size=128)
     pred = binarizer.inverse_transform(pred)
 
@@ -291,32 +309,51 @@ def normalize_data(data):
     return data
 
 
+def modify_groups(data, mapping):
+    """Change the cohort composition according to the given
+    cohort composition."""
+    data["group"] = data["group"].apply(lambda g: mapping.get(g, g))
+    return data
+
 def main():
 
-    ref_maps = [
-        pd.read_csv(f"sommaps/reference/t{t}.csv", index_col=0) for t in [1, 2]
-    ]
-    inputpath = pathlib.Path("sommaps/huge")
+    inputpath = pathlib.Path("sommaps/huge_s30")
 
     indata = load_dataset(inputpath)
 
-    subdata = subtract_ref_data(indata, ref_maps)
+    # ref_maps = [
+    #     pd.read_csv(f"sommaps/reference/t{t}.csv", index_col=0)
+    #     for t in [1, 2]
+    # ]
+    # subdata = subtract_ref_data(indata, ref_maps)
+
+    group_map = {
+        "CLL": "CM",
+        "MBL": "CM",
+        "MZL": "LM",
+        "LPL": "LM",
+        "MCL": "MP",
+        "PL": "MP",
+    }
+
+    mapped_data = modify_groups(indata, mapping=group_map)
 
     normdata = normalize_data(indata)
+    mapped_normdata = normalize_data(mapped_data)
 
     # plotpath = pathlib.Path("sommaps/output/lotta")
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
 
     confusion, groups = classify(normdata)
-    confusion, groups = classify_convolutional(normdata)
+    confusion, groups = classify_convolutional(normdata, m=30, n=30)
 
-    outpath = pathlib.Path("sommaps/output/huge")
+    outpath = pathlib.Path("sommaps/output/huge_s30")
     outpath.mkdir(parents=True, exist_ok=True)
 
     plotting.plot_confusion_matrix(
         confusion, groups, normalize=True,
-        filename=outpath / "confusion", dendroname=outpath / "dendro"
+        filename=outpath / "confusion_merged", dendroname=outpath / "dendro_merged"
     )
 
 
