@@ -38,31 +38,29 @@ def simple_run(path, data, reference, gridsize=10):
     # only use data from the second tube
     tubedata = data.get_tube(2)
 
-    marker_list = tubedata.data[0].markers
+    marker_list = reference.columns
 
     def data_generator():
         for tdata in tubedata.data:
             lmddata = tdata.data[marker_list]
             yield lmddata
 
-    print(reference)
-
     model = tfsom.TFSom(
         m=gridsize,
         n=gridsize,
         dim=len(marker_list),
-        batch_size=10,
+        batch_size=1,
         max_epochs=5,
         reference=reference,
         initialization_method="reference",
     )
-
-    print(len(tubedata.data))
-
     model.train(data_generator, num_inputs=len(tubedata.data))
 
     weights = model.output_weights
-    print(weights.shape)
+
+    tdata = tubedata.data[0].data[marker_list]
+
+    print(model.map_to_histogram_distribution(tdata).shape)
     # weights.to_csv("somweights.csv")
 
 
@@ -77,7 +75,9 @@ def case_to_map(path, data, references, gridsize=10):
         model = tfsom.SOMNodes(
             m=gridsize, n=gridsize, dim=reference.shape[0],
             batch_size=1,
-            initialization_method="reference", reference=reference
+            max_epochs=50,
+            initialization_method="reference", reference=reference,
+            counts=True
         )
 
         for case in tubedata.data:
@@ -101,7 +101,7 @@ def generate_reference(path, data, gridsize=10):
             n=gridsize,
             dim=len(marker_list),
             batch_size=5,
-            max_epochs=20,
+            max_epochs=50,
             initialization_method="random",
         )
 
@@ -144,14 +144,17 @@ def main():
         for t in [1, 2]
     }
 
-    mappath = pathlib.Path("sommaps/huge_s{gridsize}")
+    mappath = pathlib.Path(f"sommaps/huge_s{gridsize}_counts")
     mappath.mkdir(parents=True, exist_ok=True)
 
-    transdata = cases.create_view(num=1000, groups=GROUPS)
+    with open("trans_labels.txt") as fobj:
+        ref_trans = [l.strip() for l in fobj]
+
+    transdata = cases.create_view(num=100, groups=GROUPS, labels=ref_trans)
 
     metadata = pd.DataFrame({
         "label": [c.id for c in transdata.data],
-        "group": [c.group for c in transdata.data]
+        "group": [c.group for c in transdata.data],
     })
     metadata.to_csv(f"{mappath}.csv")
     case_to_map(mappath, transdata, reference_weights, gridsize=gridsize)

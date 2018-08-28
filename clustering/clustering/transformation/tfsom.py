@@ -81,7 +81,7 @@ class TFSom:
             m, n,
             dim,
             max_epochs=10,
-            batch_size=1, test_batch_size=1,
+            batch_size=1,
             initial_radius=None,
             initial_learning_rate=0.1,
             std_coeff=0.5,
@@ -130,7 +130,6 @@ class TFSom:
 
         self._max_epochs = abs(int(max_epochs))
         self._batch_size = abs(int(batch_size))
-        self._test_batch_size = abs(int(test_batch_size))
         self._std_coeff = abs(float(std_coeff))
         self._softmax_activity = bool(softmax_activity)
         self._model_name = str(model_name)
@@ -208,13 +207,6 @@ class TFSom:
             },
         )
 
-    def _neuron_locations(self):
-        """ Maps an absolute neuron index to a 2d vector for calculating the
-        neighborhood function """
-        for i in range(self._m):
-            for j in range(self._n):
-                yield np.array([i, j])
-
     def _initialize_tf_graph(self):
         """ Initialize the SOM on the TensorFlow graph
 
@@ -276,11 +268,9 @@ class TFSom:
         """Create prediction ops"""
         with tf.name_scope("Prediction"):
             self._invar = tf.placeholder(tf.float32)
-            self._prediction_input = tf.data.Dataset.from_tensor_slices(
-                self._invar
-            ).batch(
-                self._test_batch_size
-            ).make_initializable_iterator()
+            dataset = tf.data.Dataset.from_tensors(self._invar)
+
+            self._prediction_input = dataset.make_initializable_iterator()
 
             # Get the index of the minimum distance for each input item,
             # shape will be [batch_size],
@@ -333,7 +323,8 @@ class TFSom:
         # Maps an index to an (x,y) coordinate of a neuron in the map for
         # calculating the neighborhood distance
         self._location_vects = tf.constant(np.array(
-            list(self._neuron_locations())), name='Location_Vectors')
+            [[i, j] for i in range(self._m) for j in range(self._n)]
+        ), name='Location_Vectors')
 
         with tf.name_scope('Input'):
             self._input = tf.identity(self._input_tensor)
@@ -741,11 +732,12 @@ class SOMNodes(BaseEstimator, TransformerMixin):
     dimensions.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, counts=False, *args, **kwargs):
         self._args = args
         self._kwargs = kwargs
 
         self._model = None
+        self._counts = counts
         self.history = []
 
     def fit(self, X, *_):
@@ -765,4 +757,7 @@ class SOMNodes(BaseEstimator, TransformerMixin):
         weights = pd.DataFrame(
             self._model.output_weights, columns=X.columns
         )
+        if self._counts:
+            weights["counts"] = self._model.map_to_histogram_distribution(
+                X, relative=False).tolist()
         return weights
