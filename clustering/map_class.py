@@ -300,7 +300,7 @@ def classify(data):
     return confusion, binarizer.classes_
 
 
-def classify_convolutional(data, m=10, n=10):
+def classify_convolutional(data, m=10, n=10, weights=None):
     groups = list(data["group"].unique())
 
     train, test = model_selection.train_test_split(data, train_size=0.8)
@@ -314,11 +314,6 @@ def classify_convolutional(data, m=10, n=10):
 
     te1, te2, ytest = reshape_dataset_2d(test, m=m, n=n)
     ytest_mat = binarizer.transform(ytest)
-
-    weights = np.ones((len(groups), len(groups)))
-    for i in range(len(groups)):
-        if i != groups.index("normal"):
-            weights[i][groups.index("normal")] = 50
 
     model = create_model_convolutional(
         tr1[0].shape, len(groups), classweights=weights
@@ -342,8 +337,26 @@ def subtract_ref_data(data, references):
 
 def normalize_data(data):
     data["data"] = data["data"].apply(
-        lambda t: [preprocessing.StandardScaler().fit_transform(d) for d in t]
+        lambda t: [
+            pd.DataFrame(
+                preprocessing.StandardScaler().fit_transform(d),
+                columns=d.columns
+            ) for d in t]
     )
+    return data
+
+
+def remove_counts(data):
+    data["data"] = data["data"].apply(
+        lambda t: [d.drop("counts", axis=1) for d in t])
+    return data
+
+
+def sqrt_counts(data):
+    def sqrt_df(df):
+        df["counts"] = np.sqrt(df["counts"])
+        return df
+    data["data"] = data["data"].apply(lambda t: [sqrt_df(d) for d in t])
     return data
 
 
@@ -355,9 +368,11 @@ def modify_groups(data, mapping):
 
 def main():
 
-    inputpath = pathlib.Path("sommaps/huge")
+    inputpath = pathlib.Path("sommaps/huge_s30_counts")
 
     indata = load_dataset(inputpath)
+    sqrt_data = sqrt_counts(indata)
+    normdata = normalize_data(sqrt_data)
 
     # ref_maps = [
     #     pd.read_csv(f"sommaps/reference/t{t}.csv", index_col=0)
@@ -374,26 +389,30 @@ def main():
         "PL": "MP",
     }
 
-    mapped_data = modify_groups(indata, mapping=group_map)
+    groups = list(indata["group"].unique())
+    weights = np.ones((len(groups), len(groups)))
+    for i in range(len(groups)):
+        if i != groups.index("normal"):
+            weights[i][groups.index("normal")] = 50
+            weights[groups.index("normal")][i] = 25
 
-    normdata = normalize_data(indata)
-    mapped_normdata = normalize_data(mapped_data)
-
+    mapped_data = modify_groups(normdata, mapping=group_map)
     # plotpath = pathlib.Path("sommaps/output/lotta")
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
 
-    confusion, groups = classify(normdata)
-    print(confusion, groups)
-    # confusion, groups = classify_convolutional(mapped_normdata, m=30, n=30)
+    # confusion, groups = classify(normdata)
+    # print(confusion, groups)
+    confusion, groups = classify_convolutional(
+        mapped_data, m=30, n=30)
 
-    # outpath = pathlib.Path("sommaps/output/huge_s30")
-    # outpath.mkdir(parents=True, exist_ok=True)
+    outpath = pathlib.Path("sommaps/output/huge_s30_counts")
+    outpath.mkdir(parents=True, exist_ok=True)
 
-    # plotting.plot_confusion_matrix(
-    #     confusion, groups, normalize=True,
-    #     filename=outpath / "confusion_merged_weighted", dendroname=outpath / "dendro_merged_weighted"
-    # )
+    plotting.plot_confusion_matrix(
+        confusion, groups, normalize=True,
+        filename=outpath / "confusion_merged_weighted", dendroname=outpath / "dendro_merged_weighted"
+    )
 
 
 if __name__ == "__main__":
