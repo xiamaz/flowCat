@@ -11,6 +11,8 @@ from keras import layers, models, regularizers
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 
+import weighted_crossentropy
+
 import sys
 sys.path.append("../classification")
 from classification import plotting
@@ -108,7 +110,9 @@ def decomposition(dataset):
     return tf1, tf2, y
 
 
-def create_model_convolutional(xshape, yshape, num_inputs=2):
+def create_model_convolutional(
+        xshape, yshape, num_inputs=2, classweights=None
+):
     """Create a convnet model. The data will be feeded as a 3d matrix."""
     inputs = []
     input_ends = []
@@ -160,14 +164,22 @@ def create_model_convolutional(xshape, yshape, num_inputs=2):
 
     model = models.Model(inputs=inputs, outputs=final)
 
+    if classweights is None:
+        lossfun = "categorical_crossentropy"
+    else:
+        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
+            weights=classweights)
+
     model.compile(
-        loss="categorical_crossentropy", optimizer="adam", metrics=["acc"]
+        loss=lossfun,
+        optimizer="adam",
+        metrics=["acc"]
     )
 
     return model
 
 
-def create_model(xshape, yshape, num_inputs=2):
+def create_model(xshape, yshape, num_inputs=2, classweights=None):
     """Create a simple sequential neural network with multiple inputs."""
 
     inputs = []
@@ -231,26 +243,34 @@ def create_model(xshape, yshape, num_inputs=2):
 
     model = models.Model(inputs=inputs, outputs=final)
 
+    if classweights is None:
+        lossfun = "categorical_crossentropy"
+    else:
+        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
+            weights=classweights)
+
     model.compile(
-        loss="categorical_crossentropy", optimizer="adam", metrics=["acc"]
+        loss=lossfun,
+        optimizer="adam",
+        metrics=["acc"]
     )
 
     return model
 
 
-def classify(data, m=10, n=10):
+def classify(data):
     """Extremely simple sequential neural network with two
     inputs for the 10x10x12 data
-
-    m, n - denote the shape of the input
     """
+    groups = list(data["group"].unique())
 
     train, test = model_selection.train_test_split(data, train_size=0.8)
 
     tr1, tr2, ytrain = reshape_dataset(train)
 
     binarizer = preprocessing.LabelBinarizer()
-    ytrain_mat = binarizer.fit_transform(ytrain)
+    binarizer.fit(groups)
+    ytrain_mat = binarizer.transform(ytrain)
 
     te1, te2, ytest = reshape_dataset(test)
     ytest_mat = binarizer.transform(ytest)
@@ -258,7 +278,14 @@ def classify(data, m=10, n=10):
     # model = naive_bayes.GaussianNB()
     # model.fit(tr1, ytrain)
 
-    model = create_model((tr1.shape[1], ), ytrain_mat.shape[1])
+    weights = np.ones((len(groups), len(groups)))
+    for i in range(len(groups)):
+        if i != groups.index("normal"):
+            weights[i][groups.index("normal")] = 50
+
+    model = create_model(
+        (tr1.shape[1], ), ytrain_mat.shape[1], classweights=weights
+    )
     model.fit([tr1, tr2], ytrain_mat, epochs=20, batch_size=16)
     pred = model.predict([te1, te2], batch_size=128)
     pred = binarizer.inverse_transform(pred)
@@ -274,17 +301,28 @@ def classify(data, m=10, n=10):
 
 
 def classify_convolutional(data, m=10, n=10):
+    groups = list(data["group"].unique())
+
     train, test = model_selection.train_test_split(data, train_size=0.8)
 
     tr1, tr2, ytrain = reshape_dataset_2d(train, m=m, n=n)
 
     binarizer = preprocessing.LabelBinarizer()
-    ytrain_mat = binarizer.fit_transform(ytrain)
+    binarizer.fit(groups)
+
+    ytrain_mat = binarizer.transform(ytrain)
 
     te1, te2, ytest = reshape_dataset_2d(test, m=m, n=n)
     ytest_mat = binarizer.transform(ytest)
 
-    model = create_model_convolutional(tr1[0].shape, ytrain_mat.shape[1])
+    weights = np.ones((len(groups), len(groups)))
+    for i in range(len(groups)):
+        if i != groups.index("normal"):
+            weights[i][groups.index("normal")] = 50
+
+    model = create_model_convolutional(
+        tr1[0].shape, len(groups), classweights=weights
+    )
     model.fit([tr1, tr2], ytrain_mat, epochs=30, batch_size=16)
     pred = model.predict([te1, te2], batch_size=128)
     pred = binarizer.inverse_transform(pred)
@@ -317,7 +355,7 @@ def modify_groups(data, mapping):
 
 def main():
 
-    inputpath = pathlib.Path("sommaps/huge_s30")
+    inputpath = pathlib.Path("sommaps/huge")
 
     indata = load_dataset(inputpath)
 
@@ -346,15 +384,16 @@ def main():
     # plot_transformed(plotpath, tf1, tf2, y)
 
     confusion, groups = classify(normdata)
-    confusion, groups = classify_convolutional(normdata, m=30, n=30)
+    print(confusion, groups)
+    # confusion, groups = classify_convolutional(mapped_normdata, m=30, n=30)
 
-    outpath = pathlib.Path("sommaps/output/huge_s30")
-    outpath.mkdir(parents=True, exist_ok=True)
+    # outpath = pathlib.Path("sommaps/output/huge_s30")
+    # outpath.mkdir(parents=True, exist_ok=True)
 
-    plotting.plot_confusion_matrix(
-        confusion, groups, normalize=True,
-        filename=outpath / "confusion_merged", dendroname=outpath / "dendro_merged"
-    )
+    # plotting.plot_confusion_matrix(
+    #     confusion, groups, normalize=True,
+    #     filename=outpath / "confusion_merged_weighted", dendroname=outpath / "dendro_merged_weighted"
+    # )
 
 
 if __name__ == "__main__":

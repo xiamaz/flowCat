@@ -47,7 +47,7 @@ class WeightedCategoricalCrossEntropy(object):
         # return loss
 
     def tf_w_categorical_crossentropy(self, y_true, y_pred):
-        # weights = tf.convert_to_tensor(self.weights, tf.float32)
+        weights = tf.convert_to_tensor(self.weights, tf.float32)
 
         output_dimensions = list(range(len(y_pred.get_shape())))
 
@@ -58,11 +58,11 @@ class WeightedCategoricalCrossEntropy(object):
         y_pred = tf.clip_by_value(y_pred, _epsilon, 1. - _epsilon)
         loss = - tf.reduce_sum(y_true * tf.log(y_pred), -1)
 
-        # pred_binary = tf.cast(tf.equal(
-        #     y_pred,
-        #     tf.expand_dims(tf.reduce_max(y_pred, axis=-1), axis=-1)
-        # ), tf.float32)
-        # weight_val = tf.transpose(tf.matmul(
-        #     tf.matmul(y_true, weights), tf.transpose(pred_binary)
-        # ))
-        return loss # * weight_val
+        pred_binary = tf.cast(tf.equal(
+            y_pred,
+            tf.expand_dims(tf.reduce_max(y_pred, axis=-1), axis=-1)
+        ), tf.float32)
+        weight_val = tf.transpose(tf.matmul(
+            tf.matmul(y_true, weights), tf.transpose(pred_binary)
+        ))
+        return loss * weight_val
