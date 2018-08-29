@@ -6,7 +6,7 @@ from sklearn import manifold, model_selection, preprocessing
 from sklearn import naive_bayes
 from sklearn import metrics
 
-from keras import layers, models, regularizers
+from keras import layers, models, regularizers, optimizers
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -172,7 +172,9 @@ def create_model_convolutional(
 
     model.compile(
         loss=lossfun,
-        optimizer="adam",
+        optimizer=optimizers.Adam(
+            lr=0.0001, decay=0.0, epsilon=0.1
+        ),
         metrics=["acc"]
     )
 
@@ -303,7 +305,7 @@ def classify(data):
 def classify_convolutional(data, m=10, n=10, weights=None):
     groups = list(data["group"].unique())
 
-    train, test = model_selection.train_test_split(data, train_size=0.8)
+    train, test = model_selection.train_test_split(data, train_size=0.9)
 
     tr1, tr2, ytrain = reshape_dataset_2d(train, m=m, n=n)
 
@@ -318,7 +320,13 @@ def classify_convolutional(data, m=10, n=10, weights=None):
     model = create_model_convolutional(
         tr1[0].shape, len(groups), classweights=weights
     )
-    model.fit([tr1, tr2], ytrain_mat, epochs=30, batch_size=16)
+    model.fit(
+        [tr1, tr2],
+        ytrain_mat,
+        epochs=30,
+        batch_size=16,
+        validation_split=0.2
+    )
     pred = model.predict([te1, te2], batch_size=128)
     pred = binarizer.inverse_transform(pred)
 
@@ -354,7 +362,8 @@ def remove_counts(data):
 
 def sqrt_counts(data):
     def sqrt_df(df):
-        df["counts"] = np.sqrt(df["counts"])
+        if "counts" in df.columns:
+            df["counts"] = np.sqrt(df["counts"])
         return df
     data["data"] = data["data"].apply(lambda t: [sqrt_df(d) for d in t])
     return data
@@ -368,7 +377,7 @@ def modify_groups(data, mapping):
 
 def main():
 
-    inputpath = pathlib.Path("sommaps/huge_s30_counts")
+    inputpath = pathlib.Path("sommaps/huge_s30")
 
     indata = load_dataset(inputpath)
     sqrt_data = sqrt_counts(indata)
