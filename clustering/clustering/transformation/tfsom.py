@@ -636,11 +636,11 @@ class TFSom:
 
                 # if recording summaries; initialize a run while recording, save after batch is done
                 if tensorboard:
-                    summary, _, _, = self._sess.run([self._merged, self._training_op,
-                                                     self._activity_op],
-                                                    feed_dict={self._epoch: epoch},
-                                                    options=run_options,
-                                                    run_metadata=run_metadata)
+                    summary, _, _, = self._sess.run(
+                        [ self._merged, self._training_op, self._activity_op],
+                        feed_dict={self._epoch: epoch},
+                        options=run_options, run_metadata=run_metadata
+                    )
 
                 # run plain run if not, save checkpoint regardless
                 else:
