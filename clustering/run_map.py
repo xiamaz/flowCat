@@ -9,8 +9,11 @@ import scipy as sp
 
 from sklearn.metrics import confusion_matrix
 from sklearn.pipeline import Pipeline
+from sklearn import preprocessing
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+
+# import somoclu
 
 from clustering.transformation import tfsom, fcs, pregating
 from clustering.collection import CaseCollection, CaseView
@@ -33,38 +36,87 @@ def configure_print_logging(rootname="clustering"):
     rootlogger.addHandler(handler)
 
 
-def simple_run(data, gridsize=10):
+def create_simple_generator(tubecases):
+    """Create generator yielding dataframes from list of tubecases."""
+
+    def generate_data():
+        for tcase in tubecases:
+            data = tcase.data
+            yield data
+
+    return generate_data
+
+
+def create_z_score_generator(tubecases):
+    """Normalize channel information for mean and standard deviation."""
+
+    def generate_z_score():
+        for tcase in tubecases:
+            data = tcase.data
+            zscores = preprocessing.StandardScaler().fit_transform(data)
+            # TODO: possibly needs min-max scaling to remove negative values
+            yield pd.DataFrame(zscores, columns=data.columns)
+
+    return generate_z_score
+
+
+# def somoclu_simple(data):
+#     """Very simple SOM run using somoclu instead of tensorflow as the core."""
+#     gridsize = 30
+# 
+#     tubedata = data.get_tube(2)
+# 
+#     data_generator = create_z_score_generator(tubedata.data)
+#     testdata = list(data_generator())[0]
+# 
+#     model = somoclu.Somoclu(
+#         n_columns=gridsize, n_rows=gridsize,
+#         kerneltype=1,
+#         maptype="planar", gridtype="rectangular",
+#         std_coeff=0.5,
+#         initialization="random",
+#         verbose=2
+#     )
+#     model.train(
+#         testdata.values.astype("float32"), epochs = 1000,
+#         radius0=0, radiusN=1, radiuscooling="linear",
+#         scale0=0.1, scaleN=0.01, scalecooling="linear"
+#     )
+
+
+def simple_run(data):
     """Very simple SOM run for tensorflow testing."""
     # only use data from the second tube
     tubedata = data.get_tube(2)
 
-    marker_list = reference.columns
+    gridsize = 30
+    max_epochs = 10
 
-    def data_generator():
-        for tdata in tubedata.data:
-            lmddata = tdata.data[marker_list]
-            yield lmddata
+    marker_list = tubedata.data[0].markers
+
+    data_generator = create_z_score_generator(tubedata.data)
 
     model = tfsom.TFSom(
         m=gridsize,
         n=gridsize,
-        dim=len(marker_list),
+        channels=marker_list,
         batch_size=1,
-        max_epochs=5,
+        radius_cooling="exponential",
+        max_epochs=max_epochs,
         initialization_method="random",
-        checkpoint_dir='checkpoints',
-        summary_dir='summaries'
+        tensorboard=True,
+        tensorboard_dir=f'simple_run_expo/tb_s{gridsize}_c{len(data)}_e{max_epochs}',
     )
     model.train(
-        data_generator, num_inputs=len(tubedata.data), tensorboard=True
+        data_generator(), num_inputs=len(tubedata.data)
     )
+    return
 
+    # metainfo
     weights = model.output_weights
-
-    tdata = tubedata.data[0].data[marker_list]
-
-    print(model.map_to_histogram_distribution(tdata).shape)
-    # weights.to_csv("somweights.csv")
+    for data in data_generator():
+        counts = model.map_to_histogram_distribution(data, relative=False)
+        print(counts)
 
 
 def case_to_map(path, data, references, gridsize=10):
@@ -75,8 +127,9 @@ def case_to_map(path, data, references, gridsize=10):
 
         reference = references[tube]
 
+        # TODO: decrease initial radius and learning rate
         model = tfsom.SOMNodes(
-            m=gridsize, n=gridsize, dim=reference.shape[0],
+            m=gridsize, n=gridsize, channels=list(reference.columns),
             batch_size=1,
             max_epochs=50,
             initialization_method="reference", reference=reference,
@@ -93,7 +146,7 @@ def case_to_map(path, data, references, gridsize=10):
             tubeweights.to_csv(filepath)
 
 
-def generate_reference(path, data, gridsize=10):
+def generate_reference(path, data, gridsize=10, max_epochs=100):
     """Create and save consensus som maps."""
 
     for tube in [1, 2]:
@@ -102,44 +155,55 @@ def generate_reference(path, data, gridsize=10):
         model = tfsom.TFSom(
             m=gridsize,
             n=gridsize,
-            dim=len(marker_list),
-            batch_size=5,
-            max_epochs=50,
+            channels=marker_list,
+            batch_size=1,
+            max_epochs=max_epochs,
             initialization_method="random",
+            tensorboard=True,
+            tensorboard_dir=f"tensorboard_c{len(data)}_ep{max_epochs}",
+            model_name=f"reference_t{tube}_s{gridsize}",
         )
 
-        def generate_data():
-            for tcase in tubedata.data:
-                data = tcase.data[marker_list]
-                yield data
+        generate_data = create_simple_generator(tubedata.data)
 
-        model.train(generate_data, num_inputs=len(tubedata.data))
+        model.train(generate_data(), num_inputs=len(tubedata.data))
         weights = model.output_weights
 
-        path.mkdir(parents=True, exist_ok=True)
         df_weights = pd.DataFrame(weights, columns=marker_list)
         df_weights.to_csv(path / f"t{tube}_s{gridsize}.csv")
 
 
 def main():
-    gridsize = 30
-    generate_reference = False
+    gridsize = 50
+    simplerun = True
+    createref = True
+    max_epochs = 1000
 
     configure_print_logging()
 
     cases = CaseCollection(inputpath="s3://mll-flowdata/CLL-9F", tubes=[1, 2])
 
+
+    if simplerun:
+        # always load the same normal case for comparability
+        with open("simple.txt", "r") as f:
+            simple_label = [l.strip() for l in f]
+        simple_cases = cases.create_view(num=1, groups=["normal"], labels=simple_label)
+
+        simple_run(simple_cases)
+        return
+
     # generate consensus reference and exit
-    if generate_reference:
-        with open("labels.txt") as fobj:
-            selected = [l.strip() for l in fobj]
+    if createref:
+        # with open("labels.txt") as fobj:
+        #     selected = [l.strip() for l in fobj]
 
-        reference_cases = cases.create_view(labels=selected)
-        print(len(reference_cases.data))
+        # reference_cases = cases.create_view(labels=selected)
+        reference_cases = cases.create_view(num=1, infiltration=20)
 
-        refpath = pathlib.Path("sommaps/reference")
-        generate_reference(refpath, reference_cases, gridsize=gridsize)
-
+        refpath = pathlib.Path(f"sommaps/reference_ep{max_epochs}_s{gridsize}")
+        refpath.mkdir(parents=True, exist_ok=True)
+        generate_reference(refpath, reference_cases, gridsize=gridsize, max_epochs=max_epochs)
         return
 
     reference_weights = {
@@ -153,7 +217,7 @@ def main():
     with open("trans_labels.txt") as fobj:
         ref_trans = [l.strip() for l in fobj]
 
-    transdata = cases.create_view(num=100, groups=GROUPS, labels=ref_trans)
+    transdata = cases.create_view(num=1000, groups=GROUPS, labels=ref_trans)
 
     metadata = pd.DataFrame({
         "label": [c.id for c in transdata.data],
@@ -164,7 +228,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # main()
-    cases = (CaseCollection(inputpath="s3://mll-flowdata/CLL-9F", tubes=[1, 2]))
-    data = cases.create_view(num=10)
-    simple_run(data = data)
+    main()

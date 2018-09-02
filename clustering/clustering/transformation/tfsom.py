@@ -30,9 +30,6 @@ from sklearn.base import BaseEstimator, TransformerMixin
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 
-__author__ = "Chris Gorman"
-__email__ = "chris@cgorman.net"
-
 """
 Modified from code by Chris Gorman.
 
@@ -43,30 +40,73 @@ https://codesachin.wordpress.com/2015/11/28/self-organizing-maps-with-googles-te
 LOGGER = logging.getLogger(__name__)
 
 
-def create_batched_generator(data_generator, batch_size):
-    def batch_generator():
+def create_marker_generator(data_iterable, channels, batch_size=1):
+    def marker_generator():
         buf = []
         cache = []
 
-        for i, data in enumerate(data_generator()):
+        for i, data in enumerate(data_iterable):
             if i % batch_size == 0 and buf:
                 concat = np.concatenate(buf, axis=0)
                 yield concat
                 cache.append(concat)
                 buf = []
-
-            buf.append(data)
-
+            mdata = data[channels].values
+            buf.append(mdata)
         if buf:
             concat = np.concatenate(buf, axis=0)
+            yield concat
             cache.append(concat)
 
         while True:
-            for concat in cache:
-                yield concat
+            for cached in cache:
+                yield cached
 
-    return batch_generator
+    return marker_generator
 
+
+def linear_cooling(initial, end, epoch, max_epochs):
+    """Implement linear decay of parameter depending on the current epoch."""
+    result = tf.subtract(
+        initial,
+        tf.multiply(
+            epoch,
+            tf.divide(
+                tf.cast(tf.subtract(initial, end), tf.float32),
+                tf.cast(tf.subtract(max_epochs, 1), tf.float32))))
+    return result
+
+
+def exponential_cooling(initial, end, epoch, max_epochs):
+    """Implementation of exponential decay for parameter depending on epoch."""
+    # Original from somuclu:
+    # if (end == 0.0) {
+    #     diff = -log(0.1) / nEpoch;
+    # }
+    # else {
+    #     diff = -log(end / start) / nEpoch;
+    # }
+    # return start * exp(-epoch * diff);
+    if end == 0:
+        diff_a = tf.log(0.1)
+    else:
+        diff_a = tf.log(
+            tf.divide(
+                tf.cast(end, tf.float32),
+                tf.cast(initial, tf.float32)))
+
+    diff = tf.divide(
+        diff_a,
+        tf.cast(max_epochs, tf.float32))
+
+    result = tf.multiply(
+        tf.cast(initial, tf.float32),
+        tf.exp(
+            tf.multiply(
+                tf.cast(epoch, tf.float32),
+                diff)))
+
+    return result
 
 
 class TFSom:
@@ -78,57 +118,41 @@ class TFSom:
 
     def __init__(
             self,
-            m, n,
-            dim,
-            max_epochs=10,
-            batch_size=1,
-            initial_radius=None,
-            initial_learning_rate=0.1,
-            std_coeff=0.5,
-            softmax_activity=False,
-            output_sensitivity=-1.0,
-            reference=None,
-            initialization_method="sample",
+            m, n, channels,
+            max_epochs=10, batch_size=1,
+            initial_radius=None, end_radius=None, radius_cooling="linear",
+            initial_learning_rate=0.05, end_learning_rate=0.01, learning_cooling="linear",
+            std_coeff=1.0,  # standard coefficient of the gaussian neighborhood
+            softmax_activity=False, output_sensitivity=-1.0,
+            initialization_method="sample", reference=None, max_random=1.0,
             model_name="Self-Organizing-Map",
-            checkpoint_dir=None,
-            summary_dir=None
+            tensorboard=False, tensorboard_dir="tensorboard"
     ):
         """
         Initialize a self-organizing map on the tensorflow graph
-        :param m: Number of rows of neurons
-        :param n: Number of columns of neurons
-        :param max_epochs: Number of epochs to train for
-        :param batch_size: Number of input vectors to train on at a time
-        :param initial_radius: Starting value of the neighborhood radius -
-                defaults to max(m, n) / 2.0
-        :param initial_learning_rate: The starting learning rate of the SOM.
-                Decreases linearly w/r/t `max_epochs`
-        :param graph: The tensorflow graph to build the network on
-        :param std_coeff: Coefficient of the standard deviation of the
-                neighborhood function
-        :param model_name: The name that will be given to the checkpoint files
-        :param softmax_activity: If `True` the activity will be softmaxed to
-                form a probability distribution
-        :param output_sensitivity: The constant controlling the width of the
-                activity gaussian. See the Jupyter Notebook
-                for an explanation.
-        :param initialization_method: method used to initialize the som nodes.
-        Choices are either random number initialization or sample based
-        initialization.
+        Args:
+            m, n: Number of rows and columns.
+            channels: Columns in the input data. Names will be used for
+                alignment of the input dataframe prior to training and prediction.
         """
 
         self._m = abs(int(m))
         self._n = abs(int(n))
-        self._dim = abs(int(dim))
+        self._channels = channels
+        self._dim = len(channels)
 
-        if initial_radius is None:
-            self._initial_radius = max(m, n) / 2.0
-        else:
-            self._initial_radius = float(initial_radius)
+        self._initial_radius = max(m, n) / 2.0 if initial_radius is None else float(initial_radius)
+        self._end_radius = 1.0 if end_radius is None else float(end_radius)
+        self._radius_cooling = radius_cooling
+
+        self._initial_learning_rate = initial_learning_rate
+        self._end_learning_rate = end_learning_rate
+        self._learning_cooling = learning_cooling
 
         # optional reference data that will be used as initial weights or for
         # random sampling as initial node weights
         self._reference = reference
+        self._max_random = max_random
 
         self._max_epochs = abs(int(max_epochs))
         self._batch_size = abs(int(batch_size))
@@ -177,11 +201,12 @@ class TFSom:
         self._prediction_distance = None
         self._transform_output = None
 
-        # checkpoint & save
-        self._checkpoint_dir = checkpoint_dir
+        # tensorboard visualizations
+        self._tensorboard = tensorboard
+        self._tensorboard_dir = Path(tensorboard_dir) / self._model_name
+        self._tensorboard_dir.mkdir(parents=True, exist_ok=True)
         self._saver = None
         self._summary_list = list()
-        self._summary_dir = summary_dir
 
         # optional for alternative initialization
         self._init_samples = None
@@ -200,12 +225,7 @@ class TFSom:
             )
         )
 
-        # Initialize the summary writer after the session has been initialized
-
-        self.writer = tf.summary.FileWriter(str(Path.cwd() / self._summary_dir / 'train'), self._sess.graph)
-
-        self._initial_learning_rate = initial_learning_rate
-
+        self._writer = None
 
     def save(self, location):
         """Save the current model into the specified location."""
@@ -219,16 +239,6 @@ class TFSom:
                 "histogram": self._transform_output,
             },
         )
-
-    def _save_checkpoint(self, global_step):
-        """Save a checkpoint file"""
-
-        if self._saver is None:
-            # Create the saver object
-            self._saver = tf.train.Saver()
-        if self._checkpoint_dir is not None:
-            output_name = Path.cwr() / (self._checkpoint_dir) / self._model_name
-            self._saver.save(self._sess, output_name, global_step=global_step)
 
     def _initialize_tf_graph(self):
         """ Initialize the SOM on the TensorFlow graph
@@ -259,17 +269,14 @@ class TFSom:
                     tf.get_variable_scope().reuse_variables()
 
                     # Put the activity op on the last GPU
-                    self._activity_op = self._make_activity_op(
-                        self._input_tensor
-                    )
+                    # self._activity_op = self._make_activity_op(self._input)
             else:
                 # Running CPU only
                 with tf.name_scope("Tower_0"):
                     tower_updates.append(self._tower_som())
                     tf.get_variable_scope().reuse_variables()
-                    self._activity_op = self._make_activity_op(
-                        self._input_tensor
-                    )
+
+                    # self._activity_op = self._make_activity_op(self._input)
 
             with tf.name_scope("Weight_Update"):
                 # Get the outputs
@@ -282,10 +289,11 @@ class TFSom:
                 # Assign them
                 self._training_op = tf.assign(self._weights, new_weights)
 
-        # use autoplacement until we know how to parallelize across
-        # multiple gpus
         with self._graph.as_default():
             self._prediction_variables()
+
+            # merge all summaries
+            self._merged = tf.summary.merge(self._summary_list)
 
     def _prediction_variables(self):
         """Create prediction ops"""
@@ -328,7 +336,7 @@ class TFSom:
             # Tensors will be different for each tower even if we reference
             # "self"
             if self._initialization_method == "random":
-                initializer = tf.random_uniform_initializer(maxval=1023)
+                initializer = tf.random_uniform_initializer(maxval=self._max_random)
                 shape = [self._m * self._n, self._dim]
             elif self._initialization_method in ["sample", "reference"]:
                 initializer = self._init_samples
@@ -341,19 +349,6 @@ class TFSom:
                 shape=shape,
                 initializer=initializer
             )
-
-            with tf.name_scope('summaries'):
-                # All summary ops are added to a list and then the merge() function is called at the end of
-                # this method
-                mean = tf.reduce_mean(self._weights)
-                self._summary_list.append(tf.summary.scalar('mean', mean))
-                with tf.name_scope('stdev'):
-                    stdev = tf.sqrt(tf.reduce_mean(tf.squared_difference(self._weights, mean)))
-                self._summary_list.append(tf.summary.scalar('stdev', stdev))
-                self._summary_list.append(tf.summary.scalar('max', tf.reduce_max(self._weights)))
-                self._summary_list.append(tf.summary.scalar('min', tf.reduce_min(self._weights)))
-                self._summary_list.append(tf.summary.histogram('histogram', self._weights))
-
 
         # Matrix of size [m*n, 2] for SOM grid locations of neurons.
         # Maps an index to an (x,y) coordinate of a neuron in the map for
@@ -368,153 +363,132 @@ class TFSom:
         with tf.name_scope('Epoch'):
             self._epoch = tf.placeholder("float", [], name="iter")
 
-        # Start by computing the best matching units / winning units for each
-        # input vector in the batch.
-        # Basically calculates the Euclidean distance between every neuron's
-        # weight vector and the inputs, and returns the index of the neurons
-        # which give the least value
-        # Since we are doing batch processing of the input, we need to
-        # calculate a BMU for each of the individual inputs in the batch. Will
-        # have the shape [batch_size]
-
-        # Oh also any time we call expand_dims it's almost always so we can
-        # make TF broadcast stuff properly
+        # get best matching units for all events in batch
         with tf.name_scope('BMU_Indices'):
-            # Distance between weights and the input vector
-            # Note we are reducing along 2nd axis so we end up with a tensor of
-            # [batch_size, num_neurons] corresponding to the distance between a
-            # particular input and each neuron in the map
-            # Also note we are getting the squared distance because there's no
-            # point calling sqrt or tf.norm if we're just doing a strict
-            # comparison
+            # squared distance of [batch_size, num_neurons], eg for each event
+            # to all neurons
             squared_distance = tf.reduce_sum(
                 tf.pow(tf.subtract(tf.expand_dims(self._weights, axis=0),
                                    tf.expand_dims(self._input, axis=1)), 2), 2)
 
-            # Get the index of the minimum distance for each input item, shape
-            # will be [batch_size],
             bmu_indices = tf.argmin(squared_distance, axis=1)
 
-        # This will extract the location of the BMU in the map for each input
-        # based on the BMU's indices
+        # get the locations of BMU for each event
         with tf.name_scope('BMU_Locations'):
-            # Using tf.gather we can use `bmu_indices` to index the location
-            # vectors directly
             bmu_locs = tf.reshape(
                 tf.gather(self._location_vects, bmu_indices), [-1, 2]
             )
 
         with tf.name_scope('Learning_Rate'):
-            # With each epoch, the initial sigma value decreases linearly
-            radius = tf.subtract(
-                self._initial_radius,
-                tf.multiply(
-                    self._epoch,
-                    tf.divide(
-                        tf.cast(
-                            tf.subtract(self._initial_radius, 1), tf.float32
-                        ),
-                        tf.cast(
-                            tf.subtract(self._max_epochs, 1), tf.float32
-                        )
-                    )
-                )
-            )
+            # learning rate linearly decreases to 0 at max_epoch
+            # α = αi - (epoch / max_epoch * αi)
+            # same for radius
+            if self._radius_cooling == "linear":
+                radius = linear_cooling(self._initial_radius, self._end_radius, self._epoch, self._max_epochs)
+            elif self._radius_cooling == "exponential":
+                radius = exponential_cooling(
+                    self._initial_radius, self._end_radius, self._epoch, self._max_epochs)
+            else:
+                raise TypeError(f"Unknown cooling type: {self._radius_cooling}")
 
-            alpha = tf.subtract(
-                self._initial_learning_rate,
-                tf.multiply(
-                    self._epoch,
-                    tf.divide(
-                        tf.cast(
-                            tf.subtract(self._initial_learning_rate, 1),
-                            tf.float32
-                        ),
-                        tf.cast(
-                            tf.subtract(self._max_epochs, 1),
-                            tf.float32
-                        )
-                    )
-                )
-            )
+            if self._learning_cooling == "linear":
+                alpha = linear_cooling(
+                    self._initial_learning_rate, self._end_learning_rate, self._epoch, self._max_epochs)
+            elif self._learning_cooling == "exponential":
+                alpha = exponential_cooling(
+                    self._initial_learning_rate, self._end_learning_rate, self._epoch, self._max_epochs)
+            else:
+                raise TypeError(f"Unknown cooling type: {self._learning_cooling}")
 
-            # Construct the op that will generate a matrix with learning rates
-            # for all neurons and all inputs, based on iteration number and
-            # location to BMU
+            # calculate distance of BMU all neurons in the map, eg this is the
+            # distance in the 2d grid
+            #   location_vects - array of 2d coords of all nodes
+            #   bmu_locs - batch-size array of 2d coord of BMU
+            # calc square distance in map, use expand dim for clever
+            # broadcasting
+            bmu_distance_squares = tf.reduce_sum(
+                tf.pow(
+                    tf.subtract(
+                        tf.expand_dims(self._location_vects, axis=0),
+                        tf.expand_dims(bmu_locs, axis=1)),
+                    2),
+                2)
 
-            # Start by getting the squared difference between each BMU location
-            # and every other unit in the map bmu_locs is [batch_size, 2], i.e.
-            # the coordinates of the BMU for each input vector.
-            # location vects shape should be [1, num_neurons, 2]
-            # bmu_locs should be [batch_size, 1, 2]
-            # Output needs to be [batch_size, num_neurons], i.e. a row vector
-            # of distances for each input item
-            bmu_distance_squares = tf.reduce_sum(tf.pow(tf.subtract(
-                tf.expand_dims(self._location_vects, axis=0),
-                tf.expand_dims(bmu_locs, axis=1)), 2), 2)
-
-            # Using the distances between each BMU, construct the Gaussian
-            # neighborhood function.
-            # Basically, neurons which are close to the winner will move more
-            # than those further away.  The radius tensor decreases the width
-            # of the Gaussian over time, so early in training more neurons will
-            # be affected by the winner and by the end of training only the
-            # winner will move.
-            # This tensor will be of shape [batch_size, num_neurons] as well
-            # and will be the value multiplied to each neuron based on its
-            # distance from the BMU for each input vector
+            # gaussian neighborhood, eg 67% neighborhood with 1std
+            # keep in mind, that radius is decreasing with epoch
             neighbourhood_func = tf.exp(
                 tf.divide(
-                    tf.negative(
-                        tf.cast(bmu_distance_squares, "float32")
-                    ),
+                    tf.negative(tf.cast(bmu_distance_squares, "float32")),
                     tf.multiply(
-                        tf.square(tf.multiply(radius, self._std_coeff)), 2
-                    )
-                )
-            )
+                        tf.square(
+                            tf.multiply(
+                                radius,
+                                self._std_coeff)),
+                        2)))
 
-            # Finally multiply by the learning rate to decrease overall neuron
-            # movement over time
+            # learn rate dependent on neighborhood
             learning_rate_op = tf.multiply(neighbourhood_func, alpha)
 
-        # The batch formula for SOMs multiplies a neuron's neighborhood by all
-        # of the input vectors in the batch, then divides that by just the sum
-        # of the neighborhood function for each of the inputs.
-        # We are writing this in a way that performs that operation for each of
-        # the neurons in the map.
         with tf.name_scope('Update_Weights'):
-            # The numerator needs to be shaped [num_neurons, dimensions] to
-            # represent the new weights for each of the neurons. At this point,
-            # the learning rate tensor will be shaped [batch_size, neurons].
-            # The end result is that, for each neuron in the network, we use
-            # the learning rate between it and each of the input vectors, to
-            # calculate a new set of weights.
+            # weight input with learning rate and sum across events, if we
+            # divide with the summed learning rate we will get a distance
+            # weighted update
+            # shape: [num_neurons, dimensions]
             numerator = tf.reduce_sum(
                 tf.multiply(
                     tf.expand_dims(learning_rate_op, axis=-1),
                     tf.expand_dims(self._input, axis=1)
-                ), axis=0
-            )
+                ), axis=0)
 
-            # The denominator is just the sum of the neighborhood functions for
-            # each neuron, so we get the sum along axis 1 giving us an output
-            # shape of [num_neurons]. We then expand the dims so we can
-            # broadcast for the division op. Again we transpose the learning
-            # rate tensor so it's [num_neurons, batch_size] representing the
-            # learning rate of each neuron for each input vector
+            # sum neighborhood function, eg the learn rate of each neuron
+            # we divide the batch summed new weights through the neighborhood
+            # function sum
+            # shape: [batch_size, neurons]
             denominator = tf.expand_dims(
                 tf.reduce_sum(learning_rate_op, axis=0) + float(1e-12),
-                axis=-1
-            )
+                axis=-1)
 
-        # We only really care about summaries from one of the tower SOMs, so
-        # assign the merge op to the last tower we make. Otherwise there's way
-        # too many on Tensorboard.
-        self._merged = tf.summary.merge(self._summary_list)
+        with tf.name_scope('Summary'):
+            # All summary ops are added to a list and then the merge() function is called at the end of
+            # this method
+            # learning parameters
+            _, update_mean_alpha = tf.metrics.mean(alpha)
+            _, update_mean_radius = tf.metrics.mean(radius)
 
-        # With multi-gpu training we collect the results and do the weight
-        # assignment on the CPU
+            self._summary_list.append(tf.summary.scalar('alpha', update_mean_alpha))
+            self._summary_list.append(tf.summary.scalar('radius', update_mean_radius))
+
+            mean_distance = tf.sqrt(tf.cast(tf.reduce_mean(bmu_distance_squares), tf.float32))
+            _, update_mean_dist = tf.metrics.mean(mean_distance)
+            self._summary_list.append(tf.summary.scalar('mean_distance', update_mean_dist))
+
+            # proportion of events where 1st and 2nd bmu are not adjacent
+            _, top2_indices = tf.nn.top_k(tf.negative(squared_distance), k=2)
+            top2_locs = tf.gather(self._location_vects, top2_indices)
+            distances = tf.reduce_sum(tf.pow(tf.subtract(top2_locs[:, 0, :], top2_locs[:, 1, :]), 2), 1)
+            topographic_error = tf.divide(
+                tf.reduce_sum(tf.cast(distances > 1, tf.float32)),
+                tf.cast(tf.size(distances), tf.float32))
+            self._summary_list.append(tf.summary.scalar("topographic_error", topographic_error))
+
+            # self._activity_op = learning_rate_op
+            learn_image = tf.reshape(
+                tf.reduce_mean(learning_rate_op, axis=0), shape=(1, self._m, self._n, 1))
+            self._summary_list.append(tf.summary.image("learn_img", learn_image))
+
+            # marker images
+            for channel in ["CD45-KrOr", "SS INT LIN"]:
+                sel_channel = self._weights[:, self._channels.index(channel)]
+                normalized_values = tf.div(
+                    tf.subtract(sel_channel, tf.reduce_min(sel_channel)),
+                    tf.subtract(tf.reduce_max(sel_channel), tf.reduce_min(sel_channel)))
+                marker_image = tf.reshape(normalized_values, shape=(1, self._m, self._n, 1))
+                self._summary_list.append(tf.summary.image(f"{channel}_img", marker_image))
+
+            # marker images
+            # self._activity_op = self._input_tensor
+            self._activity_op = tf.no_op()
+
         return numerator, denominator
 
     def _make_activity_op(self, input_tensor):
@@ -524,38 +498,44 @@ class TFSom:
                 the SOM's weights.
         :return A handle to the newly created activity op:
         """
-        with self._graph.as_default():
-            with tf.name_scope("Activity"):
-                # This constant controls the width of the gaussian.
-                # The closer to 0 it is, the wider it is.
-                c = tf.constant(self._c, dtype="float32")
-                # Get the euclidean distance between each neuron and the input
-                # vectors
-                dist = tf.norm(tf.subtract(
+        with tf.name_scope("Activity"):
+            # This constant controls the width of the gaussian.
+            # The closer to 0 it is, the wider it is.
+            c = tf.constant(self._c, dtype="float32")
+            # Get the euclidean distance between each neuron and the input
+            # vectors
+            dist = tf.norm(
+                tf.subtract(
                     tf.expand_dims(self._weights, axis=0),
-                    tf.expand_dims(input_tensor, axis=1)
-                ), name="Distance")  # [batch_size, neurons]
+                    tf.expand_dims(input_tensor, axis=1)),
+                name="Distance", axis=-1)  # [batch_size, neurons]
+            # squared_distance = tf.reduce_sum(
+            #     tf.pow(tf.subtract(tf.expand_dims(self._weights, axis=0),
+            #                        tf.expand_dims(self._input, axis=1)),
+            #            2), 2)
 
-                # Calculate the Gaussian of the activity. Units with distances
-                # closer to 0 will have activities closer to 1.
-                activity = tf.exp(
-                    tf.multiply(tf.pow(dist, 2), c), name="Gaussian"
-                )
+            # Calculate the Gaussian of the activity. Units with distances
+            # closer to 0 will have activities closer to 1.
+            activity = tf.exp(
+                tf.multiply(
+                    tf.pow(
+                        dist,
+                        2),
+                    c), name="Gaussian")
 
-                # Convert the activity into a softmax probability distribution
-                if self._softmax_activity:
-                    activity = tf.divide(
-                        tf.exp(activity),
-                        tf.expand_dims(
-                            tf.reduce_sum(tf.exp(activity), axis=1),
-                            axis=-1
-                        ),
-                        name="Softmax"
-                    )
+            # Convert the activity into a softmax probability distribution
+            if self._softmax_activity:
+                activity = tf.divide(
+                    tf.exp(
+                        activity),
+                    tf.expand_dims(tf.reduce_sum(
+                            tf.exp(
+                                activity), axis=1), axis=-1), name="Softmax")
 
-                return tf.identity(activity, name="Output")
+            output = tf.identity(activity, name="Output")
+            return output
 
-    def train(self, data_generator, num_inputs, step_offset=0, tensorboard = False):
+    def train(self, data_iterable, num_inputs, step_offset=0):
         """ Train the network on the data provided by the input tensor.
         :param num_inputs: The total number of inputs in the data-set. Used to
                             determine batches per epoch
@@ -567,9 +547,12 @@ class TFSom:
         if self._trained:
             LOGGER.warning("Model is already trained.")
 
-        batched_generator = create_batched_generator(
-            data_generator, self._batch_size
-        )
+        marker_generator = create_marker_generator(data_iterable, self._channels, batch_size=self._batch_size)
+
+        # Divide by num_gpus to avoid accidentally training on the same data a
+        # bunch of times
+        batches_per_epoch = int(num_inputs / self._batch_size + 0.5)
+        total_batches = batches_per_epoch * self._max_epochs
 
         # initialize the input fitting dataset
         # the fitting input tensor is directly integrated into the
@@ -577,8 +560,9 @@ class TFSom:
         # when we know the actual data of our input
         with self._graph.as_default():
             dataset = tf.data.Dataset.from_generator(
-                data_generator, tf.float32
+                marker_generator, tf.float32
             )
+            print("Batching the dataset")
 
             if self._initialization_method == "sample":
                 samples = self._reference.values[np.random.choice(
@@ -603,61 +587,57 @@ class TFSom:
             init_op = tf.global_variables_initializer()
             self._sess.run([init_op])
 
-        # Divide by num_gpus to avoid accidentally training on the same data a
-        # bunch of times
-        batches_per_epoch = int(
-            num_inputs / self._batch_size / max(len(self._gpus), 1) + 0.5
-        )
+            metric_init = tf.variables_initializer(self._graph.get_collection(tf.GraphKeys.METRIC_VARIABLES))
 
-        total_batches = batches_per_epoch * self._max_epochs
+        # Initialize the summary writer after the session has been initialized
+        self._writer = tf.summary.FileWriter(
+            str(self._tensorboard_dir / "summary" / 'train'), self._sess.graph)
+
         global_step = step_offset
-
-
 
         LOGGER.info("Training self-organizing Map")
         for epoch in range(self._max_epochs):
-            LOGGER.info("Epoch: %d/%d", epoch, self._max_epochs)
+            LOGGER.info("Epoch: %d/%d", epoch + 1, self._max_epochs)
 
             # if the tensorboard flag has been provided (for outputting the summaries)
-            if tensorboard:
+            if self._tensorboard:
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
 
+            # reset metric variables after every batch
+            self._sess.run(metric_init)
             for batch in range(batches_per_epoch):
-                current_batch = batch + (batches_per_epoch * epoch)
-                global_step = current_batch + step_offset
-                percent_complete = current_batch / total_batches
-                LOGGER.debug(
-                    "\tBatch %d/%d - %.2f%% complete",
-                    batch,
-                    batches_per_epoch,
-                    percent_complete * 100
-                )
+                global_step += 1
+                # current_batch = batch + (batches_per_epoch * epoch)
+                # percent_complete = current_batch / total_batches
+                # LOGGER.debug(
+                #     "\tBatch %d/%d - %.2f%% complete",
+                #     batch,
+                #     batches_per_epoch,
+                #     percent_complete * 100
+                # )
 
                 # if recording summaries; initialize a run while recording, save after batch is done
-                if tensorboard:
-                    summary, _, _, = self._sess.run(
+                if self._tensorboard:
+                    summary, _, activity, = self._sess.run(
                         [ self._merged, self._training_op, self._activity_op],
                         feed_dict={self._epoch: epoch},
                         options=run_options, run_metadata=run_metadata
                     )
-
-                # run plain run if not, save checkpoint regardless
+                    if activity is not None:
+                        print(activity)
+                        print(activity.shape)
                 else:
                     self._sess.run(
                         self._training_op,
-                        feed_dict={self._epoch: epoch}
+                        feed_dict={
+                            self._epoch: epoch}
                     )
 
-            # save the summary if it has been tracked
-            if tensorboard:
-
-                writer.add_run_metadata(run_metadata, "step_{}".format(global_step))
-                writer.add_summary(summary, global_step)
-
-            # save checkpoint after the batch
-
-            self._save_checkpoint(global_step)
+                # save the summary if it has been tracked
+                if self._tensorboard:
+                    self._writer.add_run_metadata(run_metadata, f"step_{global_step}")
+                    self._writer.add_summary(summary, global_step)
 
         self._trained = True
         return self
@@ -680,8 +660,9 @@ class TFSom:
 
     @prediction_input.setter
     def prediction_input(self, value):
+        valuearr = value[self._channels].values
         self._sess.run(
-            self._prediction_input.initializer, feed_dict={self._invar: value}
+            self._prediction_input.initializer, feed_dict={self._invar: valuearr}
         )
 
     def map_to_nodes(self, data):
@@ -752,7 +733,6 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
     def __init__(self, *args, **kwargs):
         """Expose a subset of tested parameters for external tuning."""
         self._model = TFSom(*args, **kwargs)
-        self._columns = None
 
     @property
     def weights(self):
@@ -775,7 +755,6 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
         """Fit the data using a matrix containing the data. The input
         can be either a numpy matrix or a pandas dataframe."""
         self._model.train(data)
-        # self._columns = data.columns
         return self
 
     def predict(self, data):
