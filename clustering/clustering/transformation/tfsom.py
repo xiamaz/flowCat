@@ -109,6 +109,65 @@ def exponential_cooling(initial, end, epoch, max_epochs):
     return result
 
 
+def planar_distance(matched, locations, *_, **__):
+    return tf.subtract(
+        tf.expand_dims(locations, axis=0),
+        tf.expand_dims(matched, axis=1))
+
+
+def toroid_distance(matched, locations, map_size, *_, **__):
+    abs_subtracted = tf.abs(planar_distance(matched, locations))
+    # subtract abs distance from map size
+    map_subtracted = tf.subtract(map_size, abs_subtracted)
+    # select the smaller from abs and subtracted distance
+    distance = tf.minimum(abs_subtracted, map_subtracted)
+    return distance
+
+
+def calc_vec_distance(map_type, *args, **kwargs):
+    if map_type == "planar":
+        distance = planar_distance(*args, **kwargs)
+    elif map_type == "toroid":
+        distance = toroid_distance(*args, **kwargs)
+    else:
+        raise TypeError(f"Unknown map type: {map_type}")
+    return distance
+
+
+def squared_euclidean_distance(matched_location, location_vectors, map_type, map_size=None):
+    """
+    dist = sum((a-b)^2)
+    Args:
+        matched_location: Array of BMU for each event. shape [events, locs]
+        location_vectors: Location of nodes in the 2-dimensional map. shape [nodes, loc]
+        map_type: Determines border behavior. Possible options are planar and toroid.
+        map_size: Size of the map. Needed for toroidal distance calculations.
+    Returns:
+        Squared euclidean distance. This will NOT take the square root!
+    """
+    distance = calc_vec_distance(map_type, matched_location, location_vectors, map_size)
+    euclidean = tf.reduce_sum(tf.pow(distance, 2), axis=2)
+    return euclidean
+
+
+def manhattan_distance(matched_location, location_vectors, map_type, map_size=None):
+    """
+    dist = sum(abs(a-b))
+    """
+    distance = calc_vec_distance(map_type, matched_location, location_vectors, map_size)
+    manhattan = tf.reduce_sum(tf.abs(distance), axis=2)
+    return manhattan
+
+
+def chebyshev_distance(matched_location, location_vectors, map_type, map_size=None):
+    """
+    dist = max(abs(a-b))
+    """
+    distance = calc_vec_distance(map_type, matched_location, location_vectors, map_size)
+    chebyshev = tf.reduce_max(tf.abs(distance), axis=2)
+    return chebyshev
+
+
 class TFSom:
     """Tensorflow Model of a self-organizing map, without assumptions about
     usage.
@@ -122,7 +181,7 @@ class TFSom:
             max_epochs=10, batch_size=1,
             initial_radius=None, end_radius=None, radius_cooling="linear",
             initial_learning_rate=0.05, end_learning_rate=0.01, learning_cooling="linear",
-            std_coeff=1.0,  # standard coefficient of the gaussian neighborhood
+            node_distance="euclidean", map_type="planar", std_coeff=0.5,
             softmax_activity=False, output_sensitivity=-1.0,
             initialization_method="sample", reference=None, max_random=1.0,
             model_name="Self-Organizing-Map",
@@ -154,9 +213,13 @@ class TFSom:
         self._reference = reference
         self._max_random = max_random
 
+        # node distance calculation option on the SOM map
+        self._node_distance = node_distance
+        self._map_type = map_type
+        self._std_coeff = abs(float(std_coeff))
+
         self._max_epochs = abs(int(max_epochs))
         self._batch_size = abs(int(batch_size))
-        self._std_coeff = abs(float(std_coeff))
         self._softmax_activity = bool(softmax_activity)
         self._model_name = str(model_name)
 
@@ -406,13 +469,25 @@ class TFSom:
             #   bmu_locs - batch-size array of 2d coord of BMU
             # calc square distance in map, use expand dim for clever
             # broadcasting
-            bmu_distance_squares = tf.reduce_sum(
-                tf.pow(
-                    tf.subtract(
-                        tf.expand_dims(self._location_vects, axis=0),
-                        tf.expand_dims(bmu_locs, axis=1)),
-                    2),
-                2)
+            map_size = tf.constant([self._m, self._n], dtype=tf.int64)
+            if self._node_distance == "euclidean":
+                bmu_distance_squares = squared_euclidean_distance(
+                    bmu_locs, self._location_vects, self._map_type, map_size)
+            elif self._node_distance == "manhattan":
+                bmu_distance_squares = manhattan_distance(
+                    bmu_locs, self._location_vects, self._map_type, map_size)
+            elif self._node_distance == "chebyshev":
+                bmu_distance_squares = chebyshev_distance(
+                    bmu_locs, self._location_vects, self._map_type, map_size)
+            else:
+                raise TypeError(f"Unknown distance type: {self._node_distance}")
+            # bmu_distance_squares = tf.reduce_sum(
+            #     tf.pow(
+            #         tf.subtract(
+            #             tf.expand_dims(self._location_vects, axis=0),
+            #             tf.expand_dims(bmu_locs, axis=1)),
+            #         2),
+            #     2)
 
             # gaussian neighborhood, eg 67% neighborhood with 1std
             # keep in mind, that radius is decreasing with epoch
@@ -484,6 +559,15 @@ class TFSom:
                     tf.subtract(tf.reduce_max(sel_channel), tf.reduce_min(sel_channel)))
                 marker_image = tf.reshape(normalized_values, shape=(1, self._m, self._n, 1))
                 self._summary_list.append(tf.summary.image(f"{channel}_img", marker_image))
+
+            # distance_image = tf.reshape(
+            #     tf.sqrt(tf.cast(self._activity_op[0, :], tf.float32)), shape=(1, self._m, self._n, 1))
+            # scaled_distance_image = tf.subtract(
+            #     1.0,
+            #     tf.div(
+            #         tf.subtract(distance_image, tf.reduce_min(distance_image)),
+            #         tf.subtract(tf.reduce_max(distance_image), tf.reduce_min(distance_image))))
+            # self._summary_list.append(tf.summary.image("distance_img", scaled_distance_image))
 
             # marker images
             # self._activity_op = self._input_tensor

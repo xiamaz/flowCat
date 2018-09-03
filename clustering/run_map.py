@@ -102,10 +102,13 @@ def simple_run(data):
         channels=marker_list,
         batch_size=1,
         radius_cooling="exponential",
+        learning_cooling="exponential",
+        map_type="toroid",
+        node_distance="euclidean",
         max_epochs=max_epochs,
         initialization_method="random",
         tensorboard=True,
-        tensorboard_dir=f'simple_run_expo/tb_s{gridsize}_c{len(data)}_e{max_epochs}',
+        tensorboard_dir=f'simple_run_toroid/tb_s{gridsize}_c{len(data)}_e{max_epochs}',
     )
     model.train(
         data_generator(), num_inputs=len(tubedata.data)
