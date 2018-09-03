@@ -533,9 +533,9 @@ class TFSom:
             self._summary_list.append(tf.summary.scalar('alpha', update_mean_alpha))
             self._summary_list.append(tf.summary.scalar('radius', update_mean_radius))
 
-            mean_distance = tf.sqrt(tf.cast(tf.reduce_mean(bmu_distance_squares), tf.float32))
+            mean_distance = tf.sqrt(tf.cast(tf.reduce_min(squared_distance, axis=1), tf.float32))
             _, update_mean_dist = tf.metrics.mean(mean_distance)
-            self._summary_list.append(tf.summary.scalar('mean_distance', update_mean_dist))
+            self._summary_list.append(tf.summary.scalar('quantization_error', update_mean_dist))
 
             # proportion of events where 1st and 2nd bmu are not adjacent
             _, top2_indices = tf.nn.top_k(tf.negative(squared_distance), k=2)
