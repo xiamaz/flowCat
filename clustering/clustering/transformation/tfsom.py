@@ -205,7 +205,7 @@ class TFSom:
 
         self._m = abs(int(m))
         self._n = abs(int(n))
-        self._channels = channels
+        self._channels = list(channels)
         self._dim = len(channels)
 
         self._initial_radius = max(m, n) / 2.0 if initial_radius is None else float(initial_radius)
@@ -246,10 +246,7 @@ class TFSom:
 
         # always run with the maximum number of gpus
         # limit to the first gpu at first
-        self._gpus = [
-            d.name for d in device_lib.list_local_devices()
-            if d.device_type == "GPU"
-        ]
+        self._gpus = [d.name for d in device_lib.list_local_devices() if d.device_type == "GPU"]
 
         # Initialized later, just declaring up here for neatness and to avoid
         # warnings
@@ -299,17 +296,19 @@ class TFSom:
             graph=self._graph,
             config=tf.ConfigProto(
                 allow_soft_placement=True,
-                log_device_placement=False,
-            )
-        )
+                log_device_placement=False,))
 
         self._writer = None
 
     @property
     def config_name(self):
-        """Create a config string with following format:
-        s{grid_size}_e{max_epoch}"""
-        return f"{self._model_name}_s{self._m}_e{self._max_epochs}_m{self._map_type}_d{self._node_distance}"
+        """Create a config string usable as file or directory name."""
+        return f"{self._model_name}_{self.config_tag}"
+
+    @property
+    def config_tag(self):
+        """Create config tag without model name."""
+        return f"s{self._m}_e{self._max_epochs}_m{self._map_type}_d{self._node_distance}"
 
     def save(self, location):
         """Save the current model into the specified location."""
@@ -324,7 +323,7 @@ class TFSom:
             },
         )
 
-    def _initialize_tf_graph(self):
+    def _initialize_tf_graph(self, *args, **kwargs):
         """ Initialize the SOM on the TensorFlow graph
 
         In multi-gpu mode it will duplicate the model across the GPUs and use
@@ -349,7 +348,7 @@ class TFSom:
                 with tf.device(self._gpus[0]), tf.name_scope('Tower_0'):
                     # Create the model on this tower and add the
                     # (numerator, denominator) tensors to the list
-                    tower_updates.append(self._tower_som())
+                    tower_updates.append(self._tower_som(*args, **kwargs))
                     tf.get_variable_scope().reuse_variables()
 
                     # Put the activity op on the last GPU
@@ -370,6 +369,14 @@ class TFSom:
                 denominators = tf.reduce_sum(tf.stack(denominators), axis=0)
                 # Divide them
                 new_weights = tf.divide(numerators, denominators)
+                # diff new and old weights
+                if self._tensorboard:
+                    with tf.name_scope("WeightChange"):
+                        diff_weights = tf.reshape(
+                            tf.sqrt(tf.reduce_sum(tf.pow(self._weights - new_weights, 2), axis=1)),
+                            shape=(1, self._m, self._n, 1))
+                        # self._activity_op = diff_weights
+                        self._summary_list.append(tf.summary.image("WeightDiff", diff_weights))
                 # Assign them
                 self._training_op = tf.assign(self._weights, new_weights)
 
@@ -378,6 +385,9 @@ class TFSom:
 
             # merge all summaries
             self._merged = tf.summary.merge(self._summary_list)
+
+            if self._activity_op is None:
+                self._activity_op = tf.no_op()
 
     def _prediction_variables(self):
         """Create prediction ops"""
@@ -410,7 +420,7 @@ class TFSom:
                 self._prediction_output, self._m * self._n
             ), 0)
 
-    def _tower_som(self):
+    def _tower_som(self, batches_per_epoch):
         """ Build a single SOM tower on the TensorFlow graph """
         # Randomly initialized weights for all neurons, stored together
         # as a matrix Variable of shape [num_neurons, input_dims]
@@ -445,7 +455,8 @@ class TFSom:
             self._input = tf.identity(self._input_tensor)
 
         with tf.name_scope('Epoch'):
-            self._epoch = tf.placeholder("float", [], name="iter")
+            global_step = tf.Variable(-1.0, dtype=tf.float32)
+            self._epoch = tf.floor(tf.assign_add(global_step, 1.0) / batches_per_epoch)
 
         # get best matching units for all events in batch
         with tf.name_scope('BMU_Indices'):
@@ -552,27 +563,12 @@ class TFSom:
                 self._create_color_map([None, "Kappa-FITC", "Lambda-PE"], "kappa_lambda")
             self._create_color_map(["CD45-KrOr", "SS INT LIN", "CD19-APCA750"], "zz_cd45_ss_cd19")
 
-            # marker images
-            # for channel in ["CD45-KrOr", "SS INT LIN"]:
-            #     sel_channel = self._weights[:, self._channels.index(channel)]
-            #     normalized_values = tf.div(
-            #         tf.subtract(sel_channel, tf.reduce_min(sel_channel)),
-            #         tf.subtract(tf.reduce_max(sel_channel), tf.reduce_min(sel_channel)))
-            #     marker_image = tf.reshape(normalized_values, shape=(1, self._m, self._n, 1))
-            #     self._summary_list.append(tf.summary.image(f"{channel}_img", marker_image))
+        with tf.name_scope("MappingSummary"):
+            mapped_events_per_node = tf.reduce_sum(
+                tf.one_hot(bmu_indices, self._m * self._n), axis=0)
 
-            # distance_image = tf.reshape(
-            #     tf.sqrt(tf.cast(self._activity_op[0, :], tf.float32)), shape=(1, self._m, self._n, 1))
-            # scaled_distance_image = tf.subtract(
-            #     1.0,
-            #     tf.div(
-            #         tf.subtract(distance_image, tf.reduce_min(distance_image)),
-            #         tf.subtract(tf.reduce_max(distance_image), tf.reduce_min(distance_image))))
-            # self._summary_list.append(tf.summary.image("distance_img", scaled_distance_image))
-
-            # marker images
-            # self._activity_op = self._input_tensor
-            self._activity_op = tf.no_op()
+            event_image = tf.reshape(mapped_events_per_node, shape=(1, self._m, self._n, 1))
+            self._summary_list.append(tf.summary.image("mapping_img", event_image))
 
         return numerator, denominator
 
@@ -688,16 +684,17 @@ class TFSom:
             self._input_tensor = dataset.make_one_shot_iterator().get_next()
 
             # Create the ops and put them on the graph
-            self._initialize_tf_graph()
+            self._initialize_tf_graph(batches_per_epoch)
 
             init_op = tf.global_variables_initializer()
             self._sess.run([init_op])
 
             metric_init = tf.variables_initializer(self._graph.get_collection(tf.GraphKeys.METRIC_VARIABLES))
 
-        # Initialize the summary writer after the session has been initialized
-        self._writer = tf.summary.FileWriter(
-            str(self._tensorboard_dir / f"train_{create_stamp()}"), self._sess.graph)
+        if self._tensorboard:
+            # Initialize the summary writer after the session has been initialized
+            self._writer = tf.summary.FileWriter(
+                str(self._tensorboard_dir / f"train_{create_stamp()}"), self._sess.graph)
 
         global_step = step_offset
 
@@ -726,8 +723,7 @@ class TFSom:
                 # if recording summaries; initialize a run while recording, save after batch is done
                 if self._tensorboard:
                     summary, _, activity, = self._sess.run(
-                        [ self._merged, self._training_op, self._activity_op],
-                        feed_dict={self._epoch: epoch},
+                        [self._merged, self._training_op, self._activity_op],
                         options=run_options, run_metadata=run_metadata
                     )
                     if activity is not None:
@@ -896,10 +892,7 @@ class SOMNodes(BaseEstimator, TransformerMixin):
         """Always retrain model, if fit is called."""
         self._model = TFSom(*self._args, **self._kwargs)
 
-        def genx():
-            yield X
-
-        self._model.train(genx, num_inputs=1)
+        self._model.train([X], num_inputs=1)
         return self
 
     def predict(self, X, *_):

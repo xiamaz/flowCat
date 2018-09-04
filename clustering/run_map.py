@@ -67,7 +67,7 @@ def simple_run(cases):
     # always load the same normal case for comparability
     with open("simple.txt", "r") as f:
         simple_label = [l.strip() for l in f]
-    data = cases.create_view(num=5, groups=GROUPS) # groups=["normal"], labels=simple_label)
+    data = cases.create_view(num=1, groups=GROUPS) # groups=["normal"], labels=simple_label)
 
     with open("labels_classic5.txt", "w") as f:
         f.writelines("\n".join([d.id for d in data]))
@@ -75,31 +75,36 @@ def simple_run(cases):
     # only use data from the second tube
     tubedata = data.get_tube(2)
 
+    # load reference
+    reference = pd.read_csv("sommaps_new/reference_ep10_s32_planar/t2.csv", index_col=0)
+
     gridsize = 32
     max_epochs = 10
 
-    marker_list = tubedata.data[0].markers
+    marker_list = tubedata.data[0].markers if reference is None else reference.columns
 
-    data_generator = create_z_score_generator(tubedata.data)
+    data_generator = create_z_score_generator([tubedata.data[0]])
 
     model = tfsom.TFSom(
         m=gridsize,
         n=gridsize,
         channels=marker_list,
         batch_size=1,
-        end_radius=2,
+        initial_radius=1,
+        end_radius=1,
         radius_cooling="exponential",
         learning_cooling="exponential",
         map_type="planar",
         node_distance="euclidean",
         max_epochs=max_epochs,
-        initialization_method="random",
+        initialization_method="random" if "reference" is None else "reference",
+        reference=reference,
         tensorboard=True,
-        tensorboard_dir=f'tensorboard',
-        model_name="tube2_cohorts_5each"
+        tensorboard_dir=f'tensorboard_feeder',
+        model_name="remaptest_ir6"
     )
     model.train(
-        data_generator(), num_inputs=len(tubedata.data)
+        data_generator(), num_inputs=1  # len(tubedata.data)
     )
     return
 
@@ -110,34 +115,7 @@ def simple_run(cases):
         print(counts)
 
 
-def case_to_map(path, data, references, gridsize=10):
-    """Transform cases to map representation of their data."""
-
-    for tube in [1, 2]:
-        tubedata = data.get_tube(tube)
-
-        reference = references[tube]
-
-        # TODO: decrease initial radius and learning rate
-        model = tfsom.SOMNodes(
-            m=gridsize, n=gridsize, channels=list(reference.columns),
-            batch_size=1,
-            max_epochs=50,
-            initialization_method="reference", reference=reference,
-            counts=True
-        )
-
-        for case in tubedata.data:
-            print(f"Transforming {case.parent.id}")
-            filename = f"{case.parent.id}_t{tube}.csv"
-
-            filepath = path / filename
-
-            tubeweights = model.fit_transform(case.data[reference.columns])
-            tubeweights.to_csv(filepath)
-
-
-def generate_reference(path, data, gridsize=10, max_epochs=100):
+def generate_reference(refpath, data, gridsize=10, max_epochs=100):
     """Create and save consensus som maps."""
 
     for tube in [1, 2]:
@@ -151,7 +129,7 @@ def generate_reference(path, data, gridsize=10, max_epochs=100):
             end_radius=2,
             radius_cooling="exponential",
             learning_cooling="exponential",
-            map_type="planar",
+            map_type="toroid",
             node_distance="euclidean",
             max_epochs=max_epochs,
             initialization_method="random",
@@ -166,14 +144,49 @@ def generate_reference(path, data, gridsize=10, max_epochs=100):
         weights = model.output_weights
 
         df_weights = pd.DataFrame(weights, columns=marker_list)
-        df_weights.to_csv(path / f"t{tube}.csv")
+        # save the reference weight to the specified location
+        output_path = refpath / model.config_tag / f"t{tube}.csv"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        df_weights.to_csv(output_path)
+
+
+def case_to_map(path, data, references, gridsize=10):
+    """Transform cases to map representation of their data."""
+
+    for tube in [1, 2]:
+        tubedata = data.get_tube(tube)
+
+        reference = references[tube]
+
+        model = tfsom.SOMNodes(
+            m=gridsize, n=gridsize, channels=list(reference.columns),
+            batch_size=1,
+            initial_learning_rate=0.05,
+            end_learning_rate=0.01,
+            initial_radius=1,
+            end_radius=1,
+            map_type="toroid",
+            max_epochs=5,
+            initialization_method="reference", reference=reference,
+            counts=True
+        )
+
+        for case in tubedata.data:
+            print(f"Transforming {case.parent.id}")
+            filename = f"{case.parent.id}_t{tube}.csv"
+
+            filepath = path / filename
+
+            tubeweights = model.fit_transform(case.data[reference.columns])
+            tubeweights.to_csv(filepath)
 
 
 def main():
     gridsize = 32
     simplerun = False
-    createref = True
+    createref = False
     max_epochs = 10
+    maptype = "toroid"
 
     configure_print_logging()
 
@@ -190,30 +203,31 @@ def main():
 
         reference_cases = cases.create_view(labels=selected)
         # reference_cases = cases.create_view(num=1, infiltration=20)
-        refpath = pathlib.Path(f"sommaps_new/reference_ep{max_epochs}_s{gridsize}_planar")
-        refpath.mkdir(parents=True, exist_ok=True)
+        refpath = pathlib.Path(f"sommaps_new/references")
         generate_reference(refpath, reference_cases, gridsize=gridsize, max_epochs=max_epochs)
         return
 
     reference_weights = {
-        t: pd.read_csv(f"sommaps/reference/t{t}_s{gridsize}.csv", index_col=0)
+        t: pd.read_csv(f"sommaps_new/reference_ep10_s{gridsize}_{maptype}/t{t}.csv", index_col=0)
         for t in [1, 2]
     }
 
-    mappath = pathlib.Path(f"sommaps/huge_s{gridsize}_counts")
+    mappath = pathlib.Path(f"sommaps_new/test_{maptype}_s{gridsize}")
     mappath.mkdir(parents=True, exist_ok=True)
 
-    with open("trans_labels.txt") as fobj:
-        ref_trans = [l.strip() for l in fobj]
+    # with open("trans_labels.txt") as fobj:
+    #     ref_trans = [l.strip() for l in fobj]
+    ref_trans = None
 
-    transdata = cases.create_view(num=1000, groups=GROUPS, labels=ref_trans)
+    transdata = cases.create_view(num=5, groups=GROUPS, labels=ref_trans)
+
+    case_to_map(mappath, transdata, reference_weights, gridsize=gridsize)
 
     metadata = pd.DataFrame({
         "label": [c.id for c in transdata.data],
         "group": [c.group for c in transdata.data],
     })
     metadata.to_csv(f"{mappath}.csv")
-    case_to_map(mappath, transdata, reference_weights, gridsize=gridsize)
 
 
 if __name__ == "__main__":
