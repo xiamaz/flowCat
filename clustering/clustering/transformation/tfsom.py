@@ -29,6 +29,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 
 import tensorflow as tf
 from tensorflow.python.client import device_lib
+from ..utils import create_stamp
 
 """
 Modified from code by Chris Gorman.
@@ -75,6 +76,17 @@ def linear_cooling(initial, end, epoch, max_epochs):
                 tf.cast(tf.subtract(initial, end), tf.float32),
                 tf.cast(tf.subtract(max_epochs, 1), tf.float32))))
     return result
+
+
+def apply_cooling(cooling_type, *args, **kwargs):
+    """Wrapper around different cooling functions."""
+    if cooling_type == "linear":
+        cool_op = linear_cooling(*args, **kwargs)
+    elif cooling_type == "exponential":
+        cool_op = exponential_cooling(*args, **kwargs)
+    else:
+        raise TypeError(f"Unknown cooling type: {cooling_type}")
+    return cool_op
 
 
 def exponential_cooling(initial, end, epoch, max_epochs):
@@ -124,48 +136,42 @@ def toroid_distance(matched, locations, map_size, *_, **__):
     return distance
 
 
-def calc_vec_distance(map_type, *args, **kwargs):
-    if map_type == "planar":
-        distance = planar_distance(*args, **kwargs)
-    elif map_type == "toroid":
-        distance = toroid_distance(*args, **kwargs)
-    else:
-        raise TypeError(f"Unknown map type: {map_type}")
-    return distance
-
-
-def squared_euclidean_distance(matched_location, location_vectors, map_type, map_size=None):
-    """
-    dist = sum((a-b)^2)
-    Args:
-        matched_location: Array of BMU for each event. shape [events, locs]
-        location_vectors: Location of nodes in the 2-dimensional map. shape [nodes, loc]
-        map_type: Determines border behavior. Possible options are planar and toroid.
-        map_size: Size of the map. Needed for toroidal distance calculations.
-    Returns:
-        Squared euclidean distance. This will NOT take the square root!
-    """
-    distance = calc_vec_distance(map_type, matched_location, location_vectors, map_size)
-    euclidean = tf.reduce_sum(tf.pow(distance, 2), axis=2)
+def squared_euclidean_distance(distances):
+    """dist = sum((a-b)^2)"""
+    euclidean = tf.reduce_sum(tf.pow(distances, 2), axis=2)
     return euclidean
 
 
-def manhattan_distance(matched_location, location_vectors, map_type, map_size=None):
-    """
-    dist = sum(abs(a-b))
-    """
-    distance = calc_vec_distance(map_type, matched_location, location_vectors, map_size)
-    manhattan = tf.reduce_sum(tf.abs(distance), axis=2)
+def manhattan_distance(distances):
+    """dist = sum(abs(a-b))"""
+    manhattan = tf.reduce_sum(tf.abs(distances), axis=2)
     return manhattan
 
 
-def chebyshev_distance(matched_location, location_vectors, map_type, map_size=None):
-    """
-    dist = max(abs(a-b))
-    """
-    distance = calc_vec_distance(map_type, matched_location, location_vectors, map_size)
-    chebyshev = tf.reduce_max(tf.abs(distance), axis=2)
+def chebyshev_distance(distances):
+    """dist = max(abs(a-b))"""
+    chebyshev = tf.reduce_max(tf.abs(distances), axis=2)
     return chebyshev
+
+
+def calculate_node_distance(matched_location, location_vectors, map_type, distance_type, map_size):
+    """Calculate the distance between a list of selected node coordinates and all nodes in the map."""
+    if map_type == "planar":
+        distance = planar_distance(matched_location, location_vectors, map_size)
+    elif map_type == "toroid":
+        distance = toroid_distance(matched_location, location_vectors, map_size)
+    else:
+        raise TypeError(f"Unknown map type: {map_type}")
+
+    if distance_type == "euclidean":
+        bmu_distances = squared_euclidean_distance(distance)
+    elif distance_type == "manhattan":
+        bmu_distances = manhattan_distance(distance)
+    elif distance_type == "chebyshev":
+        bmu_distances = chebyshev_distance(distance)
+    else:
+        raise TypeError(f"Unknown distance type: {self._node_distance}")
+    return bmu_distances
 
 
 class TFSom:
@@ -194,6 +200,8 @@ class TFSom:
             channels: Columns in the input data. Names will be used for
                 alignment of the input dataframe prior to training and prediction.
         """
+        # snapshot all local variables for config saving
+        config = {k: v for k, v in locals().items() if k != "self"}
 
         self._m = abs(int(m))
         self._n = abs(int(n))
@@ -266,8 +274,15 @@ class TFSom:
 
         # tensorboard visualizations
         self._tensorboard = tensorboard
-        self._tensorboard_dir = Path(tensorboard_dir) / self._model_name
-        self._tensorboard_dir.mkdir(parents=True, exist_ok=True)
+        if tensorboard:
+            self._tensorboard_dir = Path(tensorboard_dir) / self.config_name
+            self._tensorboard_dir.mkdir(parents=True, exist_ok=True)
+            # save configuration
+            with open(str(self._tensorboard_dir / "config.json"), "w") as f:
+                f.writelines(str(config))
+        else:
+            self._tensorboard_dir = None
+
         self._saver = None
         self._summary_list = list()
 
@@ -289,6 +304,12 @@ class TFSom:
         )
 
         self._writer = None
+
+    @property
+    def config_name(self):
+        """Create a config string with following format:
+        s{grid_size}_e{max_epoch}"""
+        return f"{self._model_name}_s{self._m}_e{self._max_epochs}_m{self._map_type}_d{self._node_distance}"
 
     def save(self, location):
         """Save the current model into the specified location."""
@@ -446,54 +467,26 @@ class TFSom:
             # learning rate linearly decreases to 0 at max_epoch
             # α = αi - (epoch / max_epoch * αi)
             # same for radius
-            if self._radius_cooling == "linear":
-                radius = linear_cooling(self._initial_radius, self._end_radius, self._epoch, self._max_epochs)
-            elif self._radius_cooling == "exponential":
-                radius = exponential_cooling(
-                    self._initial_radius, self._end_radius, self._epoch, self._max_epochs)
-            else:
-                raise TypeError(f"Unknown cooling type: {self._radius_cooling}")
+            radius = apply_cooling(
+                self._radius_cooling,
+                self._initial_radius, self._end_radius,
+                self._epoch, self._max_epochs)
+            alpha = apply_cooling(
+                self._learning_cooling,
+                self._initial_learning_rate, self._end_learning_rate,
+                self._epoch, self._max_epochs)
 
-            if self._learning_cooling == "linear":
-                alpha = linear_cooling(
-                    self._initial_learning_rate, self._end_learning_rate, self._epoch, self._max_epochs)
-            elif self._learning_cooling == "exponential":
-                alpha = exponential_cooling(
-                    self._initial_learning_rate, self._end_learning_rate, self._epoch, self._max_epochs)
-            else:
-                raise TypeError(f"Unknown cooling type: {self._learning_cooling}")
-
-            # calculate distance of BMU all neurons in the map, eg this is the
-            # distance in the 2d grid
-            #   location_vects - array of 2d coords of all nodes
-            #   bmu_locs - batch-size array of 2d coord of BMU
-            # calc square distance in map, use expand dim for clever
-            # broadcasting
+            # calculate the node distances between BMU and all other nodes
+            # distance will depend on the used metric and the type of the map
             map_size = tf.constant([self._m, self._n], dtype=tf.int64)
-            if self._node_distance == "euclidean":
-                bmu_distance_squares = squared_euclidean_distance(
-                    bmu_locs, self._location_vects, self._map_type, map_size)
-            elif self._node_distance == "manhattan":
-                bmu_distance_squares = manhattan_distance(
-                    bmu_locs, self._location_vects, self._map_type, map_size)
-            elif self._node_distance == "chebyshev":
-                bmu_distance_squares = chebyshev_distance(
-                    bmu_locs, self._location_vects, self._map_type, map_size)
-            else:
-                raise TypeError(f"Unknown distance type: {self._node_distance}")
-            # bmu_distance_squares = tf.reduce_sum(
-            #     tf.pow(
-            #         tf.subtract(
-            #             tf.expand_dims(self._location_vects, axis=0),
-            #             tf.expand_dims(bmu_locs, axis=1)),
-            #         2),
-            #     2)
+            bmu_distances = calculate_node_distance(
+                    bmu_locs, self._location_vects, self._map_type, self._node_distance, map_size)
 
             # gaussian neighborhood, eg 67% neighborhood with 1std
             # keep in mind, that radius is decreasing with epoch
             neighbourhood_func = tf.exp(
                 tf.divide(
-                    tf.negative(tf.cast(bmu_distance_squares, "float32")),
+                    tf.negative(tf.cast(bmu_distances, "float32")),
                     tf.multiply(
                         tf.square(
                             tf.multiply(
@@ -551,14 +544,22 @@ class TFSom:
                 tf.reduce_mean(learning_rate_op, axis=0), shape=(1, self._m, self._n, 1))
             self._summary_list.append(tf.summary.image("learn_img", learn_image))
 
+        with tf.name_scope("WeightsSummary"):
+            # combined cd45 ss int lin plot using r and g color
+            self._create_color_map(["CD45-KrOr", "SS INT LIN", None], "cd45_ss")
+            self._create_color_map([None, "SS INT LIN", "CD19-APCA750"], "ss_cd19")
+            if "Kappa-FITC" in self._channels:
+                self._create_color_map([None, "Kappa-FITC", "Lambda-PE"], "kappa_lambda")
+            self._create_color_map(["CD45-KrOr", "SS INT LIN", "CD19-APCA750"], "zz_cd45_ss_cd19")
+
             # marker images
-            for channel in ["CD45-KrOr", "SS INT LIN"]:
-                sel_channel = self._weights[:, self._channels.index(channel)]
-                normalized_values = tf.div(
-                    tf.subtract(sel_channel, tf.reduce_min(sel_channel)),
-                    tf.subtract(tf.reduce_max(sel_channel), tf.reduce_min(sel_channel)))
-                marker_image = tf.reshape(normalized_values, shape=(1, self._m, self._n, 1))
-                self._summary_list.append(tf.summary.image(f"{channel}_img", marker_image))
+            # for channel in ["CD45-KrOr", "SS INT LIN"]:
+            #     sel_channel = self._weights[:, self._channels.index(channel)]
+            #     normalized_values = tf.div(
+            #         tf.subtract(sel_channel, tf.reduce_min(sel_channel)),
+            #         tf.subtract(tf.reduce_max(sel_channel), tf.reduce_min(sel_channel)))
+            #     marker_image = tf.reshape(normalized_values, shape=(1, self._m, self._n, 1))
+            #     self._summary_list.append(tf.summary.image(f"{channel}_img", marker_image))
 
             # distance_image = tf.reshape(
             #     tf.sqrt(tf.cast(self._activity_op[0, :], tf.float32)), shape=(1, self._m, self._n, 1))
@@ -574,6 +575,27 @@ class TFSom:
             self._activity_op = tf.no_op()
 
         return numerator, denominator
+
+
+    def _create_color_map(self, channels, name="colormap"):
+        """Create a color map using given channels. Also generate a small reference visualizing the
+        given colorspace."""
+        slices = [
+            tf.zeros(self._m * self._n) if channel is None else self._weights[:, self._channels.index(channel)]
+            for channel in channels
+        ]
+        marker_image = tf.reshape(tf.stack(slices, axis=1), shape=(1, self._m, self._n, 3))
+        self._summary_list.append(tf.summary.image(name, marker_image))
+
+        if None in channels:
+            none_pos = channels.index(None)
+            legend_list = [[i, j] for i in range(2) for j in range(2)]
+            for leg in legend_list:
+                leg.insert(none_pos, 0)
+
+            legend_axis = tf.reshape(tf.constant(legend_list, dtype=tf.float16), shape=(1, 2, 2, 3))
+            self._summary_list.append(tf.summary.image(f"{name}_legend", legend_axis))
+
 
     def _make_activity_op(self, input_tensor):
         """ Creates the op for calculating the activity of a SOM
@@ -675,7 +697,7 @@ class TFSom:
 
         # Initialize the summary writer after the session has been initialized
         self._writer = tf.summary.FileWriter(
-            str(self._tensorboard_dir / "summary" / 'train'), self._sess.graph)
+            str(self._tensorboard_dir / f"train_{create_stamp()}"), self._sess.graph)
 
         global_step = step_offset
 

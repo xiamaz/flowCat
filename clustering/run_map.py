@@ -3,6 +3,7 @@ import pathlib
 
 import logging
 
+import numpy as np
 import pandas as pd
 import networkx as nx
 import scipy as sp
@@ -54,42 +55,27 @@ def create_z_score_generator(tubecases):
         for tcase in tubecases:
             data = tcase.data
             zscores = preprocessing.StandardScaler().fit_transform(data)
-            # TODO: possibly needs min-max scaling to remove negative values
-            yield pd.DataFrame(zscores, columns=data.columns)
+            min_maxed = preprocessing.MinMaxScaler().fit_transform(zscores)
+            yield pd.DataFrame(min_maxed, columns=data.columns)
 
     return generate_z_score
 
 
-# def somoclu_simple(data):
-#     """Very simple SOM run using somoclu instead of tensorflow as the core."""
-#     gridsize = 30
-# 
-#     tubedata = data.get_tube(2)
-# 
-#     data_generator = create_z_score_generator(tubedata.data)
-#     testdata = list(data_generator())[0]
-# 
-#     model = somoclu.Somoclu(
-#         n_columns=gridsize, n_rows=gridsize,
-#         kerneltype=1,
-#         maptype="planar", gridtype="rectangular",
-#         std_coeff=0.5,
-#         initialization="random",
-#         verbose=2
-#     )
-#     model.train(
-#         testdata.values.astype("float32"), epochs = 1000,
-#         radius0=0, radiusN=1, radiuscooling="linear",
-#         scale0=0.1, scaleN=0.01, scalecooling="linear"
-#     )
-
-
-def simple_run(data):
+def simple_run(cases):
     """Very simple SOM run for tensorflow testing."""
+
+    # always load the same normal case for comparability
+    with open("simple.txt", "r") as f:
+        simple_label = [l.strip() for l in f]
+    data = cases.create_view(num=5, groups=GROUPS) # groups=["normal"], labels=simple_label)
+
+    with open("labels_classic5.txt", "w") as f:
+        f.writelines("\n".join([d.id for d in data]))
+
     # only use data from the second tube
     tubedata = data.get_tube(2)
 
-    gridsize = 30
+    gridsize = 32
     max_epochs = 10
 
     marker_list = tubedata.data[0].markers
@@ -101,14 +87,16 @@ def simple_run(data):
         n=gridsize,
         channels=marker_list,
         batch_size=1,
+        end_radius=2,
         radius_cooling="exponential",
         learning_cooling="exponential",
-        map_type="toroid",
+        map_type="planar",
         node_distance="euclidean",
         max_epochs=max_epochs,
         initialization_method="random",
         tensorboard=True,
-        tensorboard_dir=f'simple_run_toroid/tb_s{gridsize}_c{len(data)}_e{max_epochs}',
+        tensorboard_dir=f'tensorboard',
+        model_name="tube2_cohorts_5each"
     )
     model.train(
         data_generator(), num_inputs=len(tubedata.data)
@@ -160,51 +148,49 @@ def generate_reference(path, data, gridsize=10, max_epochs=100):
             n=gridsize,
             channels=marker_list,
             batch_size=1,
+            end_radius=2,
+            radius_cooling="exponential",
+            learning_cooling="exponential",
+            map_type="planar",
+            node_distance="euclidean",
             max_epochs=max_epochs,
             initialization_method="random",
             tensorboard=True,
-            tensorboard_dir=f"tensorboard_c{len(data)}_ep{max_epochs}",
-            model_name=f"reference_t{tube}_s{gridsize}",
+            model_name=f"reference_t{tube}",
+            tensorboard_dir=f'tensorboard_reference',
         )
 
-        generate_data = create_simple_generator(tubedata.data)
+        generate_data = create_z_score_generator(tubedata.data)
 
         model.train(generate_data(), num_inputs=len(tubedata.data))
         weights = model.output_weights
 
         df_weights = pd.DataFrame(weights, columns=marker_list)
-        df_weights.to_csv(path / f"t{tube}_s{gridsize}.csv")
+        df_weights.to_csv(path / f"t{tube}.csv")
 
 
 def main():
-    gridsize = 50
-    simplerun = True
+    gridsize = 32
+    simplerun = False
     createref = True
-    max_epochs = 1000
+    max_epochs = 10
 
     configure_print_logging()
 
     cases = CaseCollection(inputpath="s3://mll-flowdata/CLL-9F", tubes=[1, 2])
 
-
     if simplerun:
-        # always load the same normal case for comparability
-        with open("simple.txt", "r") as f:
-            simple_label = [l.strip() for l in f]
-        simple_cases = cases.create_view(num=1, groups=["normal"], labels=simple_label)
-
-        simple_run(simple_cases)
+        simple_run(cases)
         return
 
     # generate consensus reference and exit
     if createref:
-        # with open("labels.txt") as fobj:
-        #     selected = [l.strip() for l in fobj]
+        with open("labels.txt") as fobj:
+            selected = [l.strip() for l in fobj]
 
-        # reference_cases = cases.create_view(labels=selected)
-        reference_cases = cases.create_view(num=1, infiltration=20)
-
-        refpath = pathlib.Path(f"sommaps/reference_ep{max_epochs}_s{gridsize}")
+        reference_cases = cases.create_view(labels=selected)
+        # reference_cases = cases.create_view(num=1, infiltration=20)
+        refpath = pathlib.Path(f"sommaps_new/reference_ep{max_epochs}_s{gridsize}_planar")
         refpath.mkdir(parents=True, exist_ok=True)
         generate_reference(refpath, reference_cases, gridsize=gridsize, max_epochs=max_epochs)
         return
