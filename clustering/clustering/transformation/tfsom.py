@@ -20,6 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # =================================================================================
+import random
 import logging
 from pathlib import Path
 
@@ -60,6 +61,9 @@ def create_marker_generator(data_iterable, channels, batch_size=1):
             cache.append(concat)
 
         while True:
+            # randomize the presentation of the batches, to prevent ecg like
+            # fitting to individual samples
+            random.shuffle(cache)
             for cached in cache:
                 yield cached
 
@@ -188,7 +192,6 @@ class TFSom:
             initial_radius=None, end_radius=None, radius_cooling="linear",
             initial_learning_rate=0.05, end_learning_rate=0.01, learning_cooling="linear",
             node_distance="euclidean", map_type="planar", std_coeff=0.5,
-            softmax_activity=False, output_sensitivity=-1.0,
             initialization_method="sample", reference=None, max_random=1.0,
             model_name="Self-Organizing-Map",
             tensorboard=False, tensorboard_dir="tensorboard"
@@ -228,17 +231,7 @@ class TFSom:
 
         self._max_epochs = abs(int(max_epochs))
         self._batch_size = abs(int(batch_size))
-        self._softmax_activity = bool(softmax_activity)
         self._model_name = str(model_name)
-
-        if output_sensitivity > 0:
-            output_sensitivity *= -1
-        elif output_sensitivity == 0:
-            output_sensitivity = -1
-
-        # The activity equation is kind of long so I'm naming this c for
-        # brevity
-        self._c = float(output_sensitivity)
 
         self._initialization_method = initialization_method
 
@@ -258,8 +251,6 @@ class TFSom:
         self._training_op = None
         self._centroid_grid = None
         self._locations = None
-        self._activity_op = None
-        self._activity_merged = None
 
         # prediction variables
         self._invar = None
@@ -350,16 +341,11 @@ class TFSom:
                     # (numerator, denominator) tensors to the list
                     tower_updates.append(self._tower_som(*args, **kwargs))
                     tf.get_variable_scope().reuse_variables()
-
-                    # Put the activity op on the last GPU
-                    # self._activity_op = self._make_activity_op(self._input)
             else:
                 # Running CPU only
                 with tf.name_scope("Tower_0"):
                     tower_updates.append(self._tower_som())
                     tf.get_variable_scope().reuse_variables()
-
-                    # self._activity_op = self._make_activity_op(self._input)
 
             with tf.name_scope("Weight_Update"):
                 # Get the outputs
@@ -375,7 +361,6 @@ class TFSom:
                         diff_weights = tf.reshape(
                             tf.sqrt(tf.reduce_sum(tf.pow(self._weights - new_weights, 2), axis=1)),
                             shape=(1, self._m, self._n, 1))
-                        # self._activity_op = diff_weights
                         self._summary_list.append(tf.summary.image("WeightDiff", diff_weights))
                 # Assign them
                 self._training_op = tf.assign(self._weights, new_weights)
@@ -385,9 +370,6 @@ class TFSom:
 
             # merge all summaries
             self._merged = tf.summary.merge(self._summary_list)
-
-            if self._activity_op is None:
-                self._activity_op = tf.no_op()
 
     def _prediction_variables(self):
         """Create prediction ops"""
@@ -550,7 +532,6 @@ class TFSom:
                 tf.cast(tf.size(distances), tf.float32))
             self._summary_list.append(tf.summary.scalar("topographic_error", topographic_error))
 
-            # self._activity_op = learning_rate_op
             learn_image = tf.reshape(
                 tf.reduce_mean(learning_rate_op, axis=0), shape=(1, self._m, self._n, 1))
             self._summary_list.append(tf.summary.image("learn_img", learn_image))
@@ -591,51 +572,6 @@ class TFSom:
 
             legend_axis = tf.reshape(tf.constant(legend_list, dtype=tf.float16), shape=(1, 2, 2, 3))
             self._summary_list.append(tf.summary.image(f"{name}_legend", legend_axis))
-
-
-    def _make_activity_op(self, input_tensor):
-        """ Creates the op for calculating the activity of a SOM
-        :param input_tensor: A tensor to calculate the activity of. Must be of
-                shape `[batch_size, dim]` where `dim` is the dimensionality of
-                the SOM's weights.
-        :return A handle to the newly created activity op:
-        """
-        with tf.name_scope("Activity"):
-            # This constant controls the width of the gaussian.
-            # The closer to 0 it is, the wider it is.
-            c = tf.constant(self._c, dtype="float32")
-            # Get the euclidean distance between each neuron and the input
-            # vectors
-            dist = tf.norm(
-                tf.subtract(
-                    tf.expand_dims(self._weights, axis=0),
-                    tf.expand_dims(input_tensor, axis=1)),
-                name="Distance", axis=-1)  # [batch_size, neurons]
-            # squared_distance = tf.reduce_sum(
-            #     tf.pow(tf.subtract(tf.expand_dims(self._weights, axis=0),
-            #                        tf.expand_dims(self._input, axis=1)),
-            #            2), 2)
-
-            # Calculate the Gaussian of the activity. Units with distances
-            # closer to 0 will have activities closer to 1.
-            activity = tf.exp(
-                tf.multiply(
-                    tf.pow(
-                        dist,
-                        2),
-                    c), name="Gaussian")
-
-            # Convert the activity into a softmax probability distribution
-            if self._softmax_activity:
-                activity = tf.divide(
-                    tf.exp(
-                        activity),
-                    tf.expand_dims(tf.reduce_sum(
-                            tf.exp(
-                                activity), axis=1), axis=-1), name="Softmax")
-
-            output = tf.identity(activity, name="Output")
-            return output
 
     def train(self, data_iterable, num_inputs, step_offset=0):
         """ Train the network on the data provided by the input tensor.
@@ -680,7 +616,6 @@ class TFSom:
                 )
 
             dataset = dataset.repeat()
-            # dataset = dataset.batch(self._batch_size)
             self._input_tensor = dataset.make_one_shot_iterator().get_next()
 
             # Create the ops and put them on the graph
@@ -711,24 +646,13 @@ class TFSom:
             self._sess.run(metric_init)
             for batch in range(batches_per_epoch):
                 global_step += 1
-                # current_batch = batch + (batches_per_epoch * epoch)
-                # percent_complete = current_batch / total_batches
-                # LOGGER.debug(
-                #     "\tBatch %d/%d - %.2f%% complete",
-                #     batch,
-                #     batches_per_epoch,
-                #     percent_complete * 100
-                # )
 
                 # if recording summaries; initialize a run while recording, save after batch is done
                 if self._tensorboard:
-                    summary, _, activity, = self._sess.run(
-                        [self._merged, self._training_op, self._activity_op],
+                        summary, _, = self._sess.run(
+                        [self._merged, self._training_op],
                         options=run_options, run_metadata=run_metadata
                     )
-                    if activity is not None:
-                        print(activity)
-                        print(activity.shape)
                 else:
                     self._sess.run(
                         self._training_op,
