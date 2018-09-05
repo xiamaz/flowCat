@@ -65,14 +65,15 @@ def plot_confusion_matrix(
     FigureCanvas(fig)
     fig.savefig(filename, dpi=300)
 
-    fig = Figure()
-    Y = hierarchy.distance.pdist(confusion_matrix, metric='euclidean')
-    Z = hierarchy.linkage(Y, method='single')
-    axes = fig.add_subplot(111)
-    hierarchy.dendrogram(Z, show_contracted=True, labels=classes, ax=axes)
-    fig.tight_layout()
-    FigureCanvas(fig)
-    fig.savefig(dendroname, dpi=300)
+    if dendroname is not None:
+        fig = Figure()
+        Y = hierarchy.distance.pdist(confusion_matrix, metric='euclidean')
+        Z = hierarchy.linkage(Y, method='single')
+        axes = fig.add_subplot(111)
+        hierarchy.dendrogram(Z, show_contracted=True, labels=classes, ax=axes)
+        fig.tight_layout()
+        FigureCanvas(fig)
+        fig.savefig(dendroname, dpi=300)
 
 
 def plot_history(history: "History", path: str):

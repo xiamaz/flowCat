@@ -7,6 +7,7 @@ from sklearn import naive_bayes
 from sklearn import metrics
 
 from keras import layers, models, regularizers, optimizers
+from keras.utils import plot_model
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -320,6 +321,8 @@ def classify_convolutional(data, m=10, n=10, weights=None):
     model = create_model_convolutional(
         tr1[0].shape, len(groups), classweights=weights
     )
+    plot_model(model, "basic_convnet")
+    return None, None
     model.fit(
         [tr1, tr2],
         ytrain_mat,
@@ -414,6 +417,7 @@ def main():
     # print(confusion, groups)
     confusion, groups = classify_convolutional(
         mapped_data, m=30, n=30)
+    return
 
     outpath = pathlib.Path("sommaps/output/huge_s30_counts")
     outpath.mkdir(parents=True, exist_ok=True)
