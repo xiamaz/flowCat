@@ -37,8 +37,21 @@ class Material(Enum):
             return Material.OTHER
 
 
-class Case:
+class Case(object):
     """Basic case object containing all metadata for a case."""
+    __slots__ = (
+        "_json",
+        "path",
+        "_filepaths",
+        "_tubepaths",
+        "_tube_markers",
+        "_histogram",
+        "date",
+        "infiltration",
+        "group",
+        "id",
+    )
+
     def __init__(self, data: dict, path: str = ""):
         self._json = data
 
@@ -130,7 +143,18 @@ class Case:
         return material_num == 1
 
 
-class CasePath:
+class CasePath(object):
+    __slots__ = (
+        "path",
+        "markers",
+        "event_count",
+        "tube",
+        "material",
+        "parent",
+        "result",
+        "result_success",
+    )
+
     """Single path for a case."""
     def __init__(self, path, parent):
         self.path = os.path.join(parent.path, path["fcs"]["path"])
