@@ -64,7 +64,9 @@ def create_z_score_generator(tubecases):
 def simple_run(cases):
     """Very simple SOM run for tensorflow testing."""
 
-    num_cases = 50
+    num_cases = 5
+    gridsize = 32
+    max_epochs = 10
 
     # always load the same normal case for comparability
     with open(f"labels_normal{num_cases}.txt", "r") as f:
@@ -80,13 +82,29 @@ def simple_run(cases):
     tubedata = data.get_tube(2)
 
     # load reference
-    # reference = pd.read_csv("sommaps_new/reference_ep10_s32_planar/t2.csv", index_col=0)
-    reference = None
-
-    gridsize = 32
-    max_epochs = 10
-
+    reference = pd.read_csv("sommaps_new/reference_ep10_s32_planar/t2.csv", index_col=0)
     marker_list = tubedata.data[0].markers if reference is None else reference.columns
+
+    # reference = None
+    model = tfsom.TFSom(
+        m=gridsize,
+        n=gridsize,
+        channels=marker_list,
+        batch_size=1,
+        radius_cooling="exponential",
+        learning_cooling="exponential",
+        map_type="planar",
+        node_distance="euclidean",
+        max_epochs=max_epochs,
+        initialization_method="random" if reference is None else "reference",
+        reference=reference,
+        tensorboard=True,
+        tensorboard_dir=f'tensorboard_refit_refactor',
+        model_name=f"remaptest_remap_n{num_cases}"
+    )
+    for result in model.fit_map(create_z_score_generator(tubedata.data)()):
+        print(result)
+    return
 
     for (lstart, lend) in [(0.4, 0.04), (0.8, 0.08), (0.8, 0.8), (1.0, 0.1)]:
 
@@ -109,7 +127,7 @@ def simple_run(cases):
             initialization_method="random" if reference is None else "reference",
             reference=reference,
             tensorboard=True,
-            tensorboard_dir=f'tensorboard_metrics_learning',
+            tensorboard_dir=f'tensorboard_refit_refactor',
             model_name=f"remaptest_l{lstart:3f}-{lend:.3f}_n{num_cases}"
         )
         model.train(
@@ -124,7 +142,7 @@ def simple_run(cases):
         print(counts)
 
 
-def generate_reference(refpath, data, gridsize=10, max_epochs=100):
+def generate_reference(refpath, data, gridsize=10, max_epochs=100, map_type="planar"):
     """Create and save consensus som maps."""
 
     for tube in [1, 2]:
@@ -138,7 +156,7 @@ def generate_reference(refpath, data, gridsize=10, max_epochs=100):
             end_radius=2,
             radius_cooling="exponential",
             learning_cooling="exponential",
-            map_type="toroid",
+            map_type=map_type,
             node_distance="euclidean",
             max_epochs=max_epochs,
             initialization_method="random",
@@ -159,7 +177,7 @@ def generate_reference(refpath, data, gridsize=10, max_epochs=100):
         df_weights.to_csv(output_path)
 
 
-def case_to_map(path, data, references, gridsize=10):
+def case_to_map(path, data, references, gridsize=10, map_type="planar"):
     """Transform cases to map representation of their data."""
 
     for tube in [1, 2]:
@@ -172,27 +190,26 @@ def case_to_map(path, data, references, gridsize=10):
             batch_size=1,
             initial_learning_rate=0.05,
             end_learning_rate=0.01,
-            initial_radius=1,
+            initial_radius=3,
             end_radius=1,
-            map_type="toroid",
+            map_type=map_type,
             max_epochs=5,
             initialization_method="reference", reference=reference,
             counts=True
         )
 
-        for case in tubedata.data:
-            print(f"Transforming {case.parent.id}")
-            filename = f"{case.parent.id}_t{tube}.csv"
-
+        generate_data = create_z_score_generator(tubedata)
+        tubelabels = [c.parent.id for c in tubedata.data]
+        for label, result in zip(tubelabels, model.transform(generate_data())):
+            print(f"Saving {label}")
+            filename = f"{label}_t{tube}.csv"
             filepath = path / filename
-
-            tubeweights = model.fit_transform(case.data[reference.columns])
-            tubeweights.to_csv(filepath)
+            result.to_csv(filepath)
 
 
 def main():
     gridsize = 32
-    simplerun = True
+    simplerun = False
     createref = False
     max_epochs = 10
     maptype = "toroid"
@@ -230,7 +247,7 @@ def main():
 
     transdata = cases.create_view(num=5, groups=GROUPS, labels=ref_trans)
 
-    case_to_map(mappath, transdata, reference_weights, gridsize=gridsize)
+    case_to_map(mappath, transdata, reference_weights, gridsize=gridsize, map_type=maptype)
 
     metadata = pd.DataFrame({
         "label": [c.id for c in transdata.data],

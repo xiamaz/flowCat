@@ -82,6 +82,26 @@ class SelectedMarkers:
         return self.fit(X).transform(X)
 
 
+class IterableMixin(object):
+    """Implement iterable stuff but needs to have the data attribute."""
+    def __getitem__(self, key):
+        return self.data[key]
+
+    def __len__(self):
+        return len(self.data)
+
+    def __iter__(self):
+        self._current = 0
+        return self
+
+    def __next__(self):
+        if self._current >= len(self):
+            raise StopIteration
+        else:
+            self._current += 1
+            return self[self._current - 1]
+
+
 class CaseIterable:
     """Iterable collection for cases. Base class."""
 
@@ -133,23 +153,6 @@ class CaseIterable:
         """Return dict represendation of content."""
         return [c.json for c in self]
 
-    def __getitem__(self, key):
-        return self.data[key]
-
-    def __len__(self):
-        return len(self.data)
-
-    def __iter__(self):
-        self._current = 0
-        return self
-
-    def __next__(self):
-        if self._current >= len(self):
-            raise StopIteration
-        else:
-            self._current += 1
-            return self[self._current - 1]
-
 
 def filter_materials(data: list) -> list:
     """Filter cases to remove not allowed materials.
@@ -162,7 +165,7 @@ def filter_materials(data: list) -> list:
     return data
 
 
-class CaseCollection(CaseIterable):
+class CaseCollection(IterableMixin, CaseIterable):
     """Get case information from info file and remove errors and provide
     overview information."""
 
@@ -239,7 +242,7 @@ class CaseCollection(CaseIterable):
         )
 
 
-class CaseView(CaseIterable):
+class CaseView(IterableMixin, CaseIterable):
     """Filtered view into the base data. Perform all mutable
     actions on CaseView instead of CaseCollection."""
 
@@ -265,12 +268,14 @@ class CaseView(CaseIterable):
                 print("Loaded df with shape: ", case.get_tube(tube).data.shape)
 
 
-class TubeView:
+class TubeView(IterableMixin):
     """List containing CasePath."""
     def __init__(self, data: [CasePath], markers: list):
         self.data = data
         self.markers = markers
         self._materials = None
+        self._current = None
+
 
     @property
     def materials(self):
@@ -290,6 +295,3 @@ class TubeView:
             pd.DataFrame.from_records(hists),
             pd.DataFrame.from_records(failures)
         )
-
-    def __len__(self):
-        return len(self.data)
