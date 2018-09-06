@@ -187,11 +187,6 @@ def generate_reference(refpath, data, gridsize=10, max_epochs=100, map_type="pla
 
 def case_to_map(path, data, references, gridsize=10, map_type="planar"):
     """Transform cases to map representation of their data."""
-    augmentation_table = {
-        "FL": 5,
-        "HCL": 6,
-    }
-
     for tube in [1, 2]:
         tubedata = data.get_tube(tube)
 
@@ -207,19 +202,16 @@ def case_to_map(path, data, references, gridsize=10, map_type="planar"):
             map_type=map_type,
             max_epochs=5,
             initialization_method="reference", reference=reference,
-            counts=True
+            counts=True,
+            tensorboard=True,
+            tensorboard_dir="tensorboard_retraining/test"
         )
 
-        tubelabels = []
-        repcases = []
-        for rep, case in data_augmentor(tubedata, augmentation_table):
-            tubelabels.append((case.parent.id, rep))
-            repcases.append(case)
-
-        generate_data = create_z_score_generator(repcases)
-        for (label, rep_num), result in zip(tubelabels, model.transform(generate_data())):
+        generate_data = create_z_score_generator(tubedata)
+        tubelabels = [c.parent.id for c in tubedata]
+        for label, result in zip(tubelabels, model.transform(generate_data())):
             print(f"Saving {label}")
-            filename = f"{label}_{rep_num}_t{tube}.csv"
+            filename = f"{label}_t{tube}.csv"
             filepath = path / filename
             result.to_csv(filepath)
 
