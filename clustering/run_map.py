@@ -37,6 +37,14 @@ def configure_print_logging(rootname="clustering"):
     rootlogger.addHandler(handler)
 
 
+def data_augmentor(tubecases, augmentation_table):
+    """Create a list of cases with replication numbers."""
+    for case in tubecases:
+        reps = augmentation_table.get(case.parent.group, 1)
+        for r in range(reps):
+            yield r, case
+
+
 def create_simple_generator(tubecases):
     """Create generator yielding dataframes from list of tubecases."""
 
@@ -179,6 +187,10 @@ def generate_reference(refpath, data, gridsize=10, max_epochs=100, map_type="pla
 
 def case_to_map(path, data, references, gridsize=10, map_type="planar"):
     """Transform cases to map representation of their data."""
+    augmentation_table = {
+        "FL": 5,
+        "HCL": 6,
+    }
 
     for tube in [1, 2]:
         tubedata = data.get_tube(tube)
@@ -198,11 +210,16 @@ def case_to_map(path, data, references, gridsize=10, map_type="planar"):
             counts=True
         )
 
-        generate_data = create_z_score_generator(tubedata)
-        tubelabels = [c.parent.id for c in tubedata.data]
-        for label, result in zip(tubelabels, model.transform(generate_data())):
+        tubelabels = []
+        repcases = []
+        for rep, case in data_augmentor(tubedata, augmentation_table):
+            tubelabels.append((case.parent.id, rep))
+            repcases.append(case)
+
+        generate_data = create_z_score_generator(repcases)
+        for (label, rep_num), result in zip(tubelabels, model.transform(generate_data())):
             print(f"Saving {label}")
-            filename = f"{label}_t{tube}.csv"
+            filename = f"{label}_{rep_num}_t{tube}.csv"
             filepath = path / filename
             result.to_csv(filepath)
 
@@ -238,7 +255,7 @@ def main():
         for t in [1, 2]
     }
 
-    mappath = pathlib.Path(f"sommaps_new/test_{maptype}_s{gridsize}")
+    mappath = pathlib.Path(f"sommaps_test/test_{maptype}_s{gridsize}")
     mappath.mkdir(parents=True, exist_ok=True)
 
     # with open("trans_labels.txt") as fobj:
