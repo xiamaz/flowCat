@@ -18,7 +18,10 @@ from matplotlib.figure import Figure
 
 from clustering.transformation import tfsom, fcs, pregating
 from clustering.collection import CaseCollection, CaseView
+from clustering import utils
 
+
+utils.TMP_PATH = "/data/tmp"
 
 GROUPS = [
     "CLL", "PL", "FL", "HCL", "LPL", "MBL", "MCL", "MZL", "normal"
