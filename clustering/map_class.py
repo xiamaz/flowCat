@@ -51,8 +51,6 @@ def load_dataset(path):
 
     labels = pd.read_csv(f"{path}.csv", index_col=0)
 
-    labels.columns = ["label", "group"]
-
     labels["data"] = labels["label"].apply(
         lambda i: [
             pd.read_csv(path / f"{i}_t{t}.csv", index_col=0) for t in [1, 2]
@@ -138,7 +136,9 @@ def create_model_convolutional(
             pool_size=2, strides=1
         )(t_c2)
 
-        t_d = layers.Dropout(0.25)(t_p1)
+        t_bn = layers.BatchNormalization()(t_p1)
+
+        t_d = layers.Dropout(0.25)(t_bn)
 
         t_f = layers.Flatten()(t_p1)
 
@@ -190,16 +190,16 @@ def create_model(xshape, yshape, num_inputs=2, classweights=None):
     for i in range(num_inputs):
         t_input = layers.Input(shape=xshape)
 
-        t_attention = layers.Dense(
-            units=xshape[0], activation="softmax",
-            kernel_regularizer=regularizers.l2(.01)
-        )(t_input)
-        t_multatt = layers.multiply([t_input, t_attention])
+        # t_attention = layers.Dense(
+        #     units=xshape[0], activation="softmax",
+        #     kernel_regularizer=regularizers.l2(.01)
+        # )(t_input)
+        # t_multatt = layers.multiply([t_input, t_attention])
 
         t_a = layers.Dense(
             units=128, activation="relu", kernel_initializer="uniform",
             # kernel_regularizer=regularizers.l1(.01)
-        )(t_multatt)
+        )(t_input)
         t_ad = layers.Dropout(rate=0.01)(t_a)
 
         t_b = layers.Dense(
@@ -267,7 +267,10 @@ def classify(data):
     """
     groups = list(data["group"].unique())
 
-    train, test = model_selection.train_test_split(data, train_size=0.8)
+    train, test = model_selection.train_test_split(
+        data, train_size=0.8, stratify=data["group"])
+
+    train = pd.concat([train, test])
 
     tr1, tr2, ytrain = reshape_dataset(train)
 
@@ -275,68 +278,63 @@ def classify(data):
     binarizer.fit(groups)
     ytrain_mat = binarizer.transform(ytrain)
 
-    te1, te2, ytest = reshape_dataset(test)
-    ytest_mat = binarizer.transform(ytest)
+    # te1, te2, ytest = reshape_dataset(test)
+    # ytest_mat = binarizer.transform(ytest)
 
     # model = naive_bayes.GaussianNB()
     # model.fit(tr1, ytrain)
 
-    weights = np.ones((len(groups), len(groups)))
-    for i in range(len(groups)):
-        if i != groups.index("normal"):
-            weights[i][groups.index("normal")] = 50
-
-    model = create_model(
-        (tr1.shape[1], ), ytrain_mat.shape[1], classweights=weights
-    )
-    model.fit([tr1, tr2], ytrain_mat, epochs=20, batch_size=16)
-    pred = model.predict([te1, te2], batch_size=128)
-    pred = binarizer.inverse_transform(pred)
+    model = create_model((tr1.shape[1], ), ytrain_mat.shape[1], classweights=None)
+    model.fit([tr1, tr2], ytrain_mat, epochs=20, batch_size=16, validation_split=0.2)
+    # pred = model.predict([te1, te2], batch_size=128)
+    # pred = binarizer.inverse_transform(pred)
 
     # res = model.score(te1, ytest)
     # print(res)
     # pred = model.predict(te1)
 
-    print("F1: ", metrics.f1_score(ytest, pred, average="micro"))
+    # print("F1: ", metrics.f1_score(ytest, pred, average="micro"))
 
-    confusion = metrics.confusion_matrix(ytest, pred, binarizer.classes_,)
-    return confusion, binarizer.classes_
+    # confusion = metrics.confusion_matrix(ytest, pred, binarizer.classes_,)
+    # return confusion, binarizer.classes_
 
 
 def classify_convolutional(data, m=10, n=10, weights=None):
     groups = list(data["group"].unique())
-
-    train, test = model_selection.train_test_split(data, train_size=0.9)
-
-    tr1, tr2, ytrain = reshape_dataset_2d(train, m=m, n=n)
-
     binarizer = preprocessing.LabelBinarizer()
     binarizer.fit(groups)
 
-    ytrain_mat = binarizer.transform(ytrain)
+    # train, test = model_selection.train_test_split(data, train_size=0.9)
+    confusions = []
+    kf = model_selection.StratifiedKFold(n_splits=5, shuffle=True)
+    for train_index, test_index in kf.split(data, data["group"]):
+        tr1, tr2, ytrain = reshape_dataset_2d(
+            data.iloc[np.concatenate([train_index, test_index]), :], m=m, n=n)
+        # tr1, tr2, ytrain = reshape_dataset_2d(data.iloc[train_index, :], m=m, n=n)
 
-    te1, te2, ytest = reshape_dataset_2d(test, m=m, n=n)
-    ytest_mat = binarizer.transform(ytest)
+        ytrain_mat = binarizer.transform(ytrain)
 
-    model = create_model_convolutional(
-        tr1[0].shape, len(groups), classweights=weights
-    )
-    plot_model(model, "basic_convnet")
-    return None, None
-    model.fit(
-        [tr1, tr2],
-        ytrain_mat,
-        epochs=30,
-        batch_size=16,
-        validation_split=0.2
-    )
-    pred = model.predict([te1, te2], batch_size=128)
-    pred = binarizer.inverse_transform(pred)
+        # te1, te2, ytest = reshape_dataset_2d(data.iloc[test_index, :], m=m, n=n)
+        # ytest_mat = binarizer.transform(ytest)
 
-    print("F1: ", metrics.f1_score(ytest, pred, average="micro"))
+        model = create_model_convolutional(
+            tr1[0].shape, len(groups), classweights=weights
+        )
+        model.fit(
+            [tr1, tr2],
+            ytrain_mat,
+            epochs=100,
+            batch_size=16,
+            validation_split=0.2
+        )
+        # pred = model.predict([te1, te2], batch_size=128)
+        # pred = binarizer.inverse_transform(pred)
 
-    confusion = metrics.confusion_matrix(ytest, pred, binarizer.classes_,)
-    return confusion, binarizer.classes_
+        # print("F1: ", metrics.f1_score(ytest, pred, average="micro"))
+
+        # confusion = metrics.confusion_matrix(ytest, pred, binarizer.classes_,)
+        # confusions.append(confusion)
+    return confusions, binarizer.classes_
 
 
 def subtract_ref_data(data, references):
@@ -350,7 +348,9 @@ def normalize_data(data):
     data["data"] = data["data"].apply(
         lambda t: [
             pd.DataFrame(
-                preprocessing.StandardScaler().fit_transform(d),
+                preprocessing.MinMaxScaler().fit_transform(
+                    preprocessing.StandardScaler().fit_transform(d)
+                ),
                 columns=d.columns
             ) for d in t]
     )
@@ -379,8 +379,9 @@ def modify_groups(data, mapping):
     return data
 
 def main():
+    map_size = 32
 
-    inputpath = pathlib.Path("sommaps/huge_s30")
+    inputpath = pathlib.Path("sommaps_aws/sample_maps/initial_planar_s32")
 
     indata = load_dataset(inputpath)
     sqrt_data = sqrt_counts(indata)
@@ -413,17 +414,16 @@ def main():
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
 
-    # confusion, groups = classify(normdata)
+    # n_confusion, n_groups = classify(normdata)
     # print(confusion, groups)
-    confusion, groups = classify_convolutional(
-        mapped_data, m=30, n=30)
-    return
+    confusions, groups = classify_convolutional(mapped_data, m=map_size, n=map_size)
+    sum_confusion = np.sum(confusions, axis=0)
 
-    outpath = pathlib.Path("sommaps/output/huge_s30_counts")
+    outpath = pathlib.Path("output/initial_planar_s32_5fold_100ep_batchnorm")
     outpath.mkdir(parents=True, exist_ok=True)
 
     plotting.plot_confusion_matrix(
-        confusion, groups, normalize=True,
+        sum_confusion, groups, normalize=True,
         filename=outpath / "confusion_merged_weighted", dendroname=outpath / "dendro_merged_weighted"
     )
 
