@@ -314,8 +314,8 @@ def classify_convolutional(data, m=10, n=10, weights=None):
 
         ytrain_mat = binarizer.transform(ytrain)
 
-        # te1, te2, ytest = reshape_dataset_2d(data.iloc[test_index, :], m=m, n=n)
-        # ytest_mat = binarizer.transform(ytest)
+        te1, te2, ytest = reshape_dataset_2d(data.iloc[test_index, :], m=m, n=n)
+        ytest_mat = binarizer.transform(ytest)
 
         model = create_model_convolutional(
             tr1[0].shape, len(groups), classweights=weights
@@ -327,13 +327,13 @@ def classify_convolutional(data, m=10, n=10, weights=None):
             batch_size=16,
             validation_split=0.2
         )
-        # pred = model.predict([te1, te2], batch_size=128)
-        # pred = binarizer.inverse_transform(pred)
+        pred = model.predict([te1, te2], batch_size=128)
+        pred = binarizer.inverse_transform(pred)
 
-        # print("F1: ", metrics.f1_score(ytest, pred, average="micro"))
+        print("F1: ", metrics.f1_score(ytest, pred, average="micro"))
 
-        # confusion = metrics.confusion_matrix(ytest, pred, binarizer.classes_,)
-        # confusions.append(confusion)
+        confusion = metrics.confusion_matrix(ytest, pred, binarizer.classes_,)
+        confusions.append(confusion)
     return confusions, binarizer.classes_
 
 
@@ -381,7 +381,7 @@ def modify_groups(data, mapping):
 def main():
     map_size = 32
 
-    inputpath = pathlib.Path("sommaps_aws/sample_maps/initial_planar_s32")
+    inputpath = pathlib.Path("sommaps_aws/sample_maps/radius6_toroid_s32")
 
     indata = load_dataset(inputpath)
     sqrt_data = sqrt_counts(indata)
@@ -419,7 +419,7 @@ def main():
     confusions, groups = classify_convolutional(mapped_data, m=map_size, n=map_size)
     sum_confusion = np.sum(confusions, axis=0)
 
-    outpath = pathlib.Path("output/initial_planar_s32_5fold_100ep_batchnorm")
+    outpath = pathlib.Path("output/radius6_s32_5fold_100ep_batchnorm")
     outpath.mkdir(parents=True, exist_ok=True)
 
     plotting.plot_confusion_matrix(
