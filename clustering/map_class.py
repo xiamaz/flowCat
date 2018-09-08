@@ -299,7 +299,18 @@ def classify(data):
     # return confusion, binarizer.classes_
 
 
-def classify_convolutional(data, m=10, n=10, weights=None):
+def pad_matrices(matrices, pad_width=1):
+    """Pad matrices."""
+    padded = np.pad(matrices, pad_width=[
+        (0, 0),
+        (pad_width, pad_width),
+        (pad_width, pad_width),
+        (0, 0),
+    ], mode="wrap")
+    return padded
+
+
+def classify_convolutional(data, m=10, n=10, weights=None, toroidal=False):
     groups = list(data["group"].unique())
     binarizer = preprocessing.LabelBinarizer()
     binarizer.fit(groups)
@@ -311,10 +322,15 @@ def classify_convolutional(data, m=10, n=10, weights=None):
         tr1, tr2, ytrain = reshape_dataset_2d(
             data.iloc[np.concatenate([train_index, test_index]), :], m=m, n=n)
         # tr1, tr2, ytrain = reshape_dataset_2d(data.iloc[train_index, :], m=m, n=n)
-
+        if toroidal:
+            tr1 = pad_matrices(tr1, pad_width=1)
+            tr2 = pad_matrices(tr2, pad_width=1)
         ytrain_mat = binarizer.transform(ytrain)
 
         te1, te2, ytest = reshape_dataset_2d(data.iloc[test_index, :], m=m, n=n)
+        if toroidal:
+            te1 = pad_matrices(te1, pad_width=1)
+            te2 = pad_matrices(te2, pad_width=1)
         ytest_mat = binarizer.transform(ytest)
 
         model = create_model_convolutional(
@@ -381,7 +397,7 @@ def modify_groups(data, mapping):
 def main():
     map_size = 32
 
-    inputpath = pathlib.Path("sommaps_aws/sample_maps/radius6_toroid_s32")
+    inputpath = pathlib.Path("mll-sommaps/sample_maps/initial_toroid_s32")
 
     indata = load_dataset(inputpath)
     sqrt_data = sqrt_counts(indata)
@@ -416,7 +432,8 @@ def main():
 
     # n_confusion, n_groups = classify(normdata)
     # print(confusion, groups)
-    confusions, groups = classify_convolutional(mapped_data, m=map_size, n=map_size)
+    confusions, groups = classify_convolutional(
+        mapped_data, m=map_size, n=map_size, toroidal=True)
     sum_confusion = np.sum(confusions, axis=0)
 
     outpath = pathlib.Path("output/radius6_s32_5fold_100ep_batchnorm")
