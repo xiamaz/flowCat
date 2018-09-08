@@ -278,25 +278,26 @@ def classify(data):
     binarizer.fit(groups)
     ytrain_mat = binarizer.transform(ytrain)
 
-    # te1, te2, ytest = reshape_dataset(test)
-    # ytest_mat = binarizer.transform(ytest)
+    te1, te2, ytest = reshape_dataset(test)
+    ytest_mat = binarizer.transform(ytest)
 
-    # model = naive_bayes.GaussianNB()
-    # model.fit(tr1, ytrain)
+    model = naive_bayes.GaussianNB()
+    model.fit(tr1, ytrain)
 
     model = create_model((tr1.shape[1], ), ytrain_mat.shape[1], classweights=None)
     model.fit([tr1, tr2], ytrain_mat, epochs=20, batch_size=16, validation_split=0.2)
-    # pred = model.predict([te1, te2], batch_size=128)
-    # pred = binarizer.inverse_transform(pred)
+    pred = model.predict([te1, te2], batch_size=128)
+    pred = binarizer.inverse_transform(pred)
 
-    # res = model.score(te1, ytest)
-    # print(res)
-    # pred = model.predict(te1)
+    res = model.score(te1, ytest)
+    print(res)
+    pred = model.predict(te1)
 
-    # print("F1: ", metrics.f1_score(ytest, pred, average="micro"))
+    print("F1: ", metrics.f1_score(ytest, pred, average="micro"))
 
-    # confusion = metrics.confusion_matrix(ytest, pred, binarizer.classes_,)
-    # return confusion, binarizer.classes_
+    confusion = metrics.confusion_matrix(ytest, pred, binarizer.classes_,)
+    stats = {"mcc": metrics.matthews_corrcoef(ytest, pred)}
+    return stats, confusion, binarizer.classes_
 
 
 def pad_matrices(matrices, pad_width=1):
@@ -317,6 +318,7 @@ def classify_convolutional(data, m=10, n=10, weights=None, toroidal=False):
 
     # train, test = model_selection.train_test_split(data, train_size=0.9)
     confusions = []
+    stats = {"mcc": []}
     kf = model_selection.StratifiedKFold(n_splits=5, shuffle=True)
     for train_index, test_index in kf.split(data, data["group"]):
         tr1, tr2, ytrain = reshape_dataset_2d(
@@ -350,7 +352,8 @@ def classify_convolutional(data, m=10, n=10, weights=None, toroidal=False):
 
         confusion = metrics.confusion_matrix(ytest, pred, binarizer.classes_,)
         confusions.append(confusion)
-    return confusions, binarizer.classes_
+        stats["mcc"].append(metrics.matthews_corrcoef(ytest, pred))
+    return stats, confusions, binarizer.classes_
 
 
 def subtract_ref_data(data, references):
@@ -394,10 +397,14 @@ def modify_groups(data, mapping):
     data["group"] = data["group"].apply(lambda g: mapping.get(g, g))
     return data
 
+
+def confusion_f1(confusion):
+    """Calculate f1 score from confusion matrix."""
+
 def main():
     map_size = 32
 
-    inputpath = pathlib.Path("mll-sommaps/sample_maps/initial_toroid_s32")
+    inputpath = pathlib.Path("mll-sommaps/sample_maps/cs-all1_planar_s32")
 
     indata = load_dataset(inputpath)
     sqrt_data = sqrt_counts(indata)
@@ -433,10 +440,10 @@ def main():
     # n_confusion, n_groups = classify(normdata)
     # print(confusion, groups)
     confusions, groups = classify_convolutional(
-        mapped_data, m=map_size, n=map_size, toroidal=True)
+        mapped_data, m=map_size, n=map_size, toroidal=False)
     sum_confusion = np.sum(confusions, axis=0)
 
-    outpath = pathlib.Path("output/radius6_s32_5fold_100ep_batchnorm")
+    outpath = pathlib.Path("output/all1_s32_5fold_100ep_batchnorm")
     outpath.mkdir(parents=True, exist_ok=True)
 
     plotting.plot_confusion_matrix(
