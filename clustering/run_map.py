@@ -220,7 +220,7 @@ def main():
     gridsize = 32
     simplerun = False
     createref = False
-    max_epochs = 10
+    max_epochs = 20
     maptype = "toroid"
 
     configure_print_logging()
@@ -236,25 +236,23 @@ def main():
         with open("labels.txt") as fobj:
             selected = [l.strip() for l in fobj]
 
-        reference_cases = cases.create_view(labels=selected)
+        reference_cases = cases.create_view(labels=selected, num=5, groups=["normal"])
         # reference_cases = cases.create_view(num=1, infiltration=20)
-        refpath = pathlib.Path(f"sommaps_new/references")
+        refpath = pathlib.Path(f"sommaps_smaller/references_normal5")
         generate_reference(refpath, reference_cases, gridsize=gridsize, max_epochs=max_epochs)
         return
 
     reference_weights = {
-        t: pd.read_csv(f"sommaps_new/reference_ep10_s{gridsize}_{maptype}/t{t}.csv", index_col=0)
+        t: pd.read_csv(f"sommaps_aws/reference_maps/reference_s32_e20_mplanar_deuclidean_normal1/t{t}.csv", index_col=0)
         for t in [1, 2]
     }
 
-    mappath = pathlib.Path(f"sommaps_test/test_{maptype}_s{gridsize}")
+    mappath = pathlib.Path(f"sommaps_aws/sample_maps/normal1_{maptype}_s{gridsize}")
     mappath.mkdir(parents=True, exist_ok=True)
 
-    # with open("trans_labels.txt") as fobj:
-    #     ref_trans = [l.strip() for l in fobj]
-    ref_trans = None
+    ref_trans = list(pd.read_csv("sommaps_aws/sample_maps/initial_toroid_s32.csv", index_col=0)["label"])
 
-    transdata = cases.create_view(num=5, groups=GROUPS, labels=ref_trans)
+    transdata = cases.create_view(num=1000, groups=GROUPS, labels=ref_trans)
 
     case_to_map(mappath, transdata, reference_weights, gridsize=gridsize, map_type=maptype)
 
