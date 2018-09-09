@@ -1,6 +1,7 @@
 import sys
 import time
 import pathlib
+import collections
 
 import logging
 
@@ -183,12 +184,12 @@ def generate_reference(refpath, data, gridsize=10, max_epochs=10, map_type="plan
         time_a = time.time()
         model.train(generate_data(), num_inputs=len(tubedata.data))
         time_b = time.time()
-        print(f"Training time: {(time_b - time_a) * 1000:.3}ms")
+        print(f"Training time: {(time_b - time_a):.3}s")
         weights = model.output_weights
 
         df_weights = pd.DataFrame(weights, columns=marker_list)
         # save the reference weight to the specified location
-        output_path = refpath / model.config_name / f"t{tube}.csv"
+        output_path = refpath / f"{name}_{model.config_tag}" / f"t{tube}.csv"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         df_weights.to_csv(output_path)
 
@@ -217,6 +218,7 @@ def case_to_map(path, data, references, gridsize=10, map_type="planar"):
 
         generate_data = create_z_score_generator(tubedata)
         tubelabels = [c.parent.id for c in tubedata]
+        circ_buffer = collections.deque(maxlen=20)
         time_a = time.time()
         for label, result in zip(tubelabels, model.transform(generate_data())):
             time_b = time.time()
@@ -224,14 +226,16 @@ def case_to_map(path, data, references, gridsize=10, map_type="planar"):
             filename = f"{label}_t{tube}.csv"
             filepath = path / filename
             result.to_csv(filepath)
-            print(f"Training time: {time_b - time_a:.3}s")
+            time_d = time_b - time_a
+            circ_buffer.append(time_d)
+            print(f"Training time: {time_d}s Rolling avg: {np.mean(circ_buffer)}s")
             time_a = time_b
 
 
 def main():
     gridsize = 32
     simplerun = False
-    createref = True
+    createref = False
     max_epochs = 10
     maptype = "planar"
 
@@ -255,16 +259,17 @@ def main():
         return
 
     reference_weights = {
-        t: pd.read_csv(f"sommaps_aws/reference_maps/reference_s32_e20_mplanar_deuclidean_normal1/t{t}.csv", index_col=0)
+        t: pd.read_csv(f"mll-sommaps/reference_maps/selected5_s32_e10_mplanar_deuclidean/t{t}.csv", index_col=0)
         for t in [1, 2]
     }
 
-    mappath = pathlib.Path(f"sommaps_aws/sample_maps/normal1_{maptype}_s{gridsize}")
+    mappath = pathlib.Path(f"sommaps_aws/sample_maps/selected5_{maptype}_s{gridsize}")
     mappath.mkdir(parents=True, exist_ok=True)
 
-    ref_trans = list(pd.read_csv("sommaps_aws/sample_maps/initial_toroid_s32.csv", index_col=0)["label"])
+    # ref_trans = list(pd.read_csv("sommaps_aws/sample_maps/initial_toroid_s32.csv", index_col=0)["label"])
+    ref_trans = None
 
-    transdata = cases.create_view(num=1000, groups=GROUPS, labels=ref_trans)
+    transdata = cases.create_view(groups=GROUPS, labels=ref_trans)
 
     case_to_map(mappath, transdata, reference_weights, gridsize=gridsize, map_type=maptype)
 
