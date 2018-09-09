@@ -451,7 +451,7 @@ def main():
     name = "initial_toroidal_s32_1000ep_batchnorm_wrapped"
 
     # n_metrics, n_confusion, n_groups = classify(normdata)
-    metrics, confusions, groups = classify_convolutional(
+    nmetrics, confusions, groups = classify_convolutional(
         mapped_data, m=map_size, n=map_size, toroidal=True,
         path=f"mll-sommaps/models/{name}")
     sum_confusion = np.sum(confusions, axis=0)
