@@ -1,4 +1,5 @@
 import sys
+import time
 import pathlib
 
 import logging
@@ -21,7 +22,7 @@ from clustering.collection import CaseCollection, CaseView
 from clustering import utils
 
 
-utils.TMP_PATH = "/data/tmp"
+utils.TMP_PATH = "tmp"
 
 GROUPS = [
     "CLL", "PL", "FL", "HCL", "LPL", "MBL", "MCL", "MZL", "normal"
@@ -153,8 +154,9 @@ def simple_run(cases):
         print(counts)
 
 
-def generate_reference(refpath, data, gridsize=10, max_epochs=100, map_type="planar"):
+def generate_reference(refpath, data, gridsize=10, max_epochs=10, map_type="planar", name=""):
     """Create and save consensus som maps."""
+    name = name if name else "reference"
 
     for tube in [1, 2]:
         tubedata = data.get_tube(tube)
@@ -172,18 +174,21 @@ def generate_reference(refpath, data, gridsize=10, max_epochs=100, map_type="pla
             max_epochs=max_epochs,
             initialization_method="random",
             tensorboard=True,
-            model_name=f"reference_t{tube}",
+            model_name=f"{name}_t{tube}",
             tensorboard_dir=f'tensorboard_reference',
         )
 
         generate_data = create_z_score_generator(tubedata.data)
 
+        time_a = time.time()
         model.train(generate_data(), num_inputs=len(tubedata.data))
+        time_b = time.time()
+        print(f"Training time: {(time_b - time_a) * 1000:.3}ms")
         weights = model.output_weights
 
         df_weights = pd.DataFrame(weights, columns=marker_list)
         # save the reference weight to the specified location
-        output_path = refpath / model.config_tag / f"t{tube}.csv"
+        output_path = refpath / model.config_name / f"t{tube}.csv"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         df_weights.to_csv(output_path)
 
@@ -212,19 +217,23 @@ def case_to_map(path, data, references, gridsize=10, map_type="planar"):
 
         generate_data = create_z_score_generator(tubedata)
         tubelabels = [c.parent.id for c in tubedata]
+        time_a = time.time()
         for label, result in zip(tubelabels, model.transform(generate_data())):
+            time_b = time.time()
             print(f"Saving {label}")
             filename = f"{label}_t{tube}.csv"
             filepath = path / filename
             result.to_csv(filepath)
+            print(f"Training time: {time_b - time_a:.3}s")
+            time_a = time_b
 
 
 def main():
     gridsize = 32
     simplerun = False
-    createref = False
-    max_epochs = 20
-    maptype = "toroid"
+    createref = True
+    max_epochs = 10
+    maptype = "planar"
 
     configure_print_logging()
 
@@ -236,13 +245,13 @@ def main():
 
     # generate consensus reference and exit
     if createref:
-        with open("labels.txt") as fobj:
+        with open("data/selected_cases.txt") as fobj:
             selected = [l.strip() for l in fobj]
 
-        reference_cases = cases.create_view(labels=selected, num=5, groups=["normal"])
+        reference_cases = cases.create_view(labels=selected, num=5)
         # reference_cases = cases.create_view(num=1, infiltration=20)
-        refpath = pathlib.Path(f"sommaps_smaller/references_normal5")
-        generate_reference(refpath, reference_cases, gridsize=gridsize, max_epochs=max_epochs)
+        refpath = pathlib.Path("mll-sommaps/reference_maps")
+        generate_reference(refpath, reference_cases, gridsize=gridsize, max_epochs=max_epochs, name="selected5")
         return
 
     reference_weights = {
