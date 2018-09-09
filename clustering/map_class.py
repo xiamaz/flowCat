@@ -1,3 +1,4 @@
+import pickle
 import pathlib
 
 import numpy as np
@@ -311,7 +312,10 @@ def pad_matrices(matrices, pad_width=1):
     return padded
 
 
-def classify_convolutional(data, m=10, n=10, weights=None, toroidal=False):
+def classify_convolutional(
+        data, m=10, n=10, weights=None, toroidal=False,
+        path="mll-sommaps/models"
+):
     groups = list(data["group"].unique())
     binarizer = preprocessing.LabelBinarizer()
     binarizer.fit(groups)
@@ -320,7 +324,7 @@ def classify_convolutional(data, m=10, n=10, weights=None, toroidal=False):
     confusions = []
     stats = {"mcc": []}
     kf = model_selection.StratifiedKFold(n_splits=5, shuffle=True)
-    for train_index, test_index in kf.split(data, data["group"]):
+    for i, (train_index, test_index) in enumerate(kf.split(data, data["group"])):
         tr1, tr2, ytrain = reshape_dataset_2d(
             data.iloc[np.concatenate([train_index, test_index]), :], m=m, n=n)
         # tr1, tr2, ytrain = reshape_dataset_2d(data.iloc[train_index, :], m=m, n=n)
@@ -338,13 +342,20 @@ def classify_convolutional(data, m=10, n=10, weights=None, toroidal=False):
         model = create_model_convolutional(
             tr1[0].shape, len(groups), classweights=weights
         )
-        model.fit(
+        history = model.fit(
             [tr1, tr2],
             ytrain_mat,
-            epochs=100,
+            epochs=1000,
             batch_size=16,
             validation_split=0.2
         )
+        # save the model weights after training
+        modelpath = pathlib.Path(path)
+        modelpath.mkdir(parents=True, exist_ok=True)
+        model.save(modelpath / f"model_{i}.h5")
+        with open(str(modelpath / f"history_{i}.p"), "wb") as hfile:
+            pickle.dump(history.history, hfile)
+
         pred = model.predict([te1, te2], batch_size=128)
         pred = binarizer.inverse_transform(pred)
 
@@ -436,14 +447,16 @@ def main():
     # plotpath = pathlib.Path("sommaps/output/lotta")
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
+    validation = "5fold"
+    name = "initial_toroidal_s32_1000ep_batchnorm_wrapped"
 
-    # n_confusion, n_groups = classify(normdata)
-    # print(confusion, groups)
-    confusions, groups = classify_convolutional(
-        mapped_data, m=map_size, n=map_size, toroidal=False)
+    # n_metrics, n_confusion, n_groups = classify(normdata)
+    metrics, confusions, groups = classify_convolutional(
+        mapped_data, m=map_size, n=map_size, toroidal=True,
+        path=f"mll-sommaps/models/{name}")
     sum_confusion = np.sum(confusions, axis=0)
 
-    outpath = pathlib.Path("output/all1_s32_5fold_100ep_batchnorm")
+    outpath = pathlib.Path(f"output/{name}_{validation}")
     outpath.mkdir(parents=True, exist_ok=True)
 
     plotting.plot_confusion_matrix(
