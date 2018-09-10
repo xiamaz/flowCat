@@ -139,7 +139,7 @@ def create_model_convolutional(
 
         t_bn = layers.BatchNormalization()(t_p1)
 
-        t_d = layers.Dropout(0.25)(t_bn)
+        t_d = layers.Dropout(0.2)(t_bn)
 
         t_f = layers.Flatten()(t_p1)
 
@@ -158,7 +158,8 @@ def create_model_convolutional(
     #     units=64, activation="relu", kernel_initializer="uniform",
     #     kernel_regularizer=regularizers.l2(0.01)
     # )(m_a)
-    m_end = layers.Dropout(0.5)(m_a)
+    m_bn = layers.BatchNormalization()(m_a)
+    m_end = layers.Dropout(0.2)(m_bn)
 
     final = layers.Dense(
         units=yshape, activation="softmax"
@@ -314,7 +315,7 @@ def pad_matrices(matrices, pad_width=1):
 
 def classify_convolutional(
         data, m=10, n=10, weights=None, toroidal=False,
-        path="mll-sommaps/models"
+        path="mll-sommaps/models", kfold=False,
 ):
     groups = list(data["group"].unique())
     binarizer = preprocessing.LabelBinarizer()
@@ -323,7 +324,7 @@ def classify_convolutional(
     # train, test = model_selection.train_test_split(data, train_size=0.9)
     confusions = []
     stats = {"mcc": []}
-    kf = model_selection.StratifiedKFold(n_splits=5, shuffle=True)
+    kf = model_selection.StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
     for i, (train_index, test_index) in enumerate(kf.split(data, data["group"])):
         tr1, tr2, ytrain = reshape_dataset_2d(
             data.iloc[np.concatenate([train_index, test_index]), :], m=m, n=n)
@@ -345,7 +346,7 @@ def classify_convolutional(
         history = model.fit(
             [tr1, tr2],
             ytrain_mat,
-            epochs=10,
+            epochs=100,
             batch_size=16,
             validation_split=0.2
         )
@@ -369,6 +370,8 @@ def classify_convolutional(
         print(confusion)
         confusions.append(confusion)
         stats["mcc"].append(metrics.matthews_corrcoef(ytest, pred))
+        if not kfold:
+            break
     return stats, confusions, binarizer.classes_
 
 

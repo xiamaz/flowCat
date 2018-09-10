@@ -42,27 +42,15 @@ class WeightedCategoricalCrossEntropy(object):
 
         return K.categorical_crossentropy(y_true, y_pred) * final_mask
 
-        # loss = K.categorical_crossentropy(y_true, y_pred)
-        # print(loss)
-        # return loss
-
     def tf_w_categorical_crossentropy(self, y_true, y_pred):
         weights = tf.convert_to_tensor(self.weights, tf.float32)
 
-        output_dimensions = list(range(len(y_pred.get_shape())))
-
-        # scale preds so that the class probas of each sample sum to 1
-        y_pred /= tf.reduce_sum(y_pred, -1, True)
-        # manual computation of crossentropy
-        _epsilon = tf.convert_to_tensor(epsilon(), y_pred.dtype.base_dtype)
-        y_pred = tf.clip_by_value(y_pred, _epsilon, 1. - _epsilon)
-        loss = - tf.reduce_sum(y_true * tf.log(y_pred), -1)
-
-        pred_binary = tf.cast(tf.equal(
-            y_pred,
-            tf.expand_dims(tf.reduce_max(y_pred, axis=-1), axis=-1)
-        ), tf.float32)
-        weight_val = tf.transpose(tf.matmul(
-            tf.matmul(y_true, weights), tf.transpose(pred_binary)
-        ))
+        # # scale preds so that the class probas of each sample sum to 1
+        # y_pred /= tf.reduce_sum(y_pred, -1, True)
+        # # manual computation of crossentropy
+        # _epsilon = tf.convert_to_tensor(epsilon(), y_pred.dtype.base_dtype)
+        # y_pred = tf.clip_by_value(y_pred, _epsilon, 1. - _epsilon)
+        # loss = - tf.reduce_sum(y_true * tf.log(y_pred), -1)
+        coords = tf.stack([tf.argmax(y_true, axis=1), tf.argmax(y_pred, axis=1)], axis=1)
+        weight_val = tf.gather_nd(weights, coords)
         return loss * weight_val
