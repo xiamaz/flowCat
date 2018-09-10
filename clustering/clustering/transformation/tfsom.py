@@ -64,14 +64,16 @@ def create_marker_generator(data_iterable, channels, batch_size=1, loop=True):
             if i % batch_size == 0 and buf:
                 concat = np.concatenate(buf, axis=0)
                 yield concat
-                cache.append(concat)
+                if loop:
+                    cache.append(concat)
                 buf = []
             mdata = data[channels].values
             buf.append(mdata)
         if buf:
             concat = np.concatenate(buf, axis=0)
             yield concat
-            cache.append(concat)
+            if loop:
+                cache.append(concat)
 
         while True and loop:
             # randomize the presentation of the batches, to prevent ecg like
