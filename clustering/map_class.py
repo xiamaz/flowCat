@@ -9,6 +9,7 @@ from sklearn import metrics
 
 from keras import layers, models, regularizers, optimizers
 from keras.utils import plot_model
+from keras_applications import resnet50
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -108,6 +109,67 @@ def decomposition(dataset):
     tf2 = model.fit_transform(t2, y)
 
     return tf1, tf2, y
+
+
+def create_resnet(xshape, yshape, num_inputs=2, classweights=None):
+    """Create resnet."""
+    global backend
+    backend = object()
+    backend.image_data_format = lambda: "channels_last"
+    inputs = []
+    input_ends = []
+
+    for num in range(num_inputs):
+        i = layers.Input(shape=xshape)
+        inputs.append(i)
+        x = i
+
+        # x = layers.Conv2D(
+        #     64, (5, 5),
+        #     strides=(2, 2), padding="valid", kernel_initializer="he_normal",
+        #     name="conv1")(x)
+        # x = layers.BatchNormalization(axis=3)(x)
+        # x = layers.Activation("relu")(x)
+        # x = layers.ZeroPadding2D(padding=(1, 1))(x)
+        # x = layers.MaxPooling2D((3, 3), strides=(2, 2))(x)
+
+        x = resnet50.conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1))
+        x = resnet50.identity_block(x, 3, [64, 64, 256], stage=2, block='b')
+        x = resnet50.identity_block(x, 3, [64, 64, 256], stage=2, block='c')
+
+        x = resnet50.conv_block(x, 3, [128, 128, 512], stage=3, block='a')
+        x = resnet50.identity_block(x, 3, [128, 128, 512], stage=3, block='b')
+        x = resnet50.identity_block(x, 3, [128, 128, 512], stage=3, block='c')
+        x = resnet50.identity_block(x, 3, [128, 128, 512], stage=3, block='d')
+
+        x = resnet50.conv_block(x, 3, [256, 256, 1024], stage=4, block='a')
+        x = resnet50.identity_block(x, 3, [256, 256, 1024], stage=4, block='b')
+        x = resnet50.identity_block(x, 3, [256, 256, 1024], stage=4, block='c')
+        x = resnet50.identity_block(x, 3, [256, 256, 1024], stage=4, block='d')
+        x = resnet50.identity_block(x, 3, [256, 256, 1024], stage=4, block='e')
+        x = resnet50.identity_block(x, 3, [256, 256, 1024], stage=4, block='f')
+
+        x = resnet50.conv_block(x, 3, [512, 512, 2048], stage=5, block='a')
+        x = resnet50.identity_block(x, 3, [512, 512, 2048], stage=5, block='b')
+        x = resnet50.identity_block(x, 3, [512, 512, 2048], stage=5, block='c')
+
+        x = layers.GlobalAveragePooling2D(name='avg_pool')(x)
+        input_ends.append(x)
+
+    x = layers.concatenate(input_ends)
+    x = layers.GlobalAveragePooling2D(name='avg_pool')(x)
+    x = layers.Dense(yshape, activation='softmax')(x)
+
+    model = models.Model(inputs=inputs, outputs=x)
+
+    model.compile(
+        loss=lossfun,
+        optimizer=optimizers.Adam(
+            lr=0.0001, decay=0.0, epsilon=0.1
+        ),
+        metrics=["acc"]
+    )
+    return model
 
 
 def create_model_convolutional(
@@ -342,14 +404,15 @@ def classify_convolutional(
             te2 = pad_matrices(te2, pad_width=1)
         ytest_mat = binarizer.transform(ytest)
 
-        model = create_model_convolutional(
-            tr1[0].shape, len(groups), classweights=weights
-        )
+        # model = create_model_convolutional(
+        #     tr1[0].shape, len(groups), classweights=weights
+        # )
+        model = create_resnet(tr1[0].shape, len(groups), classweights=weights)
         history = model.fit(
             [tr1, tr2],
             ytrain_mat,
             epochs=100,
-            batch_size=32,
+            batch_size=128,
             validation_split=0.2
         )
         pred_mat = model.predict([te1, te2], batch_size=128)
@@ -362,19 +425,19 @@ def classify_convolutional(
         with open(str(modelpath / f"history_{i}.p"), "wb") as hfile:
             pickle.dump(history.history, hfile)
         pred_df = pd.DataFrame(
-            pred_mat, columns=binarizer.classes_, index=data.loc[test_index, "label"])
+            pred_mat, columns=groups, index=data.loc[test_index, "label"])
         pred_df["correct"] = ytest.tolist()
         pred_df.to_csv(modelpath / f"predictions_{i}.csv")
 
         print("F1: ", metrics.f1_score(ytest, pred, average="micro"))
 
-        confusion = metrics.confusion_matrix(ytest, pred, binarizer.classes_,)
+        confusion = metrics.confusion_matrix(ytest, pred, groups,)
         print(confusion)
         confusions.append(confusion)
         stats["mcc"].append(metrics.matthews_corrcoef(ytest, pred))
         if not kfold:
             break
-    return stats, confusions, binarizer.classes_
+    return stats, confusions, groups
 
 
 def subtract_ref_data(data, references):
@@ -486,16 +549,17 @@ def main():
         ("FL", "MZL"): (3, 5),
     }
     weights = create_weight_matrix(group_weights, groups, base_weight=5)
+    weights = None
 
     # plotpath = pathlib.Path("sommaps/output/lotta")
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "single_selected_toroid_s32_1000ep_batchnorm_weighted_ints"
+    name = "resnet_test"
 
     # n_metrics, n_confusion, n_groups = classify(normdata)
     nmetrics, confusions, groups = classify_convolutional(
-        indata, m=map_size, n=map_size, toroidal=False, weights=weights,
+        indata, m=map_size, n=map_size, toroidal=True, weights=weights,
         kfold=False, groups=groups,
         path=f"mll-sommaps/models/{name}")
     sum_confusion = np.sum(confusions, axis=0)
