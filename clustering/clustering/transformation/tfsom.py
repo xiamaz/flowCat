@@ -212,6 +212,7 @@ class TFSom:
             initial_learning_rate=0.05, end_learning_rate=0.01, learning_cooling="linear",
             node_distance="euclidean", map_type="planar", std_coeff=0.5,
             initialization_method="sample", reference=None, max_random=1.0,
+            random_subsample=False,
             model_name="Self-Organizing-Map",
             tensorboard=False, tensorboard_dir="tensorboard"
     ):
@@ -270,6 +271,8 @@ class TFSom:
         self._prediction_output = None
         self._prediction_distance = None
         self._transform_output = None
+
+        self._random_subsample = random_subsample
 
         # tensorboard visualizations
         self._tensorboard = tensorboard
@@ -428,6 +431,14 @@ class TFSom:
 
         with tf.name_scope('Input'):
             input_copy = tf.identity(input_tensor)
+            if self._random_subsample:
+                random_vals = tf.cast(
+                    tf.transpose(tf.expand_dims(
+                        tf.random_uniform((self._m * self._n, )) * tf.cast(tf.shape(input_copy)[0],
+                                                                           tf.float32),
+                        axis=0)),
+                    tf.int32)
+                input_copy = tf.gather_nd(input_copy, random_vals)
 
         with tf.name_scope('Epoch'):
             global_step = tf.Variable(-1.0, dtype=tf.float32)

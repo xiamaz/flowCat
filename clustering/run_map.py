@@ -67,6 +67,7 @@ def create_z_score_generator(tubecases):
     def generate_z_score():
         for tcase in tubecases:
             data = tcase.data
+            data.drop("nix-APCA700", axis=1, inplace=True)
             zscores = preprocessing.StandardScaler().fit_transform(data)
             min_maxed = preprocessing.MinMaxScaler().fit_transform(zscores)
             yield pd.DataFrame(min_maxed, columns=data.columns)
@@ -194,24 +195,28 @@ def generate_reference(refpath, data, gridsize=10, max_epochs=10, map_type="plan
         df_weights.to_csv(output_path)
 
 
-def case_to_map(path, data, references, gridsize=10, map_type="planar"):
+def case_to_map(path, data, references=None, gridsize=10, map_type="planar"):
     """Transform cases to map representation of their data."""
     for tube in [1, 2]:
         tubedata = data.get_tube(tube)
 
-        reference = references[tube]
+        reference = references[tube] if references is not None else None
+        used_channels = list(reference.columns) if reference else tubedata[0].data.columns
+        used_channels = [c for c in used_channels if "nix" not in c]
 
         model = tfsom.SOMNodes(
-            m=gridsize, n=gridsize, channels=list(reference.columns),
+            m=gridsize, n=gridsize, channels=used_channels,
             batch_size=1,
             initial_learning_rate=0.05,
             end_learning_rate=0.01,
-            initial_radius=3,
+            initial_radius=None,
             end_radius=1,
             map_type=map_type,
-            max_epochs=5,
-            initialization_method="reference", reference=reference,
+            max_epochs=10,
+            initialization_method="reference" if reference else "random",
+            reference=reference,
             counts=True,
+            random_subsample=True,
             tensorboard=True,
             tensorboard_dir="tensorboard_retraining/test"
         )
@@ -237,7 +242,7 @@ def main():
     simplerun = False
     createref = False
     max_epochs = 10
-    maptype = "planar"
+    maptype = "toroid"
 
     configure_print_logging()
 
@@ -258,12 +263,13 @@ def main():
         generate_reference(refpath, reference_cases, gridsize=gridsize, max_epochs=max_epochs, name="selected5")
         return
 
-    reference_weights = {
-        t: pd.read_csv(f"mll-sommaps/reference_maps/selected5_s32_e10_mplanar_deuclidean/t{t}.csv", index_col=0)
-        for t in [1, 2]
-    }
+    # reference_weights = {
+    #     t: pd.read_csv(f"mll-sommaps/reference_maps/selected5_s32_e10_mplanar_deuclidean/t{t}.csv", index_col=0)
+    #     for t in [1, 2]
+    # }
+    reference_weights = None
 
-    mappath = pathlib.Path(f"sommaps_aws/sample_maps/selected5_{maptype}_s{gridsize}")
+    mappath = pathlib.Path(f"sommaps_aws/sample_maps/random_{maptype}_s{gridsize}")
     mappath.mkdir(parents=True, exist_ok=True)
 
     # ref_trans = list(pd.read_csv("sommaps_aws/sample_maps/initial_toroid_s32.csv", index_col=0)["label"])
