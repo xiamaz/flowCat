@@ -314,10 +314,12 @@ def pad_matrices(matrices, pad_width=1):
 
 
 def classify_convolutional(
-        data, m=10, n=10, weights=None, toroidal=False,
+        data, m=10, n=10, weights=None, toroidal=False, groups=None,
         path="mll-sommaps/models", kfold=False,
 ):
-    groups = list(data["group"].unique())
+    if groups is None:
+        groups = list(data["group"].unique())
+
     binarizer = preprocessing.LabelBinarizer()
     binarizer.fit(groups)
 
@@ -346,8 +348,8 @@ def classify_convolutional(
         history = model.fit(
             [tr1, tr2],
             ytrain_mat,
-            epochs=100,
-            batch_size=16,
+            epochs=1000,
+            batch_size=32,
             validation_split=0.2
         )
         pred_mat = model.predict([te1, te2], batch_size=128)
@@ -422,7 +424,7 @@ def confusion_f1(confusion):
     pass
 
 
-def create_weight_matrix(group_map, groups):
+def create_weight_matrix(group_map, groups, base_weight=5):
     """Generate weight matrix from given group mapping."""
     # expand mapping to all other groups if None is given
     expanded_groups = {}
@@ -438,7 +440,9 @@ def create_weight_matrix(group_map, groups):
         else:
             expanded_groups[(group_a, group_b)] = v
 
-    weights = np.ones((len(groups), len(groups)))
+    weights = base_weight * np.ones((len(groups), len(groups)))
+    for i in range(len(groups)):
+        weights[i, i] = 1
     for (group_a, group_b), (ab_err, ba_err) in expanded_groups.items():
         weights[groups.index(group_a), groups.index(group_b)] = ab_err
         weights[groups.index(group_b), groups.index(group_a)] = ba_err
@@ -448,7 +452,7 @@ def create_weight_matrix(group_map, groups):
 def main():
     map_size = 32
 
-    inputpath = pathlib.Path("mll-sommaps/sample_maps/selected5_lr05-001_planar_s32")
+    inputpath = pathlib.Path("mll-sommaps/sample_maps/selected5_toroid_s32")
 
     indata = load_dataset(inputpath)
     indata = sqrt_counts(indata)
@@ -460,6 +464,7 @@ def main():
     # ]
     # subdata = subtract_ref_data(indata, ref_maps)
 
+    groups = ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HZL", "normal"]
     group_map = {
         "CLL": "CM",
         "MBL": "CM",
@@ -473,23 +478,25 @@ def main():
     # false classifications in the given direction.
     # (a, b) --> (a>b, b>a)
     group_weights = {
-        ("normal", None): (2.0, 5.0),
-        ("MBL", "CLL"): (0.2, 0.2),
-        ("MZL", "LPL"): (0.2, 0.2),
-        ("MCL", "PL"): (0.2, 0.2),
+        ("normal", None): (10.0, 100.0),
+        ("MBL", "CLL"): (2, 2),
+        ("MZL", "LPL"): (2, 2),
+        ("MCL", "PL"): (2, 2),
+        ("FL", "LPL"): (3, 5),
+        ("FL", "MZL"): (3, 5),
     }
-    groups = list(indata["group"].unique())
-    weights = create_weight_matrix(group_weights, groups)
+    weights = create_weight_matrix(group_weights, groups, base_weight=5)
 
     # plotpath = pathlib.Path("sommaps/output/lotta")
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
-    validation = "5fold"
-    name = "single_selected_lr05-001_planar_s32_100ep_batchnorm_weighted"
+    validation = "holdout"
+    name = "single_selected_toroid_s32_1000ep_batchnorm_weighted_ints"
 
     # n_metrics, n_confusion, n_groups = classify(normdata)
     nmetrics, confusions, groups = classify_convolutional(
         indata, m=map_size, n=map_size, toroidal=False, weights=weights,
+        groups=groups,
         path=f"mll-sommaps/models/{name}")
     sum_confusion = np.sum(confusions, axis=0)
 
