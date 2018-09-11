@@ -347,7 +347,7 @@ def classify_convolutional(
             [tr1, tr2],
             ytrain_mat,
             epochs=100,
-            batch_size=16,
+            batch_size=32,
             validation_split=0.2
         )
         pred_mat = model.predict([te1, te2], batch_size=128)
@@ -448,7 +448,7 @@ def create_weight_matrix(group_map, groups):
 def main():
     map_size = 32
 
-    inputpath = pathlib.Path("mll-sommaps/sample_maps/selected5_lr05-001_planar_s32")
+    inputpath = pathlib.Path("mll-sommaps/sample_maps/selected5_planar_s32")
 
     indata = load_dataset(inputpath)
     indata = sqrt_counts(indata)
@@ -473,7 +473,7 @@ def main():
     # false classifications in the given direction.
     # (a, b) --> (a>b, b>a)
     group_weights = {
-        ("normal", None): (2.0, 5.0),
+        ("normal", None): (2.0, 200.0),
         ("MBL", "CLL"): (0.2, 0.2),
         ("MZL", "LPL"): (0.2, 0.2),
         ("MCL", "PL"): (0.2, 0.2),
@@ -484,12 +484,13 @@ def main():
     # plotpath = pathlib.Path("sommaps/output/lotta")
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
-    validation = "5fold"
-    name = "single_selected_lr05-001_planar_s32_100ep_batchnorm_weighted"
+    validation = "holdout"
+    name = "single_selected_planar_s32_100ep_batchnorm_weighted"
 
     # n_metrics, n_confusion, n_groups = classify(normdata)
     nmetrics, confusions, groups = classify_convolutional(
         indata, m=map_size, n=map_size, toroidal=False, weights=weights,
+        kfold=False,
         path=f"mll-sommaps/models/{name}")
     sum_confusion = np.sum(confusions, axis=0)
 

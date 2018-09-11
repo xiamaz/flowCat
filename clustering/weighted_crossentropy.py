@@ -45,12 +45,8 @@ class WeightedCategoricalCrossEntropy(object):
     def tf_w_categorical_crossentropy(self, y_true, y_pred):
         weights = tf.convert_to_tensor(self.weights, tf.float32)
 
-        # # scale preds so that the class probas of each sample sum to 1
-        # y_pred /= tf.reduce_sum(y_pred, -1, True)
-        # # manual computation of crossentropy
-        # _epsilon = tf.convert_to_tensor(epsilon(), y_pred.dtype.base_dtype)
-        # y_pred = tf.clip_by_value(y_pred, _epsilon, 1. - _epsilon)
-        # loss = - tf.reduce_sum(y_true * tf.log(y_pred), -1)
+        loss = K.tensorflow_backend.categorical_crossentropy(y_true, y_pred)
+
         coords = tf.stack([tf.argmax(y_true, axis=1), tf.argmax(y_pred, axis=1)], axis=1)
         weight_val = tf.gather_nd(weights, coords)
         return loss * weight_val
