@@ -315,7 +315,7 @@ class TFSom:
         """Initialize the SOM on the TensorFlow graph"""
         with self._graph.as_default(), tf.variable_scope(tf.get_variable_scope()):
             with tf.name_scope("Tower_0"):
-                numerators, denominators, self._global_step, self._weights, _ = self._tower_som(
+                numerators, denominators, self._global_step, self._weights, _, summaries = self._tower_som(
                     input_tensor=self._input_tensor,
                     batches_per_epoch=batches_per_epoch,
                     max_epochs=self._max_epochs,
@@ -335,14 +335,14 @@ class TFSom:
                         diff_weights = tf.reshape(
                             tf.sqrt(tf.reduce_sum(tf.pow(self._weights - new_weights, 2), axis=1)),
                             shape=(1, self._m, self._n, 1))
-                        self._summary_list.append(tf.summary.image("WeightDiff", diff_weights))
+                        summaries.append(tf.summary.image("WeightDiff", diff_weights))
                 # Assign them
                 self._training_op = tf.assign(self._weights, new_weights)
 
         with self._graph.as_default():
             self._prediction_variables(self._weights)
             # merge all summaries
-            self._merged = tf.summary.merge(self._summary_list)
+            self._merged = tf.summary.merge(self._summary_list + summaries)
 
     def _prediction_variables(self, weights,):
         """Create prediction ops"""
@@ -434,7 +434,7 @@ class TFSom:
             if self._random_subsample:
                 random_vals = tf.cast(
                     tf.transpose(tf.expand_dims(
-                        tf.random_uniform((self._m * self._n, )) * tf.cast(tf.shape(input_copy)[0],
+                        tf.random_uniform((4 * self._m * self._n, )) * tf.cast(tf.shape(input_copy)[0],
                                                                            tf.float32),
                         axis=0)),
                     tf.int32)
@@ -516,6 +516,7 @@ class TFSom:
                 tf.reduce_sum(learning_rate_op, axis=0) + float(1e-12),
                 axis=-1)
 
+        summaries = []
         if self._tensorboard:
             with tf.name_scope('Summary'):
                 # All summary ops are added to a list and then the merge() function is called at the end of
@@ -524,12 +525,12 @@ class TFSom:
                 _, update_mean_alpha = tf.metrics.mean(alpha)
                 _, update_mean_radius = tf.metrics.mean(radius)
 
-                self._summary_list.append(tf.summary.scalar('alpha', update_mean_alpha))
-                self._summary_list.append(tf.summary.scalar('radius', update_mean_radius))
+                summaries.append(tf.summary.scalar('alpha', update_mean_alpha))
+                summaries.append(tf.summary.scalar('radius', update_mean_radius))
 
                 mean_distance = tf.sqrt(tf.cast(tf.reduce_min(squared_distance, axis=1), tf.float32))
                 _, update_mean_dist = tf.metrics.mean(mean_distance)
-                self._summary_list.append(tf.summary.scalar('quantization_error', update_mean_dist))
+                summaries.append(tf.summary.scalar('quantization_error', update_mean_dist))
 
                 # proportion of events where 1st and 2nd bmu are not adjacent
                 _, top2_indices = tf.nn.top_k(tf.negative(squared_distance), k=2)
@@ -538,25 +539,29 @@ class TFSom:
                 topographic_error = tf.divide(
                     tf.reduce_sum(tf.cast(distances > 1, tf.float32)),
                     tf.cast(tf.size(distances), tf.float32))
-                self._summary_list.append(tf.summary.scalar("topographic_error", topographic_error))
+                summaries.append(tf.summary.scalar("topographic_error", topographic_error))
 
                 learn_image = tf.reshape(
                     tf.reduce_mean(learning_rate_op, axis=0), shape=(1, self._m, self._n, 1))
-                self._summary_list.append(tf.summary.image("learn_img", learn_image))
+                summaries.append(tf.summary.image("learn_img", learn_image))
 
             with tf.name_scope("WeightsSummary"):
                 # combined cd45 ss int lin plot using r and g color
-                self._create_color_map(weights, ["CD45-KrOr", "SS INT LIN", None], "cd45_ss")
-                self._create_color_map(weights, [None, "SS INT LIN", "CD19-APCA750"], "ss_cd19")
+                summaries.append(
+                    self._create_color_map(weights, ["CD45-KrOr", "SS INT LIN", None], "cd45_ss"))
+                summaries.append(
+                    self._create_color_map(weights, [None, "SS INT LIN", "CD19-APCA750"], "ss_cd19"))
                 if "Kappa-FITC" in self.channels:
-                    self._create_color_map(weights, [None, "Kappa-FITC", "Lambda-PE"], "kappa_lambda")
-                self._create_color_map(weights, ["CD45-KrOr", "SS INT LIN", "CD19-APCA750"], "zz_cd45_ss_cd19")
+                    summaries.append(
+                        self._create_color_map(weights, [None, "Kappa-FITC", "Lambda-PE"], "kappa_lambda"))
+                summaries.append(
+                    self._create_color_map(weights, ["CD45-KrOr", "SS INT LIN", "CD19-APCA750"], "zz_cd45_ss_cd19"))
 
             with tf.name_scope("MappingSummary"):
                 event_image = tf.reshape(mapped_events_per_node, shape=(1, self._m, self._n, 1))
-                self._summary_list.append(tf.summary.image("mapping_img", event_image))
+                summaries.append(tf.summary.image("mapping_img", event_image))
 
-        return numerator, denominator, global_step, weights, mapped_events_per_node
+        return numerator, denominator, global_step, weights, mapped_events_per_node, summaries
 
 
     def _create_color_map(self, weights, channels, name="colormap"):
@@ -567,16 +572,17 @@ class TFSom:
             for channel in channels
         ]
         marker_image = tf.reshape(tf.stack(slices, axis=1), shape=(1, self._m, self._n, 3))
-        self._summary_list.append(tf.summary.image(name, marker_image))
+        summary_image = tf.summary.image(name, marker_image)
 
-        if None in channels:
-            none_pos = channels.index(None)
-            legend_list = [[i, j] for i in range(2) for j in range(2)]
-            for leg in legend_list:
-                leg.insert(none_pos, 0)
+        # if None in channels:
+        #     none_pos = channels.index(None)
+        #     legend_list = [[i, j] for i in range(2) for j in range(2)]
+        #     for leg in legend_list:
+        #         leg.insert(none_pos, 0)
 
-            legend_axis = tf.reshape(tf.constant(legend_list, dtype=tf.float16), shape=(1, 2, 2, 3))
-            self._summary_list.append(tf.summary.image(f"{name}_legend", legend_axis))
+        #     legend_axis = tf.reshape(tf.constant(legend_list, dtype=tf.float16), shape=(1, 2, 2, 3))
+        #     self._summary_list.append(tf.summary.image(f"{name}_legend", legend_axis))
+        return summary_image
 
     def fit_map(
             self, data_iterable,
@@ -604,7 +610,7 @@ class TFSom:
             data_tensor = dataset.make_one_shot_iterator().get_next()
             input_tensor = tf.Variable(data_tensor, validate_shape=False)
 
-            numerator, denominator, global_step, weights, mapping = self._tower_som(
+            numerator, denominator, global_step, weights, mapping, summaries = self._tower_som(
                 input_tensor=input_tensor, batches_per_epoch=1, max_epochs=max_epochs,
                 initial_radius=initial_radius, end_radius=end_radius,
                 initial_learning_rate=initial_learn, end_learning_rate=end_radius,
@@ -612,16 +618,29 @@ class TFSom:
             new_weights = tf.divide(numerator, denominator)
             train_op = tf.assign(weights, new_weights)
 
+            summary = tf.summary.merge(summaries)
+
             var_init = tf.variables_initializer([weights, global_step, input_tensor])
+            metric_init = tf.variables_initializer(graph.get_collection(tf.GraphKeys.METRIC_VARIABLES))
+            number = 0
+            if self._tensorboard:
+                writer = tf.summary.FileWriter(
+                    str(self._tensorboard_dir / f"self_{create_stamp()}"), graph)
             while True:
                 try:
-                    session.run([var_init])
+                    session.run([var_init, metric_init])
                     for epoch in range(max_epochs):
                         session.run([train_op])
                     # get final mapping and weights
-                    arr_weights, event_mapping = session.run([weights, mapping])
+                    if self._tensorboard:
+                        arr_weights, event_mapping, sum_res = session.run([weights, mapping, summary])
+                        writer.add_summary(sum_res, number)
+                    else:
+                        arr_weights, event_mapping = session.run([weights, mapping])
+
                     # yield the result after training
                     yield arr_weights, event_mapping
+                    number += 1
                 except tf.errors.OutOfRangeError:
                     break
 
@@ -820,7 +839,7 @@ class SelfOrganizingMap(BaseEstimator, TransformerMixin):
 class SOMNodes(BaseEstimator, TransformerMixin):
     """Transform FCS data into SOM nodes, optionally with number of mapped counts."""
 
-    def __init__(self, counts=False, *args, **kwargs):
+    def __init__(self, counts=False, fitmap_args=None, *args, **kwargs):
         """
         Args:
             counts: Save counts together with marker channel data.
@@ -828,6 +847,7 @@ class SOMNodes(BaseEstimator, TransformerMixin):
         self._model = TFSom(*args, **kwargs)
         self._counts = counts
         self.history = []
+        self._fitmap_args = {} if fitmap_args is None else fitmap_args
 
     def fit(self, X, *_):
         """Optionally train the model on the provided data."""
@@ -835,7 +855,7 @@ class SOMNodes(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X, *_):
-        for weights, counts in self._model.fit_map(data_iterable=X, max_epochs=3):
+        for weights, counts in self._model.fit_map(data_iterable=X, **self._fitmap_args):
             df_weights = pd.DataFrame(weights, columns=self._model.channels)
             if self._counts:
                 df_weights["counts"] = counts

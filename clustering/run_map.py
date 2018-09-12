@@ -23,7 +23,7 @@ from clustering.collection import CaseCollection, CaseView
 from clustering import utils
 
 
-utils.TMP_PATH = "tmp"
+utils.TMP_PATH = "/home/zhao/tmp"
 
 GROUPS = [
     "CLL", "PL", "FL", "HCL", "LPL", "MBL", "MCL", "MZL", "normal"
@@ -162,7 +162,7 @@ def generate_reference(refpath, data, gridsize=10, max_epochs=10, map_type="plan
 
     for tube in [1, 2]:
         tubedata = data.get_tube(tube)
-        marker_list = tubedata.data[0].markers
+        marker_list = [m for m in tubedata.data[0].markers if "nix" not in m]
         model = tfsom.TFSom(
             m=gridsize,
             n=gridsize,
@@ -177,7 +177,7 @@ def generate_reference(refpath, data, gridsize=10, max_epochs=10, map_type="plan
             initialization_method="random",
             tensorboard=True,
             model_name=f"{name}_t{tube}",
-            tensorboard_dir=f'tensorboard_reference',
+            tensorboard_dir=f'tensorboard_wednesday',
         )
 
         generate_data = create_z_score_generator(tubedata.data)
@@ -207,8 +207,8 @@ def case_to_map(path, data, references=None, gridsize=10, map_type="planar"):
         model = tfsom.SOMNodes(
             m=gridsize, n=gridsize, channels=used_channels,
             batch_size=1,
-            initial_learning_rate=0.05,
-            end_learning_rate=0.01,
+            initial_learning_rate=0.5,
+            end_learning_rate=0.1,
             initial_radius=None,
             end_radius=1,
             map_type=map_type,
@@ -218,10 +218,18 @@ def case_to_map(path, data, references=None, gridsize=10, map_type="planar"):
             counts=True,
             random_subsample=True,
             tensorboard=True,
-            tensorboard_dir="tensorboard_retraining/test"
+            model_name=f"fitmap_t{tube}",
+            tensorboard_dir="tensorboard_retraining/test",
+            fitmap_args={
+                "max_epochs": 20,
+                "initial_learn": 0.1,
+                "end_learn": 0.01,
+                "initial_radius": 32,
+                "end_radius": 1,
+            }
         )
-
         generate_data = create_z_score_generator(tubedata)
+
         tubelabels = [c.parent.id for c in tubedata]
         circ_buffer = collections.deque(maxlen=20)
         time_a = time.time()
@@ -238,7 +246,7 @@ def case_to_map(path, data, references=None, gridsize=10, map_type="planar"):
 
 
 def main():
-    gridsize = 32
+    gridsize = 64
     simplerun = False
     createref = False
     max_epochs = 10
@@ -254,13 +262,20 @@ def main():
 
     # generate consensus reference and exit
     if createref:
+        sel_group = ["MCL"]
         with open("data/selected_cases.txt") as fobj:
             selected = [l.strip() for l in fobj]
 
-        reference_cases = cases.create_view(labels=selected, num=5)
+        reference_cases = cases.create_view(num=1, groups=sel_group, infiltration=10)
         # reference_cases = cases.create_view(num=1, infiltration=20)
-        refpath = pathlib.Path("mll-sommaps/reference_maps")
-        generate_reference(refpath, reference_cases, gridsize=gridsize, max_epochs=max_epochs, name="selected5")
+        refpath = pathlib.Path("wednesday_test/reference_maps")
+        generate_reference(
+            refpath,
+            reference_cases,
+            gridsize=gridsize,
+            max_epochs=max_epochs,
+            map_type=maptype,
+            name=f"sample_init_{''.join(sel_group)}_{reference_cases[0].id}")
         return
 
     # reference_weights = {
@@ -269,13 +284,13 @@ def main():
     # }
     reference_weights = None
 
-    mappath = pathlib.Path(f"sommaps_aws/sample_maps/random_{maptype}_s{gridsize}")
+    mappath = pathlib.Path(f"wednesday_test/sample_maps/random_fourfold_{maptype}_s{gridsize}")
     mappath.mkdir(parents=True, exist_ok=True)
 
     # ref_trans = list(pd.read_csv("sommaps_aws/sample_maps/initial_toroid_s32.csv", index_col=0)["label"])
     ref_trans = None
 
-    transdata = cases.create_view(groups=GROUPS, labels=ref_trans)
+    transdata = cases.create_view(groups=GROUPS, labels=ref_trans, num=5)
 
     case_to_map(mappath, transdata, reference_weights, gridsize=gridsize, map_type=maptype)
 
