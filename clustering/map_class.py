@@ -273,51 +273,40 @@ def create_model_convolutional(
     for i in range(num_inputs):
         t_input = layers.Input(shape=xshape)
 
-        t_c1 = layers.Conv2D(
-            filters=64,
-            kernel_size=3,
-            activation="relu",
-            strides=1,
-        )(t_input)
+        x = t_input
+        x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=1)(x)
+        x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=1)(x)
+        x = layers.MaxPooling2D(pool_size=2, strides=1)(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(0.2)(x)
 
-        t_c2 = layers.Conv2D(
-            filters=64,
-            kernel_size=3,
-            activation="relu",
-            strides=1,
-        )(t_c1)
+        x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=1)(x)
+        x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=1)(x)
+        x = layers.MaxPooling2D(pool_size=2, strides=1)(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(0.2)(x)
 
-        t_p1 = layers.MaxPooling2D(
-            pool_size=2, strides=1
-        )(t_c2)
+        x = layers.Flatten()(x)
 
-        t_bn = layers.BatchNormalization()(t_p1)
-
-        t_d = layers.Dropout(0.2)(t_bn)
-
-        t_f = layers.Flatten()(t_p1)
-
-        t_end = t_f
-
-        input_ends.append(t_end)
+        input_ends.append(x)
         inputs.append(t_input)
 
-    concat = layers.concatenate(input_ends)
+    x = layers.concatenate(input_ends)
 
-    m_a = layers.Dense(
+    x = layers.Dense(
         units=256, activation="relu", kernel_initializer="uniform",
         kernel_regularizer=regularizers.l2(0.01)
-    )(concat)
+    )(x)
     # m_end = layers.Dense(
     #     units=64, activation="relu", kernel_initializer="uniform",
     #     kernel_regularizer=regularizers.l2(0.01)
     # )(m_a)
-    m_bn = layers.BatchNormalization()(m_a)
-    m_end = layers.Dropout(0.2)(m_bn)
+    x = layers.BatchNormalization()(x)
+    x = layers.Dropout(0.2)(x)
 
     final = layers.Dense(
         units=yshape, activation="softmax"
-    )(m_end)
+    )(x)
 
     model = models.Model(inputs=inputs, outputs=final)
 
@@ -330,7 +319,7 @@ def create_model_convolutional(
     model.compile(
         loss=lossfun,
         optimizer=optimizers.Adam(
-            lr=0.0001, decay=0.0, epsilon=0.1
+            lr=0.0001, decay=0.0, epsilon=0.00001
         ),
         metrics=["acc"]
     )
@@ -496,16 +485,27 @@ def classify_convolutional(
             te2 = pad_matrices(te2, pad_width=1)
         ytest_mat = binarizer.transform(ytest)
 
-        # model = create_model_convolutional(
-        #     tr1[0].shape, len(groups), classweights=weights
-        # )
-        model = create_resnet(tr1[0].shape, len(groups), classweights=weights)
+        model = create_model_convolutional(
+            tr1[0].shape, len(groups), classweights=weights
+        )
+        # model = create_resnet(tr1[0].shape, len(groups), classweights=weights)
         history = model.fit(
             [tr1, tr2],
             ytrain_mat,
-            epochs=100,
+            epochs=1000,
             batch_size=128,
-            validation_split=0.2
+            validation_split=0.2,
+            class_weight={
+                0: 1.0,  # CLL
+                1: 2.0,  # MBL
+                2: 2.0,  # MCL
+                3: 2.0,  # PL
+                4: 2.0,  # LPL
+                5: 2.0,  # MZL
+                6: 10.0,  # FL
+                7: 10.0,  # HCL
+                8: 1.0,  # normal
+            }
         )
         pred_mat = model.predict([te1, te2], batch_size=128)
         pred = binarizer.inverse_transform(pred_mat)
@@ -619,7 +619,7 @@ def main():
     # ]
     # subdata = subtract_ref_data(indata, ref_maps)
 
-    groups = ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HZL", "normal"]
+    groups = ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"]
     group_map = {
         "CLL": "CM",
         "MBL": "CM",
@@ -647,7 +647,7 @@ def main():
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "resnet_test"
+    name = "selected_ep1000"
 
     # n_metrics, n_confusion, n_groups = classify(normdata)
     nmetrics, confusions, groups = classify_convolutional(

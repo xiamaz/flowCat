@@ -5,6 +5,7 @@ from functools import reduce
 from collections import Counter, defaultdict
 
 import pandas as pd
+from sklearn import preprocessing, model_selection
 
 from .case import Case, CasePath, Material
 from .utils import load_json, get_file_path, put_file_path
@@ -105,16 +106,12 @@ class IterableMixin(object):
 class CaseIterable:
     """Iterable collection for cases. Base class."""
 
-    def __init__(self, tubes=None):
+    def __init__(self):
         self._tubes = None
         self._groups = None
         self._current = None
         self._data = []
 
-        if tubes is not None:
-            self.selected_tubes = tubes
-        else:
-            self.selected_tubes = self.tubes
 
     @property
     def data(self) -> list:
@@ -169,7 +166,7 @@ class CaseCollection(IterableMixin, CaseIterable):
     """Get case information from info file and remove errors and provide
     overview information."""
 
-    def __init__(self, inputpath: str, *args, **kwargs):
+    def __init__(self, inputpath: str, tubes=None, *args, **kwargs):
         """
         :param inputpath: Input directory containing cohorts and a info file.
         :param tubes: List of selected tubes.
@@ -189,6 +186,11 @@ class CaseCollection(IterableMixin, CaseIterable):
         self._data = markers.fit_transform(material_data)
         self.markers = markers.selected_markers
 
+        if tubes is not None:
+            self.selected_tubes = tubes
+        else:
+            self.selected_tubes = self.tubes
+
         self._data = [
             d for d in self._data if d.has_tubes(self.selected_tubes)
         ]
@@ -199,7 +201,7 @@ class CaseCollection(IterableMixin, CaseIterable):
         ]
 
     def create_view(
-            self, labels=None, num=None, groups=None, infiltration=None,
+            self, labels=None, num=None, groups=None, infiltration=None, counts=None,
             **kwargs
     ):
         """Filter view to specified criteria and return a new view object."""
@@ -213,15 +215,20 @@ class CaseCollection(IterableMixin, CaseIterable):
         else:
             data = self._data
 
+        if labels:
+            data = [
+                case for case in data if case.id in labels
+            ]
+
         if infiltration:
             data = [
                 d for d in data
                 if d.infiltration >= infiltration or d.group in NO_INFILTRATION
             ]
 
-        if labels:
+        if counts:
             data = [
-                case for case in data if case.id in labels
+                d for d in data if d.has_count(counts, self.selected_tubes)
             ]
 
         # randomly sample num cases from each group
@@ -246,10 +253,11 @@ class CaseView(IterableMixin, CaseIterable):
     """Filtered view into the base data. Perform all mutable
     actions on CaseView instead of CaseCollection."""
 
-    def __init__(self, data, markers, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, data, markers, tubes=None):
+        super().__init__()
         self.data = data
         self.markers = markers
+        self.selected_tubes = tubes
 
     def get_tube(self, tube: int) -> "TubeView":
         return TubeView(
@@ -266,6 +274,19 @@ class CaseView(IterableMixin, CaseIterable):
             for tube in self.selected_tubes:
                 # touch the data to load it
                 print("Loaded df with shape: ", case.get_tube(tube).data.shape)
+
+    def create_split(self, num, stratify=True):
+        """Split the data into two groups."""
+        if stratify:
+            labels = [d.group for d in self.data]
+        else:
+            labels = None
+        train, test = model_selection.train_test_split(
+            self.data, test_size=num, stratify=labels)
+        return (
+            CaseView(train, self.markers, tubes=self.selected_tubes),
+            CaseView(test, self.markers, tubes=self.selected_tubes),
+        )
 
 
 class TubeView(IterableMixin):

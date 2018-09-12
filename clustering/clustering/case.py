@@ -3,6 +3,9 @@ import logging
 from enum import Enum
 from datetime import datetime
 
+from sklearn import preprocessing
+import pandas as pd
+
 import fcsparser
 
 from .utils import get_file_path
@@ -113,11 +116,17 @@ class Case(object):
             }
         return self._tube_markers
 
-    def get_tube(self, tube: int) -> dict:
+    def get_tube(self, tube: int, min_count: int = 0) -> dict:
         """Get filedict for a single tube. Return the last filedict in the
         list."""
         assert self.has_tube(tube), "Case does not have specified tube."
         all_tube = self.tubepaths[tube]
+        if min_count:
+            for tcase in all_tube:
+                if tcase.event_count > min_count:
+                    return tcase
+            raise RuntimeError(
+                f"No case found fulfilling {min_count} in {tube}")
         return all_tube[-1]
 
     def has_tube(self, tube: int) -> bool:
@@ -141,6 +150,20 @@ class Case(object):
             {self.get_tube(t).material for t in tubes}
         )
         return material_num == 1
+
+    def has_count(self, count: int, tubes: list):
+        """Check if case has the required counts in the needed channels."""
+        return all(any(p.event_count >= count for p in v) for v in self.tubepaths.values())
+
+    def get_merged_data(self, tubes=None, channels=None, min_count=0, **kwargs):
+        """Get dataframe from selected tubes and channels.
+        """
+        tubes = sorted(list(self.tube_markers.keys())) if tubes is None else tubes
+        sel_tubes = [self.get_tube(t, min_count=min_count).get_data(**kwargs) for t in tubes]
+        joined = pd.concat(sel_tubes, sort=False)
+        if channels:
+            joined = joined[channels]
+        return joined
 
 
 class CasePath(object):
@@ -173,9 +196,26 @@ class CasePath(object):
     def data(self):
         """FCS data. Do not save the fcs data in the case, since
         it would be too large."""
+        return self.get_data(normalized=False, scaled=False)
+
+    def get_data(self, normalized=True, scaled=True):
+        """
+        Args:
+            normalized: Normalize data to mean and standard deviation.
+            scaled: Scale data between 0 and 1.
+        Returns:
+            Dataframe with fcs data.
+        """
         _, data = fcsparser.parse(
-            get_file_path(self.path), data_set=0, encoding="latin-1"
-        )
+            get_file_path(self.path), data_set=0, encoding="latin-1")
+
+        if normalized:
+            data = pd.DataFrame(
+                preprocessing.StandardScaler().fit_transform(data), columns=data.columns)
+        if scaled:
+            data = pd.DataFrame(
+                preprocessing.MinMaxScaler().fit_transform(data), columns=data.columns)
+
         return data
 
     @property
