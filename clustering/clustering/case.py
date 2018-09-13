@@ -163,6 +163,8 @@ class Case(object):
         joined = pd.concat(sel_tubes, sort=False)
         if channels:
             joined = joined[channels]
+        else:
+            joined = joined[[c for c in joined.columns if "nix" not in c]]
         return joined
 
 
