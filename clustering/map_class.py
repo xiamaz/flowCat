@@ -7,6 +7,7 @@ from sklearn import manifold, model_selection, preprocessing
 from sklearn import naive_bayes
 from sklearn import metrics
 
+import keras
 from keras import layers, models, regularizers, optimizers
 from keras.utils import plot_model
 from keras_applications import resnet50
@@ -265,7 +266,7 @@ def create_resnet(xshape, yshape, num_inputs=2, classweights=None):
 
 
 def create_model_convolutional(
-        xshape, yshape, num_inputs=2, classweights=None
+        xshape, yshape, num_inputs=2
 ):
     """Create a convnet model. The data will be feeded as a 3d matrix."""
     inputs = []
@@ -274,19 +275,18 @@ def create_model_convolutional(
         t_input = layers.Input(shape=xshape)
 
         x = t_input
-        x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=1)(x)
-        x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=1)(x)
-        x = layers.MaxPooling2D(pool_size=2, strides=1)(x)
+        x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=1)(x)
+        x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=2)(x)
+        x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
         x = layers.BatchNormalization()(x)
         x = layers.Dropout(0.2)(x)
 
         x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=1)(x)
-        x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=1)(x)
-        x = layers.MaxPooling2D(pool_size=2, strides=1)(x)
+        x = layers.GlobalMaxPooling2D()(x)
         x = layers.BatchNormalization()(x)
         x = layers.Dropout(0.2)(x)
 
-        x = layers.Flatten()(x)
+        # x = layers.Flatten()(x)
 
         input_ends.append(x)
         inputs.append(t_input)
@@ -295,12 +295,14 @@ def create_model_convolutional(
 
     x = layers.Dense(
         units=256, activation="relu", kernel_initializer="uniform",
-        kernel_regularizer=regularizers.l2(0.01)
+        kernel_regularizer=regularizers.l2(0.001)
     )(x)
-    # m_end = layers.Dense(
-    #     units=64, activation="relu", kernel_initializer="uniform",
-    #     kernel_regularizer=regularizers.l2(0.01)
-    # )(m_a)
+    x = layers.BatchNormalization()(x)
+    x = layers.Dropout(0.2)(x)
+    x = layers.Dense(
+        units=128, activation="relu", kernel_initializer="uniform",
+        kernel_regularizer=regularizers.l2(0.001)
+    )(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
 
@@ -309,20 +311,6 @@ def create_model_convolutional(
     )(x)
 
     model = models.Model(inputs=inputs, outputs=final)
-
-    if classweights is None:
-        lossfun = "categorical_crossentropy"
-    else:
-        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
-            weights=classweights)
-
-    model.compile(
-        loss=lossfun,
-        optimizer=optimizers.Adam(
-            lr=0.0001, decay=0.0, epsilon=0.00001
-        ),
-        metrics=["acc"]
-    )
 
     return model
 
@@ -469,11 +457,13 @@ def classify_convolutional(
     # train, test = model_selection.train_test_split(data, train_size=0.9)
     confusions = []
     stats = {"mcc": []}
-    kf = model_selection.StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
-    for i, (train_index, test_index) in enumerate(kf.split(data, data["group"])):
-        tr1, tr2, ytrain = reshape_dataset_2d(
-            data.iloc[np.concatenate([train_index, test_index]), :], m=m, n=n)
-        # tr1, tr2, ytrain = reshape_dataset_2d(data.iloc[train_index, :], m=m, n=n)
+    test_data = data.groupby("group", as_index=False).apply(lambda d: d.sample(n=60))
+    test_index = np.random.permutation(test_data.index.get_level_values(1).values)
+    train_index = np.random.permutation(data.drop(test_index).index.values)
+    # kf = model_selection.StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
+    # for i, (train_index, test_index) in enumerate(kf.split(data, data["group"])):
+    for i, (train_index, test_index) in enumerate([(train_index, test_index)]):
+        tr1, tr2, ytrain = reshape_dataset_2d(data.iloc[train_index, :], m=m, n=n)
         if toroidal:
             tr1 = pad_matrices(tr1, pad_width=1)
             tr2 = pad_matrices(tr2, pad_width=1)
@@ -486,26 +476,41 @@ def classify_convolutional(
         ytest_mat = binarizer.transform(ytest)
 
         model = create_model_convolutional(
-            tr1[0].shape, len(groups), classweights=weights
+            tr1[0].shape, len(groups)
+        )
+        if weights is None:
+            lossfun = "categorical_crossentropy"
+        else:
+            lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
+                weights=weights)
+
+        model.compile(
+            loss=lossfun,
+            optimizer=optimizers.Adam(
+                lr=0.0001, decay=0.0, epsilon=0.00001
+            ),
+            metrics=["acc"]
         )
         # model = create_resnet(tr1[0].shape, len(groups), classweights=weights)
         history = model.fit(
             [tr1, tr2],
             ytrain_mat,
-            epochs=1000,
+            epochs=100,
             batch_size=128,
-            validation_split=0.2,
-            class_weight={
-                0: 1.0,  # CLL
-                1: 2.0,  # MBL
-                2: 2.0,  # MCL
-                3: 2.0,  # PL
-                4: 2.0,  # LPL
-                5: 2.0,  # MZL
-                6: 10.0,  # FL
-                7: 10.0,  # HCL
-                8: 1.0,  # normal
-            }
+            callbacks=[
+                # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min")
+            ],
+            validation_data=([te1, te2], ytest_mat),
+            # class_weight={
+            #     0: 1.0,  # CM
+            #     1: 2.0,  # MCL
+            #     2: 2.0,  # PL
+            #     3: 2.0,  # LPL
+            #     4: 2.0,  # MZL
+            #     5: 50.0,  # FL
+            #     6: 50.0,  # HCL
+            #     7: 1.0,  # normal
+            # }
         )
         pred_mat = model.predict([te1, te2], batch_size=128)
         pred = binarizer.inverse_transform(pred_mat)
@@ -607,10 +612,11 @@ def create_weight_matrix(group_map, groups, base_weight=5):
 def main():
     map_size = 32
 
-    inputpath = pathlib.Path("mll-sommaps/sample_maps/selected5_toroid_s32")
+    inputpath = pathlib.Path("mll-sommaps/sample_maps/completeretrain_toroid_s32")
 
     indata = load_dataset(inputpath)
-    indata = sqrt_counts(indata)
+    indata = remove_counts(indata)
+    # indata = sqrt_counts(indata)
     indata = normalize_data(indata)
 
     # ref_maps = [
@@ -619,7 +625,15 @@ def main():
     # ]
     # subdata = subtract_ref_data(indata, ref_maps)
 
-    groups = ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"]
+    # groups = ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"]
+    # 8-class
+    # groups = ["CM", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"]
+    # group_map = {
+    #     "CLL": "CM",
+    #     "MBL": "CM",
+    # }
+    # 6-class
+    groups = ["CM", "MP", "LM", "FL", "HCL", "normal"]
     group_map = {
         "CLL": "CM",
         "MBL": "CM",
@@ -628,7 +642,9 @@ def main():
         "MCL": "MP",
         "PL": "MP",
     }
-    # indata = modify_groups(indata, mapping=group_map)
+    indata = modify_groups(indata, mapping=group_map)
+    indata = indata.loc[indata["group"].isin(groups), :]
+    indata.reset_index(drop=True, inplace=True)
     # Group weights are a dict mapping tuples to tuples. Weights are for
     # false classifications in the given direction.
     # (a, b) --> (a>b, b>a)
@@ -647,7 +663,7 @@ def main():
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "selected_ep1000"
+    name = "retrain_ep100"
 
     # n_metrics, n_confusion, n_groups = classify(normdata)
     nmetrics, confusions, groups = classify_convolutional(
