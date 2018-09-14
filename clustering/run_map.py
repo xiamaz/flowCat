@@ -168,7 +168,10 @@ def generate_reference(refpath, data, gridsize=10, max_epochs=10, map_type="plan
             n=gridsize,
             channels=marker_list,
             batch_size=1,
-            end_radius=2,
+            initial_learning_rate=0.5,
+            end_learning_rate=0.1,
+            initial_radius=None,
+            end_radius=1,
             radius_cooling="exponential",
             learning_cooling="exponential",
             map_type=map_type,
@@ -177,7 +180,7 @@ def generate_reference(refpath, data, gridsize=10, max_epochs=10, map_type="plan
             initialization_method="random",
             tensorboard=True,
             model_name=f"{name}_t{tube}",
-            tensorboard_dir=f'tensorboard_wednesday',
+            tensorboard_dir=f'tensorboard_references',
         )
 
         generate_data = create_z_score_generator(tubedata.data)
@@ -201,30 +204,24 @@ def case_to_map(path, data, references=None, gridsize=10, map_type="planar"):
         tubedata = data.get_tube(tube)
 
         reference = references[tube] if references is not None else None
-        used_channels = list(reference.columns) if reference else tubedata[0].data.columns
+        used_channels = list(reference.columns) if reference is None else tubedata[0].data.columns
         used_channels = [c for c in used_channels if "nix" not in c]
 
         model = tfsom.SOMNodes(
             m=gridsize, n=gridsize, channels=used_channels,
-            batch_size=1,
-            initial_learning_rate=0.5,
-            end_learning_rate=0.1,
-            initial_radius=None,
-            end_radius=1,
             map_type=map_type,
-            max_epochs=10,
-            initialization_method="reference" if reference else "random",
+            initialization_method="reference" if reference is not None else "random",
             reference=reference,
             counts=True,
-            random_subsample=True,
-            tensorboard=True,
+            random_subsample=False,
+            tensorboard=False,
             model_name=f"fitmap_t{tube}",
             tensorboard_dir="tensorboard_retraining/test",
             fitmap_args={
-                "max_epochs": 20,
+                "max_epochs": 2,
                 "initial_learn": 0.1,
-                "end_learn": 0.01,
-                "initial_radius": 32,
+                "end_learn": 0.05,
+                "initial_radius": 6,
                 "end_radius": 1,
             }
         )
@@ -246,7 +243,7 @@ def case_to_map(path, data, references=None, gridsize=10, map_type="planar"):
 
 
 def main():
-    gridsize = 64
+    gridsize = 32
     simplerun = False
     createref = False
     max_epochs = 10
@@ -262,35 +259,35 @@ def main():
 
     # generate consensus reference and exit
     if createref:
-        sel_group = ["MCL"]
+        # sel_group = ["normal"]
         with open("data/selected_cases.txt") as fobj:
             selected = [l.strip() for l in fobj]
 
-        reference_cases = cases.create_view(num=1, groups=sel_group, infiltration=10)
+        reference_cases = cases.create_view(num=1)
         # reference_cases = cases.create_view(num=1, infiltration=20)
-        refpath = pathlib.Path("wednesday_test/reference_maps")
+        refpath = pathlib.Path("mll-sommaps/reference_maps")
         generate_reference(
             refpath,
             reference_cases,
             gridsize=gridsize,
             max_epochs=max_epochs,
             map_type=maptype,
-            name=f"sample_init_{''.join(sel_group)}_{reference_cases[0].id}")
+            name=f"selected1")
         return
 
-    # reference_weights = {
-    #     t: pd.read_csv(f"mll-sommaps/reference_maps/selected5_s32_e10_mplanar_deuclidean/t{t}.csv", index_col=0)
-    #     for t in [1, 2]
-    # }
-    reference_weights = None
+    reference_weights = {
+        t: pd.read_csv(f"mll-sommaps/reference_maps/selected1_s32_e10_mtoroid_deuclidean/t{t}.csv", index_col=0)
+        for t in [1, 2]
+    }
+    # reference_weights = None
 
-    mappath = pathlib.Path(f"wednesday_test/sample_maps/random_fourfold_{maptype}_s{gridsize}")
+    mappath = pathlib.Path(f"mll-sommaps/sample_maps/selected1_{maptype}_s{gridsize}")
     mappath.mkdir(parents=True, exist_ok=True)
 
     # ref_trans = list(pd.read_csv("sommaps_aws/sample_maps/initial_toroid_s32.csv", index_col=0)["label"])
     ref_trans = None
 
-    transdata = cases.create_view(groups=GROUPS, labels=ref_trans, num=5)
+    transdata = cases.create_view(labels=ref_trans)
 
     case_to_map(mappath, transdata, reference_weights, gridsize=gridsize, map_type=maptype)
 
