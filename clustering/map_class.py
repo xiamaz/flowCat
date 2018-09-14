@@ -28,9 +28,9 @@ COLS = "grcmyk"
 
 def load_dataset(path):
     """Return dataframe containing columns with filename and labels."""
-
+    path = pathlib.Path(path)
     labels = pd.read_csv(f"{path}.csv", index_col=0)
-    labels["sommap_path"] = labels["label"].apply(lambda l: path / f"{l}_t{{t}}.csv")
+    labels["sommap_path"] = labels["label"].apply(lambda l: path / f"{l}_t{{tube}}.csv")
     return labels
 
 
@@ -66,6 +66,47 @@ def reshape_dataframe(data, m=10, n=10, pad_width=0):
             (0, 0),
         ], mode="wrap")
     return data
+
+
+class MapLoader():
+
+    def __init__(self, tube, gridsize, channels):
+        """Object to transform input rows into the specified format."""
+        self.tube = tube
+        self.gridsize = gridsize
+        self.channels = channels
+        pass
+
+    @property
+    def shape(self):
+        return (self.gridsize, self.gridsize, len(self.channels))
+
+    def __call__(self, data):
+        """Output specified format."""
+        map_list = []
+        for path in batch_data["sommap_path"]:
+            mapdata = pd.read_csv(str(path).format(tube=tube), index_col=0)
+            if drop_counts:
+                mapdata.drop(countnames, inplace=True, axis=1, errors="ignore")
+            elif "counts" in mapdata.columns:
+                # sqrt
+                mapdata[sel_count] = np.sqrt(mapdata[sel_count])
+                # rescale 0-1
+                mapdata[sel_count] = mapdata[sel_count] / max(mapdata[sel_count])
+                mapdata.drop(
+                    [c for c in countnames if c != sel_count], axis=1, inplace=True,
+                    errors="ignore"
+                )
+                print(mapdata.columns)
+            if mat2d:
+                # infer gridwitdth from shape
+                gridwidth = int(np.sqrt(mapdata.shape[0]))
+                data = reshape_dataframe(
+                    mapdata, m=gridwidth, n=gridwidth, pad_width=pad_width)
+            else:
+                data = mapdata.values
+            map_list.append(data)
+        xdata.append(np.stack(map_list))
 
 
 class SOMMapDataset(keras.utils.Sequence):
@@ -115,7 +156,22 @@ class SOMMapDataset(keras.utils.Sequence):
         self.binarizer = preprocessing.LabelBinarizer()
         self.binarizer.fit(groups)
 
+        self._xoutputs = [
+            MapLoader(tube=1, gridsize=32),
+            MapLoader(tube=2, gridsize=32),
+        ]
         self._xtransform = xtransform or self._load_sommaps
+
+    @property
+    def xshape(self):
+        """Return shape of xvalues. Should be a list of shapes describing each input.
+        """
+        return [x.shape for x in self._xoutputs]
+
+    @property
+    def yshape(self):
+        """Return shape of yvalues."""
+        return len(self.binarizer.classes_)
 
     def __len__(self):
         """Return the number of batches generated."""
@@ -123,19 +179,28 @@ class SOMMapDataset(keras.utils.Sequence):
 
     def _load_sommaps(self, batch_data, drop_counts=False, mat2d=True, pad_width=0):
         """Process data into format suitable for Keras model input."""
+        countnames = ["counts", "count_prev"]
+        sel_count = "counts"
         xdata = []
         for tube in [1, 2]:
             map_list = []
             for path in batch_data["sommap_path"]:
-                mapdata = pd.read_csv(path.format(tube), index_col=0)
+                mapdata = pd.read_csv(str(path).format(tube=tube), index_col=0)
                 if drop_counts:
-                    mapdata.drop("counts", inplace=True)
+                    mapdata.drop(countnames, inplace=True, axis=1, errors="ignore")
                 elif "counts" in mapdata.columns:
                     # sqrt
-                    mapdata["counts"] = np.sqrt(mapdata["counts"])
+                    mapdata[sel_count] = np.sqrt(mapdata[sel_count])
                     # rescale 0-1
-                    mapdata["counts"] = mapdata["counts"] / max(mapdata["counts"])
+                    mapdata[sel_count] = mapdata[sel_count] / max(mapdata[sel_count])
+                    mapdata.drop(
+                        [c for c in countnames if c != sel_count], axis=1, inplace=True,
+                        errors="ignore"
+                    )
+                    print(mapdata.columns)
                 if mat2d:
+                    # infer gridwitdth from shape
+                    gridwidth = int(np.sqrt(mapdata.shape[0]))
                     data = reshape_dataframe(
                         mapdata, m=gridwidth, n=gridwidth, pad_width=pad_width)
                 else:
@@ -147,7 +212,7 @@ class SOMMapDataset(keras.utils.Sequence):
 
     def __getitem__(self, idx):
         """Get a single batch by id."""
-        batch_data = data.iloc[idx * self.batch_size: (idx + 1) * self.batch_size, :]
+        batch_data = self._data.iloc[idx * self.batch_size: (idx + 1) * self.batch_size, :]
 
         xdata = self._load_sommaps(batch_data)
         ydata = batch_data["group"]
@@ -494,91 +559,63 @@ def classify(data):
 
 
 def classify_convolutional(
-        data, m=10, n=10, weights=None, toroidal=False, groups=None,
-        path="mll-sommaps/models", kfold=False,
+        train, test, m=10, n=10, weights=None, toroidal=False, groups=None,
+        path="mll-sommaps/models", name="0"
 ):
     if groups is None:
         groups = list(data["group"].unique())
 
-    binarizer = preprocessing.LabelBinarizer()
-    binarizer.fit(groups)
+    trainseq = SOMMapDataset(train, batch_size=64, draw_method="shuffle", groups=groups)
+    testseq = SOMMapDataset(test, batch_size=128, draw_method="sequential", groups=groups)
 
-    # train, test = model_selection.train_test_split(data, train_size=0.9)
-    pred_dfs = []
-    test_data = data.groupby("group", as_index=False).apply(lambda d: d.sample(n=60))
-    test_index = np.random.permutation(test_data.index.get_level_values(1).values)
-    train_index = np.random.permutation(data.drop(test_index).index.values)
-    # kf = model_selection.StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
-    # for i, (train_index, test_index) in enumerate(kf.split(data, data["group"])):
-    for i, (train_index, test_index) in enumerate([(train_index, test_index)]):
-        tr1, tr2, ytrain = reshape_dataset_2d(data.iloc[train_index, :], m=m, n=n)
-        if toroidal:
-            tr1 = pad_matrices(tr1, pad_width=1)
-            tr2 = pad_matrices(tr2, pad_width=1)
-        ytrain_mat = binarizer.transform(ytrain)
+    model = create_model_convolutional(trainseq.xshape, trainseq.yshape)
+    if weights is None:
+        lossfun = "categorical_crossentropy"
+    else:
+        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
+            weights=weights)
 
-        te1, te2, ytest = reshape_dataset_2d(data.iloc[test_index, :], m=m, n=n)
-        if toroidal:
-            te1 = pad_matrices(te1, pad_width=1)
-            te2 = pad_matrices(te2, pad_width=1)
-        ytest_mat = binarizer.transform(ytest)
+    model.compile(
+        loss=lossfun,
+        optimizer=optimizers.Adam(
+            lr=0.0001, decay=0.0, epsilon=0.00001
+        ),
+        metrics=["acc"]
+    )
+    # model = create_resnet(tr1[0].shape, len(groups), classweights=weights)
+    history = model.fit_generator(
+        trainseq, epochs=100,
+        callbacks=[
+            # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min")
+        ],
+        validation_data=testseq,
+        # class_weight={
+        #     0: 1.0,  # CM
+        #     1: 2.0,  # MCL
+        #     2: 2.0,  # PL
+        #     3: 2.0,  # LPL
+        #     4: 2.0,  # MZL
+        #     5: 50.0,  # FL
+        #     6: 50.0,  # HCL
+        #     7: 1.0,  # normal
+        # }
+        workers=4,
+    )
+    pred_mat = model.predict_generator(testseq, workers=4)
 
-        model = create_model_convolutional(
-            tr1[0].shape, len(groups)
-        )
-        if weights is None:
-            lossfun = "categorical_crossentropy"
-        else:
-            lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
-                weights=weights)
+    # save the model weights after training
+    modelpath = pathlib.Path(path)
+    modelpath.mkdir(parents=True, exist_ok=True)
+    model.save(modelpath / f"model_{name}.h5")
+    with open(str(modelpath / f"history_{name}.p"), "wb") as hfile:
+        pickle.dump(history.history, hfile)
 
-        model.compile(
-            loss=lossfun,
-            optimizer=optimizers.Adam(
-                lr=0.0001, decay=0.0, epsilon=0.00001
-            ),
-            metrics=["acc"]
-        )
-        # model = create_resnet(tr1[0].shape, len(groups), classweights=weights)
-        history = model.fit(
-            [tr1, tr2],
-            ytrain_mat,
-            epochs=100,
-            batch_size=128,
-            callbacks=[
-                # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min")
-            ],
-            validation_data=([te1, te2], ytest_mat),
-            # class_weight={
-            #     0: 1.0,  # CM
-            #     1: 2.0,  # MCL
-            #     2: 2.0,  # PL
-            #     3: 2.0,  # LPL
-            #     4: 2.0,  # MZL
-            #     5: 50.0,  # FL
-            #     6: 50.0,  # HCL
-            #     7: 1.0,  # normal
-            # }
-        )
-        pred_mat = model.predict([te1, te2], batch_size=128)
-
-        # save the model weights after training
-        modelpath = pathlib.Path(path)
-        modelpath.mkdir(parents=True, exist_ok=True)
-        model.save(modelpath / f"model_{i}.h5")
-        with open(str(modelpath / f"history_{i}.p"), "wb") as hfile:
-            pickle.dump(history.history, hfile)
-
-        pred_df = pd.DataFrame(
-            pred_mat, columns=groups, index=data.loc[test_index, "label"])
-        pred_df["correct"] = ytest.tolist()
-        pred_df.to_csv(modelpath / f"predictions_{i}.csv")
-        pred_dfs.append(pred_df)
-
-        create_metrics_from_pred(pred_df)
-        if not kfold:
-            break
-    return pred_dfs
+    pred_df = pd.DataFrame(
+        pred_mat, columns=groups, index=data.loc[test_index, "label"])
+    pred_df["correct"] = ytest.tolist()
+    pred_df.to_csv(modelpath / f"predictions_{name}.csv")
+    create_metrics_from_pred(pred_df)
+    return pred_df
 
 
 def create_metrics_from_pred(pred_df, mapping=None):
@@ -651,9 +688,7 @@ def create_weight_matrix(group_map, groups, base_weight=5):
 def main():
     map_size = 32
 
-    inputpath = pathlib.Path("mll-sommaps/sample_maps/selected5_toroid_s32")
-
-    indata = load_dataset(inputpath)
+    indata = load_dataset("mll-sommaps/sample_maps/selected5_toroid_s32")
 
     # groups = ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"]
     # 8-class
@@ -696,11 +731,12 @@ def main():
     validation = "holdout"
     name = "selected5_toroid_8class_60test_ep100"
 
+    train, test = split_data(indata, num=60)
+
     # n_metrics, n_confusion, n_groups = classify(normdata)
     pred_dfs = classify_convolutional(
-        indata, m=map_size, n=map_size, toroidal=False, weights=weights,
-        kfold=False, groups=groups,
-        path=f"mll-sommaps/models/{name}")
+        train, test, m=map_size, n=map_size, toroidal=False, weights=weights,
+        groups=groups, path=f"mll-sommaps/models/{name}")
 
     # pred_df_8class = pd.read_csv(
     #     "mll-sommaps/models/cllall1_planar_8class_60test_ep100/predictions_0.csv",
@@ -710,7 +746,6 @@ def main():
     #     "mll-sommaps/models/cllall1_planar_60test_ep100/predictions_0.csv",
     #     index_col=0)
     # n6_direct = create_metrics_from_pred(pred_df_6class)
-
 
     outpath = pathlib.Path(f"output/{name}_{validation}")
     outpath.mkdir(parents=True, exist_ok=True)
