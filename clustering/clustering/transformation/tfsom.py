@@ -618,7 +618,8 @@ class TFSom:
             new_weights = tf.divide(numerator, denominator)
             train_op = tf.assign(weights, new_weights)
 
-            summary = tf.summary.merge(summaries)
+            if self._tensorboard:
+                summary = tf.summary.merge(summaries)
 
             var_init = tf.variables_initializer([weights, global_step, input_tensor])
             metric_init = tf.variables_initializer(graph.get_collection(tf.GraphKeys.METRIC_VARIABLES))
@@ -629,6 +630,7 @@ class TFSom:
             while True:
                 try:
                     session.run([var_init, metric_init])
+                    (event_mapping_prev,) = session.run([mapping])
                     for epoch in range(max_epochs):
                         session.run([train_op])
                     # get final mapping and weights
@@ -639,7 +641,7 @@ class TFSom:
                         arr_weights, event_mapping = session.run([weights, mapping])
 
                     # yield the result after training
-                    yield arr_weights, event_mapping
+                    yield arr_weights, event_mapping, event_mapping_prev
                     number += 1
                 except tf.errors.OutOfRangeError:
                     break
@@ -697,7 +699,7 @@ class TFSom:
 
                 # if recording summaries; initialize a run while recording, save after batch is done
                 if self._tensorboard:
-                        summary, _, = self._sess.run(
+                    summary, _, = self._sess.run(
                         [self._merged, self._training_op],
                         options=run_options, run_metadata=run_metadata
                     )
@@ -855,8 +857,9 @@ class SOMNodes(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X, *_):
-        for weights, counts in self._model.fit_map(data_iterable=X, **self._fitmap_args):
+        for weights, counts, count_prev in self._model.fit_map(data_iterable=X, **self._fitmap_args):
             df_weights = pd.DataFrame(weights, columns=self._model.channels)
             if self._counts:
                 df_weights["counts"] = counts
+                df_weights["count_prev"] = count_prev
             yield df_weights
