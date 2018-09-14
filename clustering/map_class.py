@@ -16,21 +16,35 @@ from keras_applications import resnet50
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 
+import fcsparser
+
 import weighted_crossentropy
 
 import sys
 sys.path.append("../classification")
 from classification import plotting
+from clustering import collection as cc
 
 
 COLS = "grcmyk"
 
+def get_tubepaths(label, cases):
+    matched = None
+    for case in cases:
+        if case.id == label:
+            matched = case
+            break
+    tubepaths = {k: v[-1].path for k, v in matched.tubepaths.items()}
+    return tubepaths
 
-def load_dataset(path):
+def load_dataset(mappath, histopath, fcspath):
     """Return dataframe containing columns with filename and labels."""
-    path = pathlib.Path(path)
-    labels = pd.read_csv(f"{path}.csv", index_col=0)
-    labels["sommap_path"] = labels["label"].apply(lambda l: path / f"{l}_t{{tube}}.csv")
+    mappath = pathlib.Path(mappath)
+    labels = pd.read_csv(f"{mappath}.csv", index_col=0)
+    labels["sommap_path"] = labels["label"].apply(lambda l: mappath / f"{l}_t{{tube}}.csv")
+    labels["histopath"] = f"{histopath}/tube{{tube}}.csv"
+    cases = cc.CaseCollection(fcspath, tubes=[1, 2])
+    labels["fcspath"] = labels["label"].apply(lambda l: get_tubepaths(l, cases))
     return labels
 
 
@@ -68,45 +82,185 @@ def reshape_dataframe(data, m=10, n=10, pad_width=0):
     return data
 
 
-class MapLoader():
+def select_drop_counts(data, sel_count=None):
+    """Select and preprocess count channel. If sel_count is None, drop
+    all count channels.
+    """
+    countnames = ["counts", "count_prev"]
+    if sel_count is not None:
+        data[sel_count] = np.sqrt(data[sel_count])
+        # rescale 0-1
+        data[sel_count] = data[sel_count] / max(data[sel_count])
 
-    def __init__(self, tube, gridsize, channels):
+    data.drop(
+        [c for c in countnames if c != sel_count], axis=1, inplace=True,
+        errors="ignore"
+    )
+    return data
+
+
+class LoaderMixin:
+    datacol = "sommap_path"
+    histocol = "histopath"
+    fcscol = "fcspath"
+
+    @staticmethod
+    def load_data(path, tube):
+        """Load the data associated with the given tube."""
+        return pd.read_csv(str(path).format(tube=tube), index_col=0)
+
+
+class CountLoader(LoaderMixin):
+
+    """Load count information from 1d histogram analysis."""
+    def __init__(self, tube, width, version="mapcount", data=None):
+        self.tube = tube
+        self.version = version
+        self.data = data
+        self.width = width
+
+    @staticmethod
+    def read_dataframe(path, tube):
+        dfdata = pd.read_csv(path.format(tube=tube), index_col=0)
+        non_number_cols = [c for c in dfdata if not c.isdigit()]
+        dfdata.set_index(dfdata["label"], inplace=True)
+        # dfdata.drop(non_number_cols, inplace=True, axis=1)
+        return dfdata
+
+    @classmethod
+    def create_inferred(cls, data, tube, version="mapcount"):
+        dfdata = None
+        if version == "dataframe":
+            dfdata = cls.read_dataframe(data[cls.histocol].iloc[0], tube=tube)
+            width = dfdata.shape[1]
+        elif version == "mapcount":
+            mapdata = self.load_data(data[cls.datacol].iloc[0], tube)
+            width = mapdata.shape[0]
+        return cls(tube=tube, width=width, version=version, data=dfdata)
+
+    @property
+    def shape(self):
+        return (self.width, )
+
+    def __call__(self, data):
+        if self.version == "mapcount":
+            count_list = []
+            for path in data[self.datacol]:
+                mapdata = self.load_data(path, self.tube)
+                countdata = select_drop_counts(
+                    mapdata, sel_count="count_prev")["count_prev"]
+                count_list.append(countdata.values)
+            counts = np.stack(count_list)
+        elif self.version == "dataframe":
+            if self.data is None:
+                self.data = self.read_dataframe(
+                    data[self.datacol].iloc[0], self.tube)
+            sel_rows = self.data.loc[data["label"], :]
+            counts = sel_rows.values
+            print(data.shape, sel_rows.shape)
+            print(sel_rows)
+        return counts
+
+
+class FCSLoader(LoaderMixin):
+    """Directly load FCS data associated with the given ids."""
+    def __init__(self, tubes, channels=None, subsample=200):
+        self.tubes = tubes
+        self.channels = channels
+        self.subsample = subsample
+
+    @classmethod
+    def create_inferred(cls, data, tubes, subsample=200, channels=None, *args, **kwargs):
+        testdata = cls._load_data(
+            data[cls.fcscol].iloc[0], subsample, tubes=tubes, channels=channels
+        )
+        channels = list(testdata.columns)
+        return cls(tubes=tubes, channels=channels, subsample=subsample, *args, **kwargs)
+
+    @property
+    def shape(self):
+        return (self.subsample, len(self.channels))
+
+    @staticmethod
+    def _load_data(pathdict, subsample, tubes, channels):
+        datas = []
+        for tube in tubes:
+            _, data = fcsparser.parse(pathdict[tube], data_set=0, encoding="latin-1")
+
+            if channels:
+                data = data[channels]
+            else:
+                data.drop([c for c in data.columns if "nix" in c], axis=1, inplace=True)
+
+            data = pd.DataFrame(
+                preprocessing.StandardScaler().fit_transform(data),
+                columns=data.columns)
+
+            data = data.sample(n=subsample)
+
+            cols = [c+s for c in data.columns for s in ["", "sig"]]
+            sig_cols = [c for c in cols if c.endswith("sig")]
+            data = pd.concat(
+                [data, pd.DataFrame(1, columns=sig_cols, index=data.index)], axis=1)
+            data = data.loc[:, cols]
+            datas.append(data)
+
+        merged = pd.concat(datas, sort=False)
+        return merged.fillna(0)
+
+    def __call__(self, data):
+        mapped_fcs = []
+        for path in data[fcscol]:
+            mapped_fcs.append(self._load_data(
+                path, self.subsample, self.tubes, self.channels
+            )[self.channels].values)
+        return np.stack(mapped_fcs)
+
+
+class Map2DLoader(LoaderMixin):
+    """2-Dimensional SOM maps for 2D-Convolutional processing."""
+    def __init__(self, tube, gridsize, channels, sel_count=None, pad_width=0):
         """Object to transform input rows into the specified format."""
         self.tube = tube
         self.gridsize = gridsize
         self.channels = channels
-        pass
+        self.sel_count = sel_count
+        self.pad_width = pad_width
+
+    @classmethod
+    def create_inferred(cls, data, tube, *args, **kwargs):
+        """Create with inferred information."""
+        return cls(tube=tube, *args, **cls.infer_size(data, tube), **kwargs)
+
+    @classmethod
+    def infer_size(cls, data, tube=1):
+        """Infer size of input from data."""
+        refdata = cls.load_data(data[cls.datacol].iloc[0], tube)
+        nodes, channels = refdata.shape
+        gridsize = int(np.ceil(np.sqrt(nodes)))
+        non_count_channels = [c for c in refdata.columns if "count" not in c]
+        return {"gridsize": gridsize, "channels": non_count_channels}
 
     @property
     def shape(self):
-        return (self.gridsize, self.gridsize, len(self.channels))
+        return (
+            self.gridsize, self.gridsize, len(self.channels) + bool(self.sel_count)
+        )
 
     def __call__(self, data):
         """Output specified format."""
         map_list = []
-        for path in batch_data["sommap_path"]:
-            mapdata = pd.read_csv(str(path).format(tube=tube), index_col=0)
-            if drop_counts:
-                mapdata.drop(countnames, inplace=True, axis=1, errors="ignore")
-            elif "counts" in mapdata.columns:
-                # sqrt
-                mapdata[sel_count] = np.sqrt(mapdata[sel_count])
-                # rescale 0-1
-                mapdata[sel_count] = mapdata[sel_count] / max(mapdata[sel_count])
-                mapdata.drop(
-                    [c for c in countnames if c != sel_count], axis=1, inplace=True,
-                    errors="ignore"
-                )
-                print(mapdata.columns)
-            if mat2d:
-                # infer gridwitdth from shape
-                gridwidth = int(np.sqrt(mapdata.shape[0]))
-                data = reshape_dataframe(
-                    mapdata, m=gridwidth, n=gridwidth, pad_width=pad_width)
-            else:
-                data = mapdata.values
+        for path in data[self.datacol]:
+            mapdata = self.load_data(path, self.tube)
+            mapdata = select_drop_counts(mapdata, self.sel_count)
+            data = reshape_dataframe(
+                mapdata,
+                m=self.gridsize,
+                n=self.gridsize,
+                pad_width=self.pad_width)
             map_list.append(data)
-        xdata.append(np.stack(map_list))
+
+        return np.stack(map_list)
 
 
 class SOMMapDataset(keras.utils.Sequence):
@@ -118,7 +272,7 @@ class SOMMapDataset(keras.utils.Sequence):
     def __init__(
             self, data,
             batch_size=32, draw_method="shuffle", epoch_size=None,
-            xtransform=None, groups=None
+            groups=None, toroidal=False,
     ):
         """
         Args:
@@ -131,8 +285,8 @@ class SOMMapDataset(keras.utils.Sequence):
                     'balanced'  # present balanced representation of data in one epoch
                 ]
             epoch_size: Number of samples in a single epoch. Is data length if None or 0.
-            xtransform: Function to transform rows in data.
             groups: List of groups to transform the labels into binary matrix.
+            toroidal: Pad data in toroidal manner.
         Returns:
             SOMMapDataset object.
         """
@@ -156,11 +310,23 @@ class SOMMapDataset(keras.utils.Sequence):
         self.binarizer = preprocessing.LabelBinarizer()
         self.binarizer.fit(groups)
 
+        if toroidal:
+            pad_width = 1
+        else:
+            pad_width = 0
+
         self._xoutputs = [
-            MapLoader(tube=1, gridsize=32),
-            MapLoader(tube=2, gridsize=32),
+            Map2DLoader.create_inferred(
+                self._data, tube=1, pad_width=pad_width, sel_count="counts"),
+            Map2DLoader.create_inferred(
+                self._data, tube=2, pad_width=pad_width, sel_count="counts"),
+            CountLoader.create_inferred(
+                self._data, tube=1, version="dataframe"),
+            CountLoader.create_inferred(
+                self._data, tube=2, version="dataframe"),
+            FCSLoader.create_inferred(
+                self._data, tubes=[1, 2], subsample=200),
         ]
-        self._xtransform = xtransform or self._load_sommaps
 
     @property
     def xshape(self):
@@ -173,52 +339,24 @@ class SOMMapDataset(keras.utils.Sequence):
         """Return shape of yvalues."""
         return len(self.binarizer.classes_)
 
+    @property
+    def shape(self):
+        """Return tuple of xshape and yshape."""
+        return self.xshape, self.yshape
+
     def __len__(self):
         """Return the number of batches generated."""
         return int(np.ceil(self.epoch_size / float(self.batch_size)))
-
-    def _load_sommaps(self, batch_data, drop_counts=False, mat2d=True, pad_width=0):
-        """Process data into format suitable for Keras model input."""
-        countnames = ["counts", "count_prev"]
-        sel_count = "counts"
-        xdata = []
-        for tube in [1, 2]:
-            map_list = []
-            for path in batch_data["sommap_path"]:
-                mapdata = pd.read_csv(str(path).format(tube=tube), index_col=0)
-                if drop_counts:
-                    mapdata.drop(countnames, inplace=True, axis=1, errors="ignore")
-                elif "counts" in mapdata.columns:
-                    # sqrt
-                    mapdata[sel_count] = np.sqrt(mapdata[sel_count])
-                    # rescale 0-1
-                    mapdata[sel_count] = mapdata[sel_count] / max(mapdata[sel_count])
-                    mapdata.drop(
-                        [c for c in countnames if c != sel_count], axis=1, inplace=True,
-                        errors="ignore"
-                    )
-                    print(mapdata.columns)
-                if mat2d:
-                    # infer gridwitdth from shape
-                    gridwidth = int(np.sqrt(mapdata.shape[0]))
-                    data = reshape_dataframe(
-                        mapdata, m=gridwidth, n=gridwidth, pad_width=pad_width)
-                else:
-                    data = mapdata.values
-                map_list.append(data)
-            xdata.append(np.stack(map_list))
-
-        return xdata
 
     def __getitem__(self, idx):
         """Get a single batch by id."""
         batch_data = self._data.iloc[idx * self.batch_size: (idx + 1) * self.batch_size, :]
 
-        xdata = self._load_sommaps(batch_data)
-        ydata = batch_data["group"]
+        xdata = [x(batch_data) for x in self._xoutputs]
 
+        ydata = batch_data["group"]
         ybinary = self.binarizer.transform(ydata)
-        return xdata, ydata
+        return xdata, ybinary
 
 
 def plot_transformed(path, tf1, tf2, y):
@@ -688,8 +826,20 @@ def create_weight_matrix(group_map, groups, base_weight=5):
 def main():
     map_size = 32
 
-    indata = load_dataset("mll-sommaps/sample_maps/selected5_toroid_s32")
+    # indata = load_dataset(
+    #     "mll-sommaps/sample_maps/selected5_toroid_s32",
+    #     histopath="../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217",
+    #     fcspath="/home/zhao/tmp/CLL-9F"
+    # )
+    # save the data
+    # with open("indata_selected5_somgated_fcs.p", "wb") as f:
+    #     pickle.dump(indata, f)
 
+    # load the data again
+    with open("indata_selected5_somgated_fcs.p", "rb") as f:
+        indata = pickle.load(f)
+
+    test = SOMMapDataset(indata, draw_method="balanced", epoch_size=1000)
     # groups = ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"]
     # 8-class
     groups = ["CM", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"]
