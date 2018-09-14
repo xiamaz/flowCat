@@ -31,27 +31,30 @@ def create_ete_model(xdims, ydim, num_inputs=2):
         inputs.append(i)
 
         x = i
-        xa = keras.layers.Conv1D(64, 1, strides=1, activation="relu")(x)
+        xa = keras.layers.Conv1D(128, 1, strides=1, activation="relu")(x)
         xa = keras.layers.GlobalAveragePooling1D()(xa)
         # xa = keras.layers.Dropout(0.2)(xa)
         # x = xa
         xb = keras.layers.Conv1D(32, 1, strides=1, activation="relu")(x)
         xb = keras.layers.GlobalMaxPool1D()(xb)
-        # # xb = keras.layers.Dropout(0.2)(xb)
+        xb = keras.layers.BatchNormalization()(xb)
+        # xb = keras.layers.Dropout(0.2)(xb)
         x = keras.layers.concatenate([xa, xb])
 
-        x = keras.layers.Dense(64, kernel_regularizer=keras.regularizers.l2(l=0.001))(x)
-        x = keras.layers.Dropout(0.2)(x)
+        # x = keras.layers.Dense(64, kernel_regularizer=keras.regularizers.l2(l=0.001))(x)
+        # x = keras.layers.Dropout(0.2)(x)
         tubes.append(x)
 
     x = keras.layers.concatenate(tubes)
 
-    x = keras.layers.Dense(64, kernel_regularizer=keras.regularizers.l2(l=0.001))(x)
+    x = keras.layers.Dense(128)(x)
     x = keras.layers.Dropout(0.2)(x)
-    x = keras.layers.Dense(64, kernel_regularizer=keras.regularizers.l2(l=0.001))(x)
+    x = keras.layers.Dense(128)(x)
     x = keras.layers.Dropout(0.2)(x)
-    # x = keras.layers.Dense(32, kernel_regularizer=keras.regularizers.l2(l=0.001))(x)
-    # x = keras.layers.Dropout(0.2)(x)
+    x = keras.layers.Dense(64)(x)
+    x = keras.layers.Dropout(0.2)(x)
+    x = keras.layers.Dense(64)(x)
+    x = keras.layers.Dropout(0.2)(x)
     x = keras.layers.Dense(ydim, activation="softmax")(x)
 
     model = keras.models.Model(inputs=inputs, outputs=x)
@@ -109,15 +112,30 @@ def get_merged_data(datas):
 
 def main():
     groups = ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"]
+    mapped_groups = ["CM", "MP", "LM", "FL", "HCL", "normal"]
+    group_map = {
+        "CLL": "CM",
+        "MBL": "CM",
+        "MZL": "LM",
+        "LPL": "LM",
+        "MCL": "MP",
+        "PL": "MP",
+    }
+    map_groups = np.vectorize(lambda d: group_map.get(d, d))
     # channels = CHANNELS
 
-    lb = sk.preprocessing.LabelBinarizer().fit(groups)
-    cases = cc.CaseCollection("tmp/CLL-9F", tubes=[1, 2])
-    sel_cases = cases.create_view(num=2000, groups=groups, counts=EVENT_COUNT)
+    lb = sk.preprocessing.LabelBinarizer().fit(mapped_groups)
+    cases = cc.CaseCollection("/home/zhao/tmp/CLL-9F", tubes=[1, 2])
+    sel_cases = cases.create_view(num=1000, groups=groups, counts=EVENT_COUNT)
 
     train, test = sel_cases.create_split(num=0.2, stratify=True)
-    xtrain, ytrain = get_merged_data(train.data + test.data)
-    mat_ytrain = lb.transform(ytrain)
+    xtrain, ytrain = get_merged_data(train.data)
+    mapped_ytrain = map_groups(ytrain)
+    mat_ytrain = lb.transform(mapped_ytrain)
+
+    xtest, ytest = get_merged_data(test.data)
+    mapped_ytest = map_groups(ytest)
+    mat_ytest = lb.transform(mapped_ytest)
 
     model = create_ete_model((xtrain[0].shape[1:], xtrain[1].shape[1:]), mat_ytrain.shape[1])
     model.compile(optimizer="adam", loss="categorical_crossentropy", metrics=["acc"])
@@ -135,14 +153,15 @@ def main():
         7: 10.0,  # HCL
         8: 1.0,  # normal
     }
-    model.fit(xtrain, mat_ytrain, batch_size=32, epochs=300, class_weight=class_weight, validation_split=0.2)
+    class_weight=None
+    model.fit(
+        xtrain, mat_ytrain, batch_size=32, epochs=1000, class_weight=class_weight,
+        validation_data=(xtest, mat_ytest))
 
-    xtest, ytest = get_merged_data(test.data)
-    mat_ytest = lb.transform(ytest)
     pred_mat = model.predict(xtest, batch_size=10)
     pred = lb.inverse_transform(pred_mat)
     # print(model.evaluate(xtest, mat_ytest, batch_size=10))
-    confusion = sk.metrics.confusion_matrix(ytest, pred, groups,)
+    confusion = sk.metrics.confusion_matrix(mapped_ytest, pred, mapped_groups,)
     print(confusion)
 
 if __name__ == "__main__":
