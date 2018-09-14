@@ -187,10 +187,7 @@ class FCSLoader(LoaderMixin):
         for tube in tubes:
             _, data = fcsparser.parse(pathdict[tube], data_set=0, encoding="latin-1")
 
-            if channels:
-                data = data[channels]
-            else:
-                data.drop([c for c in data.columns if "nix" in c], axis=1, inplace=True)
+            data.drop([c for c in data.columns if "nix" in c], axis=1, inplace=True)
 
             data = pd.DataFrame(
                 preprocessing.StandardScaler().fit_transform(data),
@@ -210,7 +207,7 @@ class FCSLoader(LoaderMixin):
 
     def __call__(self, data):
         mapped_fcs = []
-        for path in data[fcscol]:
+        for path in data[self.fcscol]:
             mapped_fcs.append(self._load_data(
                 path, self.subsample, self.tubes, self.channels
             )[self.channels].values)
