@@ -2,7 +2,7 @@ import os
 import random
 import logging
 from functools import reduce
-from collections import Counter, defaultdict
+import collections
 
 import pandas as pd
 from sklearn import preprocessing, model_selection
@@ -43,14 +43,14 @@ class SelectedMarkers:
 
     def fit(self, X: list, *_) -> list:
         # get a mapping between tubes and selected markers
-        tube_markers = defaultdict(list)
+        tube_markers = collections.defaultdict(list)
         for case in X:
             for tube, marker in case.tube_markers.items():
                 tube_markers[tube] += marker
 
         # absolute marker counts
         self._marker_counts = {
-            t: Counter(m) for t, m in tube_markers.items()
+            t: collections.Counter(m) for t, m in tube_markers.items()
         }
 
         # relative marker ratios across all cases
@@ -139,7 +139,7 @@ class CaseIterable:
         """Get number of cases per group in case colleciton."""
         if self._groups is None:
 
-            self._groups = defaultdict(list)
+            self._groups = collections.defaultdict(list)
             for data in self._data:
                 self._groups[data.group].append(data)
 
@@ -180,10 +180,10 @@ class CaseCollection(IterableMixin, CaseIterable):
             load_json(get_file_path(os.path.join(inputpath, INFONAME)))
         ]
 
-        material_data = filter_materials(data)
+        data = filter_materials(data)
 
         markers = SelectedMarkers()
-        self._data = markers.fit_transform(material_data)
+        data = markers.fit_transform(data)
         self.markers = markers.selected_markers
 
         if tubes is not None:
@@ -191,14 +191,32 @@ class CaseCollection(IterableMixin, CaseIterable):
         else:
             self.selected_tubes = self.tubes
 
-        self._data = [
-            d for d in self._data if d.has_tubes(self.selected_tubes)
+        data = [
+            d for d in data if d.has_tubes(self.selected_tubes)
         ]
 
         # ensure that data uses same material
-        self._data = [
-            d for d in self._data if d.same_material(self.selected_tubes)
+        data = [
+            d for d in data if d.same_material(self.selected_tubes)
         ]
+
+        # check the dataset for duplicates
+        label_dict = collections.defaultdict(list)
+        for single in data:
+            label_dict[single.id].append(single)
+        deduplicated = []
+        for cases in label_dict.values():
+            cases.sort(key=lambda c: c.sureness, reverse=True)
+            if len(cases) == 1 or cases[0].sureness > cases[1].sureness:
+                deduplicated.append(cases[0])
+            else:
+                LOGGER.warning(
+                    "DUP both removed: %s (%s), %s (%s)\nSureness: %s %s",
+                    cases[0].id, cases[0].group, cases[1].id, cases[1].group,
+                    cases[0].sureness_description, cases[1].sureness_description,
+                )
+
+        self._data = deduplicated
 
     def create_view(
             self, labels=None, num=None, groups=None, infiltration=None, counts=None,

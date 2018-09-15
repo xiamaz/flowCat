@@ -1,6 +1,6 @@
 import os
 import logging
-from enum import Enum
+import enum
 from datetime import datetime
 
 from sklearn import preprocessing
@@ -23,7 +23,13 @@ def all_in(smaller, larger):
     return True
 
 
-class Material(Enum):
+class Sureness(enum.IntEnum):
+    HIGH = 10
+    NORMAL = 5
+    LOW = 1
+
+
+class Material(enum.Enum):
     """Class containing material types. Abstracting the concept for
     easier consumption."""
     PERIPHERAL_BLOOD = 1
@@ -51,6 +57,9 @@ class Case(object):
         "_histogram",
         "date",
         "infiltration",
+        "short_diagnosis",
+        "sureness_description",
+        "sureness",
         "group",
         "id",
     )
@@ -74,6 +83,10 @@ class Case(object):
         self.id = data["id"]
 
         self.filepaths = data["filepaths"]
+
+        self.short_diagnosis = data["diagnosis"]
+        self.sureness_description = data["sureness"]
+        self.sureness = self._infer_sureness()
 
     @property
     def json(self):
@@ -166,6 +179,46 @@ class Case(object):
         else:
             joined = joined[[c for c in joined.columns if "nix" not in c]]
         return joined
+
+    def _infer_sureness(self):
+        """Return a sureness score from existing information."""
+        sureness_desc = self.sureness_description.lower()
+        short_diag = self.short_diagnosis.lower()
+        if self.group == "FL":
+            if "nachweis eines igh-bcl2" in sureness_desc:
+                return Sureness.HIGH
+            else:
+                return Sureness.NORMAL
+        elif self.group == "MCL":
+            if "mit nachweis ccnd1-igh" in sureness_desc:
+                return Sureness.HIGH
+            elif "nachweis eines igh-ccnd1" in sureness_desc:
+                return Sureness.HIGH
+            elif "nachweis einer 11;14-translokation" in sureness_desc:
+                return Sureness.HIGH
+            elif "ohne fish-sonde" in sureness_desc:
+                return Sureness.LOW
+            else:
+                return Sureness.NORMAL
+        elif self.group == "PL":
+            if "kein nachweis eines igh-ccnd1" in sureness_desc:
+                return Sureness.HIGH
+            elif "kein nachweis einer 11;14-translokation" in sureness_desc:
+                return Sureness.HIGH
+            else:
+                return Sureness.NORMAL
+        elif self.group == "LPL":
+            if "lymphoplasmozytisches lymphom" in short_diag:
+                return Sureness.HIGH
+            else:
+                return Sureness.NORMAL
+        elif self.group == "MZL":
+            if "marginalzonenlymphom" in short_diag:
+                return Sureness.HIGH
+            else:
+                return Sureness.NORMAL
+        else:
+            return Sureness.NORMAL
 
 
 class CasePath(object):
