@@ -339,13 +339,13 @@ class SOMMapDataset(LoaderMixin):
 
         self._xoutputs = [
             Map2DLoader.create_inferred(
-                self._data, tube=1, pad_width=pad_width, sel_count="counts"),
+                self._data, tube=1, pad_width=pad_width, sel_count=None),
             Map2DLoader.create_inferred(
-                self._data, tube=2, pad_width=pad_width, sel_count="counts"),
-            CountLoader.create_inferred(
-                self._data, tube=1, version="dataframe"),
-            CountLoader.create_inferred(
-                self._data, tube=2, version="dataframe"),
+                self._data, tube=2, pad_width=pad_width, sel_count=None),
+            # CountLoader.create_inferred(
+            #     self._data, tube=1, version="dataframe"),
+            # CountLoader.create_inferred(
+            #     self._data, tube=2, version="dataframe"),
             FCSLoader.create_inferred(
                 self._data, tubes=[1, 2], subsample=200),
         ]
@@ -418,186 +418,26 @@ def decomposition(dataset):
     return tf1, tf2, y
 
 
-def identity_block(input_tensor, kernel_size, filters, stage, block, tnum=0):
-    """The identity block is the block that has no conv layer at shortcut.
-    # Arguments
-        input_tensor: input tensor
-        kernel_size: default 3, the kernel size of
-            middle conv layer at main path
-        filters: list of integers, the filters of 3 conv layer at main path
-        stage: integer, current stage label, used for generating layer names
-        block: 'a','b'..., current block label, used for generating layer names
-    # Returns
-        Output tensor for the block.
-    """
-    filters1, filters2, filters3 = filters
-    bn_axis = 3
-    conv_name_base = f'{tnum}_res' + str(stage) + block + '_branch'
-    bn_name_base = f'{tnum}_bn' + str(stage) + block + '_branch'
+def sommap_tube(x):
+    """Block to process a single tube."""
+    x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=1)(x)
+    x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=2)(x)
+    x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Dropout(0.2)(x)
 
-    x = layers.Conv2D(filters1, (1, 1),
-                      kernel_initializer='he_normal',
-                      name=conv_name_base + '2a')(input_tensor)
-    x = layers.BatchNormalization(axis=bn_axis, name=bn_name_base + '2a')(x)
-    x = layers.Activation('relu')(x)
-
-    x = layers.Conv2D(filters2, kernel_size,
-                      padding='same',
-                      kernel_initializer='he_normal',
-                      name=conv_name_base + '2b')(x)
-    x = layers.BatchNormalization(axis=bn_axis, name=bn_name_base + '2b')(x)
-    x = layers.Activation('relu')(x)
-
-    x = layers.Conv2D(filters3, (1, 1),
-                      kernel_initializer='he_normal',
-                      name=conv_name_base + '2c')(x)
-    x = layers.BatchNormalization(axis=bn_axis, name=bn_name_base + '2c')(x)
-
-    x = layers.add([x, input_tensor])
-    x = layers.Activation('relu')(x)
+    x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=1)(x)
+    x = layers.GlobalMaxPooling2D()(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Dropout(0.2)(x)
     return x
 
 
-def conv_block(input_tensor,
-               kernel_size,
-               filters,
-               stage,
-               block,
-               tnum=0,
-               strides=(2, 2)):
-    """A block that has a conv layer at shortcut.
-    # Arguments
-        input_tensor: input tensor
-        kernel_size: default 3, the kernel size of
-            middle conv layer at main path
-        filters: list of integers, the filters of 3 conv layer at main path
-        stage: integer, current stage label, used for generating layer names
-        block: 'a','b'..., current block label, used for generating layer names
-        strides: Strides for the first conv layer in the block.
-    # Returns
-        Output tensor for the block.
-    Note that from stage 3,
-    the first conv layer at main path is with strides=(2, 2)
-    And the shortcut should have strides=(2, 2) as well
-    """
-    filters1, filters2, filters3 = filters
-    bn_axis = 3
-    conv_name_base = f'{tnum}_res' + str(stage) + block + '_branch'
-    bn_name_base = f'{tnum}_bn' + str(stage) + block + '_branch'
-
-    x = layers.Conv2D(filters1, (1, 1), strides=strides,
-                      kernel_initializer='he_normal',
-                      name=conv_name_base + '2a')(input_tensor)
-    x = layers.BatchNormalization(axis=bn_axis, name=bn_name_base + '2a')(x)
-    x = layers.Activation('relu')(x)
-
-    x = layers.Conv2D(filters2, kernel_size, padding='same',
-                      kernel_initializer='he_normal',
-                      name=conv_name_base + '2b')(x)
-    x = layers.BatchNormalization(axis=bn_axis, name=bn_name_base + '2b')(x)
-    x = layers.Activation('relu')(x)
-
-    x = layers.Conv2D(filters3, (1, 1),
-                      kernel_initializer='he_normal',
-                      name=conv_name_base + '2c')(x)
-    x = layers.BatchNormalization(axis=bn_axis, name=bn_name_base + '2c')(x)
-
-    shortcut = layers.Conv2D(filters3, (1, 1), strides=strides,
-                             kernel_initializer='he_normal',
-                             name=conv_name_base + '1')(input_tensor)
-    shortcut = layers.BatchNormalization(
-        axis=bn_axis, name=bn_name_base + '1')(shortcut)
-
-    x = layers.add([x, shortcut])
-    x = layers.Activation('relu')(x)
-    return x
-
-
-def create_resnet(xshape, yshape, num_inputs=2, classweights=None):
-    """Create resnet."""
-    inputs = []
-    input_ends = []
-
-    for num in range(num_inputs):
-        i = layers.Input(shape=xshape)
-        inputs.append(i)
-        x = i
-
-        # x = layers.Conv2D(
-        #     64, (5, 5),
-        #     strides=(2, 2), padding="valid", kernel_initializer="he_normal",
-        #     name="conv1")(x)
-        # x = layers.BatchNormalization(axis=3)(x)
-        # x = layers.Activation("relu")(x)
-        # x = layers.ZeroPadding2D(padding=(1, 1))(x)
-        # x = layers.MaxPooling2D((3, 3), strides=(2, 2))(x)
-
-        x = conv_block(x, 3, [32, 32, 128], stage=2, block='a', strides=(1, 1), tnum=num)
-        x = identity_block(x, 3, [32, 32, 128], stage=2, block='b', tnum=num)
-        x = identity_block(x, 3, [32, 32, 128], stage=2, block='c', tnum=num)
-
-        x = conv_block(x, 3, [64, 64, 256], stage=3, block='a', tnum=num)
-        x = identity_block(x, 3, [64, 64, 256], stage=3, block='b', tnum=num)
-        x = identity_block(x, 3, [64, 64, 256], stage=3, block='c', tnum=num)
-        x = identity_block(x, 3, [64, 64, 256], stage=3, block='d', tnum=num)
-
-        x = conv_block(x, 3, [128, 128, 512], stage=4, block='a', tnum=num)
-        x = identity_block(x, 3, [128, 128, 512], stage=4, block='b', tnum=num)
-        x = identity_block(x, 3, [128, 128, 512], stage=4, block='c', tnum=num)
-        x = identity_block(x, 3, [128, 128, 512], stage=4, block='d', tnum=num)
-        x = identity_block(x, 3, [128, 128, 512], stage=4, block='e', tnum=num)
-        x = identity_block(x, 3, [128, 128, 512], stage=4, block='f', tnum=num)
-
-        x = conv_block(x, 3, [256, 256, 1024], stage=5, block='a', tnum=num)
-        x = identity_block(x, 3, [256, 256, 1024], stage=5, block='b', tnum=num)
-        x = identity_block(x, 3, [256, 256, 1024], stage=5, block='c', tnum=num)
-
-        x = layers.GlobalAveragePooling2D(name=f'{num}_avg_pool')(x)
-        input_ends.append(x)
-
-    x = layers.concatenate(input_ends)
-    x = layers.Dense(yshape, activation='softmax')(x)
-
-    model = models.Model(inputs=inputs, outputs=x)
-
-    lossfun = "categorical_crossentropy"
-    model.compile(
-        loss=lossfun,
-        optimizer=optimizers.Adam(
-            lr=0.0001, decay=0.0, epsilon=0.1
-        ),
-        metrics=["acc"]
-    )
-    return model
-
-
-def create_model_convolutional(
-        xshape, yshape, num_inputs=2
-):
-    """Create a convnet model. The data will be feeded as a 3d matrix."""
-    inputs = []
-    input_ends = []
-    for i in range(num_inputs):
-        t_input = layers.Input(shape=xshape)
-
-        x = t_input
-        x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=1)(x)
-        x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=2)(x)
-        x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
-        x = layers.BatchNormalization()(x)
-        x = layers.Dropout(0.2)(x)
-
-        x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=1)(x)
-        x = layers.GlobalMaxPooling2D()(x)
-        x = layers.BatchNormalization()(x)
-        x = layers.Dropout(0.2)(x)
-
-        # x = layers.Flatten()(x)
-
-        input_ends.append(x)
-        inputs.append(t_input)
-
-    x = layers.concatenate(input_ends)
+def sommap_merged(t1, t2):
+    """Processing of SOM maps using multiple tubes."""
+    t1 = sommap_tube(t1)
+    t2 = sommap_tube(t2)
+    x = layers.concatenate([t1, t2])
 
     x = layers.Dense(
         units=256, activation="relu", kernel_initializer="uniform",
@@ -611,6 +451,47 @@ def create_model_convolutional(
     )(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
+    return x
+
+
+def fcs_merged(x):
+    """1x1 convolutions on raw FCS data."""
+    x = layers.Conv1D(64, 1, strides=1, activation="relu")(x)
+    x = layers.GlobalAveragePooling1D()(x)
+    x = layers.Dense(64)(x)
+    x = layers.Dropout(0.2)(x)
+    x = layers.Dense(64)(x)
+    x = layers.Dropout(0.2)(x)
+    return x
+
+
+def histogram_tube(x):
+    """Processing of histogram information using dense neural net."""
+    x = layers.Dense(
+        units=128, activation="relu", kernel_initializer="uniform")(x)
+    x = layers.Dropout(rate=0.01)(x)
+    x = layers.Dense(units=64, activation="relu", kernel_initializer="uniform",
+        kernel_regularizer=regularizers.l1(.01))(x)
+    x = layers.Dropout(rate=0.01)(x)
+    x = layers.BatchNormalization()(x)
+    return x
+
+
+def histogram_merged(t1, t2):
+    """Overall merged processing of histogram information."""
+    t1 = histogram_tube(t1)
+    t2 = histogram_tube(t2)
+    x = layers.concatenate([t1, t2])
+    x = layers.Dense(
+        units=64, activation="relu", kernel_initializer="uniform")(x)
+    return x
+
+
+def create_model_convolutional(xshape, yshape):
+    """Create a convnet model. The data will be feeded as a 3d matrix."""
+    map_input_t1 = layers.Input(shape=xshape[0])
+    map_input_t2 = layers.Input(shape=xshape[1])
+    x = sommap_merged(map_input_t1, map_input_t2)
 
     final = layers.Dense(
         units=yshape, activation="softmax"
@@ -621,61 +502,29 @@ def create_model_convolutional(
     return model
 
 
-def create_model(xshape, yshape, num_inputs=2, classweights=None):
+def create_model_histo(xshape, yshape):
     """Create a simple sequential neural network with multiple inputs."""
 
-    inputs = []
-    input_ends = []
-    for i in range(num_inputs):
-        t_input = layers.Input(shape=xshape)
+    t1_input = layers.Input(shape=xshape[0])
+    t2_input = layers.Input(shape=xshape[1])
 
-        # t_attention = layers.Dense(
-        #     units=xshape[0], activation="softmax",
-        #     kernel_regularizer=regularizers.l2(.01)
-        # )(t_input)
-        # t_multatt = layers.multiply([t_input, t_attention])
-
-        t_a = layers.Dense(
-            units=128, activation="relu", kernel_initializer="uniform",
-            # kernel_regularizer=regularizers.l1(.01)
-        )(t_input)
-        t_ad = layers.Dropout(rate=0.01)(t_a)
-
-        t_b = layers.Dense(
-            units=64, activation="relu", kernel_initializer="uniform",
-            kernel_regularizer=regularizers.l1(.01)
-        )(t_ad)
-        t_bd = layers.Dropout(rate=0.01)(t_b)
-
-        t_end = layers.BatchNormalization(
-        )(t_b)
-
-        input_ends.append(t_end)
-        inputs.append(t_input)
-
-    concat = layers.concatenate(input_ends)
-    m_end = layers.Dense(
-        units=64, activation="relu", kernel_initializer="uniform"
-    )(concat)
-
+    x = histogram_merged(t1_input, t2_input)
     final = layers.Dense(
         units=yshape, activation="softmax"
-    )(m_end)
+    )(x)
 
-    model = models.Model(inputs=inputs, outputs=final)
+    model = models.Model(inputs=[t1_input, t2_input], outputs=final)
 
-    if classweights is None:
-        lossfun = "categorical_crossentropy"
-    else:
-        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
-            weights=classweights)
+    return model
 
-    model.compile(
-        loss=lossfun,
-        optimizer="adam",
-        metrics=["acc"]
-    )
 
+def create_model_fcs(xshape, yshape):
+    """Create direct FCS classification model."""
+    xinput = layers.Input(shape=xshape[0])
+
+    x = fcs_merged(xinput)
+    final = keras.layers.Dense(yshape, activation="softmax")(x)
+    model = models.Model(inputs=[xinput], outputs=final)
     return model
 
 
@@ -700,6 +549,18 @@ def classify(data):
     ytest_mat = binarizer.transform(ytest)
 
     model = naive_bayes.GaussianNB()
+
+    if classweights is None:
+        lossfun = "categorical_crossentropy"
+    else:
+        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
+            weights=classweights)
+
+    model.compile(
+        loss=lossfun,
+        optimizer="adam",
+        metrics=["acc"]
+    )
     model.fit(tr1, ytrain)
 
     model = create_model((tr1.shape[1], ), ytrain_mat.shape[1], classweights=None)
