@@ -24,6 +24,9 @@ import sys
 sys.path.append("../classification")
 from classification import plotting
 from clustering import collection as cc
+from clustering import utils
+
+utils.TMP_PATH = "/home/zhao/tmp"
 
 
 NAME_MAP = {
@@ -60,11 +63,6 @@ def load_histolabels(histopath):
     both_labels = functools.reduce(lambda x, y: x.add(y, fill_value=0), counts)
     return both_labels
 
-FAILING = [
-    ("8e1d66aa75cbaa4b52db72d1b484f4266189e93d", "MZL"),
-    ("3423f7774ead5b407b99f516e6746fbac045f942", "MBL"),
-    ("a7e88b278d40debd118d34ae83d7111fa964e4b6", "normal"),
-]
 
 def load_dataset(mappath, histopath, fcspath):
     """Return dataframe containing columns with filename and labels."""
@@ -86,7 +84,7 @@ def load_dataset(mappath, histopath, fcspath):
             cdict[case.id] = {
                 "group": case.group,
                 "sommappath": str(mappath / f"{case.id}_t{{tube}}.csv"),
-                "fcspath": {k: v[-1].path for k, v in case.tubepaths.items()},
+                "fcspath": {k: utils.get_file_path(v[-1].path) for k, v in case.tubepaths.items()},
                 "histopath": f"{histopath}/tube{{tube}}.csv",
             }
         except KeyError:
@@ -761,14 +759,15 @@ def split_data(data, test_num=0.2):
 
 
 def main():
-    # indata = load_dataset(
-    #     "mll-sommaps/sample_maps/selected5_toroid_s32",
-    #     histopath="../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217",
-    #     fcspath="/home/zhao/tmp/CLL-9F"
-    # )
-    # # save the data
-    # with open("indata_selected5_somgated_fcs.p", "wb") as f:
-    #     pickle.dump(indata, f)
+    indata = load_dataset(
+        "mll-sommaps/sample_maps/selected5_toroid_s32",
+        histopath="../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217",
+        fcspath="s3://mll-flowdata/CLL-9F"
+    )
+    # save the data
+    with open("indata_selected5_somgated_fcs.p", "wb") as f:
+        pickle.dump(indata, f)
+    return
 
     # load the data again
     with open("indata_selected5_somgated_fcs.p", "rb") as f:
