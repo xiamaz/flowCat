@@ -26,6 +26,15 @@ from classification import plotting
 from clustering import collection as cc
 
 
+NAME_MAP = {
+    "HZL": "HCL",
+    "HZLv": "HCLv",
+    "Mantel": "MCL",
+    "Marginal": "MZL",
+    "CLLPL": "PL"
+}
+
+
 COLS = "grcmyk"
 
 def get_tubepaths(label, cases):
@@ -39,41 +48,56 @@ def get_tubepaths(label, cases):
 
 
 def load_histolabels(histopath):
-    dfs = [set(pd.read_csv(f"{histopath}/tube{t}.csv", index_col=0)["label"]) for t in [1, 2]]
-    both_labels = functools.reduce(lambda x, y: x & y, dfs)
+    counts = []
+    for tube in [1, 2]:
+        df = pd.read_csv(
+            f"{histopath}/tube{tube}.csv", index_col=0
+        )
+        df["group"] = df["group"].apply(lambda g: NAME_MAP.get(g, g))
+        df.set_index(["label", "group"], inplace=True)
+        count = pd.DataFrame(1, index=df.index, columns=["count"])
+        counts.append(count)
+    both_labels = functools.reduce(lambda x, y: x.add(y, fill_value=0), counts)
     return both_labels
+
+FAILING = [
+    ("8e1d66aa75cbaa4b52db72d1b484f4266189e93d", "MZL"),
+    ("3423f7774ead5b407b99f516e6746fbac045f942", "MBL"),
+    ("a7e88b278d40debd118d34ae83d7111fa964e4b6", "normal"),
+]
 
 def load_dataset(mappath, histopath, fcspath):
     """Return dataframe containing columns with filename and labels."""
     mappath = pathlib.Path(mappath)
 
-    sommap_labels = set(pd.read_csv(f"{mappath}.csv", index_col=0)["label"])
-    histo_labels = load_histolabels(histopath)
-    both_labels = sommap_labels & histo_labels
+    sommap_labels = pd.read_csv(f"{mappath}.csv", index_col=0).set_index(["label", "group"])
+    sommap_count = pd.DataFrame(1, index=sommap_labels.index, columns=["count"])
+    histo_count = load_histolabels(histopath)
+    both_count = sommap_count.add(histo_count, fill_value=0)
+    both_count = both_count.loc[both_count["count"] == 3, :]
 
-    assert both_labels, "No data having both histo and sommap info."
+    assert not both_count.empty, "No data having both histo and sommap info."
 
     cdict = {}
     cases = cc.CaseCollection(fcspath, tubes=[1, 2])
     for case in cases:
-        if case.id not in both_labels:
+        try:
+            assert both_count.loc[(case.id, case.group), "count"] == 3, "Not all data available."
+            cdict[case.id] = {
+                "group": case.group,
+                "sommappath": str(mappath / f"{case.id}_t{{tube}}.csv"),
+                "fcspath": {k: v[-1].path for k, v in case.tubepaths.items()},
+                "histopath": f"{histopath}/tube{{tube}}.csv",
+            }
+        except KeyError:
+            print(f"Skipped {case.group}")
             continue
-        cdict[case.id] = {
-            "group": case.group,
-            "sommappath": str(mappath / f"{case.id}_t{{tube}}.csv"),
-            "fcspath": {k: v[-1].path for k, v in case.tubepaths.items()},
-            "histopath": f"{histopath}/tube{{tube}}.csv",
-        }
+        except AssertionError:
+            print("WTF")
+            raise
 
     dataset = pd.DataFrame.from_dict(cdict, orient="index")
     return dataset
-
-
-def subtract_ref_data(data, references):
-    data["data"] = data["data"].apply(
-        lambda t: [r - a for r, a in zip(references, t)]
-    )
-    return data
 
 
 def normalize_data(data):
@@ -143,8 +167,9 @@ class CountLoader(LoaderMixin):
     @staticmethod
     def read_dataframe(path, tube):
         dfdata = pd.read_csv(path.format(tube=tube), index_col=0)
-        non_number_cols = [c for c in dfdata if not c.isdigit()]
-        dfdata.set_index(dfdata["label"], inplace=True)
+        dfdata["group"] = dfdata["group"].apply(lambda g: NAME_MAP.get(g, g))
+        dfdata.set_index(["label", "group"], inplace=True)
+        non_number_cols = [c for c in dfdata.columns if not c.isdigit()]
         dfdata.drop(non_number_cols, inplace=True, axis=1)
         return dfdata
 
@@ -176,10 +201,13 @@ class CountLoader(LoaderMixin):
             if self.data is None:
                 self.data = self.read_dataframe(
                     data[self.datacol].iloc[0], self.tube)
-            sel_rows = self.data.loc[data.index, :]
+            label_group = [x for x in zip(data.index, data["orig_group"])]
+            sel_rows = self.data.loc[label_group, :]
+            missing = sel_rows.loc[sel_rows["1"].isna(), :]
+            if not missing.empty:
+                print(missing)
+                raise RuntimeError()
             counts = sel_rows.values
-            print(data.shape, sel_rows.shape)
-            print(sel_rows)
         return counts
 
 
@@ -200,7 +228,7 @@ class FCSLoader(LoaderMixin):
 
     @property
     def shape(self):
-        return (self.subsample, len(self.channels))
+        return (self.subsample * len(self.tubes), len(self.channels))
 
     @staticmethod
     def _load_data(pathdict, subsample, tubes, channels):
@@ -281,20 +309,21 @@ class Map2DLoader(LoaderMixin):
         return np.stack(map_list)
 
 
-class SOMMapDataset(LoaderMixin):
+class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
     """Dataset for creating and yielding batches of data for keras model.
 
     Data can be generated by random draw or alternatively in sequence.
     """
 
     def __init__(
-            self, data,
+            self, data, xoutputs,
             batch_size=32, draw_method="shuffle", epoch_size=None,
-            groups=None, toroidal=False,
+            groups=None, toroidal=False
     ):
         """
         Args:
             data: DataFrame containing labels and paths to data.
+            xoutputs: List of output generator objects taking batches of the filepath dataframe.
             batch_size: Number of cases in a single batch.
             draw_method: Method to select cases in a single batch.
                 valid: [
@@ -329,6 +358,8 @@ class SOMMapDataset(LoaderMixin):
         if groups is None:
             groups = list(self._data["group"].unique())
 
+        self.groups = groups
+
         self.binarizer = preprocessing.LabelBinarizer()
         self.binarizer.fit(groups)
 
@@ -336,19 +367,7 @@ class SOMMapDataset(LoaderMixin):
             pad_width = 1
         else:
             pad_width = 0
-
-        self._xoutputs = [
-            Map2DLoader.create_inferred(
-                self._data, tube=1, pad_width=pad_width, sel_count=None),
-            Map2DLoader.create_inferred(
-                self._data, tube=2, pad_width=pad_width, sel_count=None),
-            # CountLoader.create_inferred(
-            #     self._data, tube=1, version="dataframe"),
-            # CountLoader.create_inferred(
-            #     self._data, tube=2, version="dataframe"),
-            FCSLoader.create_inferred(
-                self._data, tubes=[1, 2], subsample=200),
-        ]
+        self._xoutputs = xoutputs
 
     @property
     def xshape(self):
@@ -489,15 +508,15 @@ def histogram_merged(t1, t2):
 
 def create_model_convolutional(xshape, yshape):
     """Create a convnet model. The data will be feeded as a 3d matrix."""
-    map_input_t1 = layers.Input(shape=xshape[0])
-    map_input_t2 = layers.Input(shape=xshape[1])
-    x = sommap_merged(map_input_t1, map_input_t2)
+    t1 = layers.Input(shape=xshape[0])
+    t2 = layers.Input(shape=xshape[1])
+    x = sommap_merged(t1, t2)
 
     final = layers.Dense(
         units=yshape, activation="softmax"
     )(x)
 
-    model = models.Model(inputs=inputs, outputs=final)
+    model = models.Model(inputs=[t1, t2], outputs=final)
 
     return model
 
@@ -528,74 +547,57 @@ def create_model_fcs(xshape, yshape):
     return model
 
 
-def classify(data):
+def classify_histogram(train, test, groups=None, weights=None, *args, **kwargs):
     """Extremely simple sequential neural network with two
     inputs for the 10x10x12 data
     """
-    groups = list(data["group"].unique())
+    xoutputs = [
+        CountLoader.create_inferred(
+            train, tube=1, version="dataframe"),
+        CountLoader.create_inferred(
+            train, tube=2, version="dataframe"),
+    ]
 
-    train, test = model_selection.train_test_split(
-        data, train_size=0.8, stratify=data["group"])
+    trainseq = SOMMapDataset(train, xoutputs, batch_size=64, draw_method="shuffle", groups=groups)
+    testseq = SOMMapDataset(test, xoutputs, batch_size=128, draw_method="sequential", groups=groups)
 
-    train = pd.concat([train, test])
+    model = create_model_histo(*trainseq.shape)
 
-    tr1, tr2, ytrain = reshape_dataset(train)
-
-    binarizer = preprocessing.LabelBinarizer()
-    binarizer.fit(groups)
-    ytrain_mat = binarizer.transform(ytrain)
-
-    te1, te2, ytest = reshape_dataset(test)
-    ytest_mat = binarizer.transform(ytest)
-
-    model = naive_bayes.GaussianNB()
-
-    if classweights is None:
-        lossfun = "categorical_crossentropy"
-    else:
-        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
-            weights=classweights)
-
-    model.compile(
-        loss=lossfun,
-        optimizer="adam",
-        metrics=["acc"]
-    )
-    model.fit(tr1, ytrain)
-
-    model = create_model((tr1.shape[1], ), ytrain_mat.shape[1], classweights=None)
-    model.fit([tr1, tr2], ytrain_mat, epochs=20, batch_size=16, validation_split=0.2)
-    pred = model.predict([te1, te2], batch_size=128)
-    pred = binarizer.inverse_transform(pred)
-
-    res = model.score(te1, ytest)
-    print(res)
-    pred = model.predict(te1)
-
-    print("F1: ", metrics.f1_score(ytest, pred, average="micro"))
-
-    confusion = metrics.confusion_matrix(ytest, pred, binarizer.classes_,)
-    stats = {"mcc": metrics.matthews_corrcoef(ytest, pred)}
-    return stats, confusion, binarizer.classes_
-
-
-def classify_convolutional(
-        train, test, m=10, n=10, weights=None, toroidal=False, groups=None,
-        path="mll-sommaps/models", name="0"
-):
-    if groups is None:
-        groups = list(data["group"].unique())
-
-    trainseq = SOMMapDataset(train, batch_size=64, draw_method="shuffle", groups=groups)
-    testseq = SOMMapDataset(test, batch_size=128, draw_method="sequential", groups=groups)
-
-    model = create_model_convolutional(trainseq.xshape, trainseq.yshape)
     if weights is None:
         lossfun = "categorical_crossentropy"
     else:
         lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
             weights=weights)
+    model.compile(
+        loss=lossfun,
+        optimizer="adam",
+        metrics=["acc"]
+    )
+    return run_save_model(model, trainseq, testseq, *args, **kwargs)
 
+
+def classify_convolutional(
+        train, test, weights=None, toroidal=False, groups=None, *args, **kwargs
+):
+    # wrap pad input matrix if we use toroidal input data
+    pad_width = 1 if toroidal else 0
+
+    xoutputs = [
+        Map2DLoader.create_inferred(
+            train, tube=1, pad_width=pad_width, sel_count=None),
+        Map2DLoader.create_inferred(
+            train, tube=2, pad_width=pad_width, sel_count=None),
+    ]
+    trainseq = SOMMapDataset(train, xoutputs, batch_size=64, draw_method="shuffle", groups=groups)
+    testseq = SOMMapDataset(test, xoutputs, batch_size=128, draw_method="sequential", groups=groups)
+
+    model = create_model_convolutional(*trainseq.shape)
+
+    if weights is None:
+        lossfun = "categorical_crossentropy"
+    else:
+        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
+            weights=weights)
     model.compile(
         loss=lossfun,
         optimizer=optimizers.Adam(
@@ -603,7 +605,36 @@ def classify_convolutional(
         ),
         metrics=["acc"]
     )
-    # model = create_resnet(tr1[0].shape, len(groups), classweights=weights)
+    return run_save_model(model, trainseq, testseq, *args, **kwargs)
+
+
+def classify_fcs(train, test, weights=None, groups=None, *args, **kwargs):
+    xoutputs = [
+        FCSLoader.create_inferred(train, tubes=[1, 2], subsample=200),
+    ]
+    trainseq = SOMMapDataset(train, xoutputs, batch_size=16, draw_method="shuffle", groups=groups)
+    testseq = SOMMapDataset(test, xoutputs, batch_size=16, draw_method="shuffle", groups=groups)
+
+    model = create_model_fcs(*trainseq.shape)
+
+    if weights is None:
+        lossfun = "categorical_crossentropy"
+    else:
+        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
+            weights=weights)
+    model.compile(
+        loss=lossfun,
+        optimizer=optimizers.Adam(
+            lr=0.0001, decay=0.0, epsilon=0.00001
+        ),
+        metrics=["acc"]
+    )
+    return run_save_model(model, trainseq, testseq, *args, **kwargs)
+
+
+def run_save_model(model, trainseq, testseq, path="mll-sommaps/models", name="0"):
+    """Run and predict using the given model. Also save the model in the given
+    path with specified name."""
     history = model.fit_generator(
         trainseq, epochs=100,
         callbacks=[
@@ -621,8 +652,9 @@ def classify_convolutional(
         #     7: 1.0,  # normal
         # }
         workers=4,
+        use_multiprocessing=True,
     )
-    pred_mat = model.predict_generator(testseq, workers=4)
+    pred_mat = model.predict_generator(testseq, workers=4, use_multiprocessing=True)
 
     # save the model weights after training
     modelpath = pathlib.Path(path)
@@ -632,7 +664,7 @@ def classify_convolutional(
         pickle.dump(history.history, hfile)
 
     pred_df = pd.DataFrame(
-        pred_mat, columns=groups, index=data.loc[test_index, "label"])
+        pred_mat, columns=trainseq.groups, index=data.loc[test_index, "label"])
     pred_df["correct"] = ytest.tolist()
     pred_df.to_csv(modelpath / f"predictions_{name}.csv")
     create_metrics_from_pred(pred_df)
@@ -706,9 +738,29 @@ def create_weight_matrix(group_map, groups, base_weight=5):
     return weights
 
 
-def main():
-    map_size = 32
+def split_data(data, test_num=0.2):
+    """Split data in stratified fashion by group.
+    Args:
+        data: Dataset to be split. Label should be contained in 'group' column.
+        test_num: Ratio of samples in test per group or absolute number of samples in each group for test.
+    Returns:
+        (train, test) with same columns as input data.
+    """
+    grouped = data.groupby("group")
+    if test_num < 1:
+        test = grouped.apply(lambda d: d.sample(frac=test_num)).reset_index(level=0, drop=True)
+    else:
+        group_sizes = grouped.size()
+        if any(group_sizes <= test_num):
+            insuff = group_sizes[group_sizes <= test_num]
+            print("Insufficient sizes: ", insuff)
+            raise RuntimeError("Some cohorts are too small.")
+        test = grouped.apply(lambda d: d.sample(n=test_num)).reset_index(level=0, drop=True)
+    train = data.drop(test.index, axis=0)
+    return train, test
 
+
+def main():
     # indata = load_dataset(
     #     "mll-sommaps/sample_maps/selected5_toroid_s32",
     #     histopath="../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217",
@@ -717,16 +769,10 @@ def main():
     # # save the data
     # with open("indata_selected5_somgated_fcs.p", "wb") as f:
     #     pickle.dump(indata, f)
-    # return
 
     # load the data again
     with open("indata_selected5_somgated_fcs.p", "rb") as f:
         indata = pickle.load(f)
-
-    test = SOMMapDataset(indata, draw_method="shuffle", epoch_size=1000)
-    print("Output shapes: ", test.shape)
-    print("Sample output: ", test[0])
-    return
 
     # groups = ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"]
     # 8-class
@@ -746,15 +792,16 @@ def main():
         "MCL": "MP",
         "PL": "MP",
     }
+    indata["orig_group"] = indata["group"]
     indata = modify_groups(indata, mapping=group_map)
     indata = indata.loc[indata["group"].isin(groups), :]
-    indata.reset_index(drop=True, inplace=True)
+    # indata.reset_index(drop=True, inplace=True)
+
     # Group weights are a dict mapping tuples to tuples. Weights are for
     # false classifications in the given direction.
     # (a, b) --> (a>b, b>a)
     group_weights = {
         ("normal", None): (10.0, 100.0),
-        ("MBL", "CLL"): (2, 2),
         ("MZL", "LPL"): (2, 2),
         ("MCL", "PL"): (2, 2),
         ("FL", "LPL"): (3, 5),
@@ -769,12 +816,19 @@ def main():
     validation = "holdout"
     name = "selected5_toroid_8class_60test_ep100"
 
-    train, test = split_data(indata, num=60)
+    train, test = split_data(indata, test_num=60)
 
-    # n_metrics, n_confusion, n_groups = classify(normdata)
-    pred_dfs = classify_convolutional(
-        train, test, m=map_size, n=map_size, toroidal=False, weights=weights,
-        groups=groups, path=f"mll-sommaps/models/{name}")
+    # pred_dfs = classify_histogram(
+    #     train, test, weights=weights, groups=groups, path=f"mll-sommaps/models/{name}",
+    # )
+
+    # pred_dfs = classify_convolutional(
+    #     train, test, toroidal=False, weights=weights,
+    #     groups=groups, path=f"mll-sommaps/models/{name}")
+
+    pred_dfs = classify_fcs(
+        train, test, groups=groups, path=f"mll-sommaps/models/{name}")
+    return
 
     # pred_df_8class = pd.read_csv(
     #     "mll-sommaps/models/cllall1_planar_8class_60test_ep100/predictions_0.csv",
