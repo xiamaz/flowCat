@@ -51,6 +51,8 @@ def load_dataset(mappath, histopath, fcspath):
     histo_labels = load_histolabels(histopath)
     both_labels = sommap_labels & histo_labels
 
+    assert both_labels, "No data having both histo and sommap info."
+
     cdict = {}
     cases = cc.CaseCollection(fcspath, tubes=[1, 2])
     for case in cases:
