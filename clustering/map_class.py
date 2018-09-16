@@ -1,6 +1,7 @@
 import pickle
 import pathlib
 import functools
+import hashlib
 
 import numpy as np
 import pandas as pd
@@ -26,8 +27,10 @@ from classification import plotting
 from clustering import collection as cc
 from clustering import utils
 
+
 utils.TMP_PATH = "/home/zhao/tmp"
 
+CACHEDIR = "cache"
 
 NAME_MAP = {
     "HZL": "HCL",
@@ -36,7 +39,6 @@ NAME_MAP = {
     "Marginal": "MZL",
     "CLLPL": "PL"
 }
-
 
 COLS = "grcmyk"
 
@@ -209,12 +211,50 @@ class CountLoader(LoaderMixin):
         return counts
 
 
+def args_hasher(*args, **kwargs):
+    """Use at own discretion. Will simply concatenate all input args as
+    strings to generate keys."""
+    h = hashlib.blake2b()
+    hashstr = "".join(str(a) for a in args) + "".join(str(k) + str(v) for k, v in kwargs.items())
+    h.update(hashstr.encode())
+    return h.hexdigest()
+
+
+def disk_cache(fun):
+
+    cachepath = pathlib.Path(CACHEDIR) / fun.__name__
+    cachepath.mkdir(parents=True, exist_ok=True)
+
+    @functools.wraps(fun)
+    def wrapper(*args, **kwargs):
+        hashed = args_hasher(*args, **kwargs)
+        filepath = cachepath / hashed
+        if filepath.exists():
+            with open(filepath, "rb") as f:
+                result = pickle.load(f)
+        else:
+            result = fun(*args, **kwargs)
+            with open(filepath, "wb") as f:
+                pickle.dump(result, f)
+        return result
+
+    return wrapper
+
+
+
 class FCSLoader(LoaderMixin):
     """Directly load FCS data associated with the given ids."""
     def __init__(self, tubes, channels=None, subsample=200):
         self.tubes = tubes
         self.channels = channels
         self.subsample = subsample
+
+    @staticmethod
+    def hash_input(path, subsample, tubes, channels):
+        """Hash the given information to generate ids for caching."""
+        h.update(str(path) + str(tube) + str(channels) + str(subsample))
+        hashed = h.hexdigest()
+        return hashed
 
     @classmethod
     def create_inferred(cls, data, tubes, subsample=200, channels=None, *args, **kwargs):
@@ -229,7 +269,8 @@ class FCSLoader(LoaderMixin):
         return (self.subsample * len(self.tubes), len(self.channels))
 
     @staticmethod
-    def _load_data(pathdict, subsample, tubes, channels):
+    @disk_cache
+    def _load_data(pathdict, subsample, tubes, channels=None):
         datas = []
         for tube in tubes:
             _, data = fcsparser.parse(pathdict[tube], data_set=0, encoding="latin-1")
@@ -250,14 +291,16 @@ class FCSLoader(LoaderMixin):
             datas.append(data)
 
         merged = pd.concat(datas, sort=False)
-        return merged.fillna(0)
+        merged = merged.fillna(0)
+        if channels:
+            return merged[channels].values
+        else:
+            return merged
 
     def __call__(self, data):
         mapped_fcs = []
         for path in data[self.fcscol]:
-            mapped_fcs.append(self._load_data(
-                path, self.subsample, self.tubes, self.channels
-            )[self.channels].values)
+            mapped_fcs.append(self._load_data(path, self.subsample, self.tubes, self.channels))
         return np.stack(mapped_fcs)
 
 
@@ -383,6 +426,14 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
         """Return tuple of xshape and yshape."""
         return self.xshape, self.yshape
 
+    @property
+    def labels(self):
+        return self._data.index.values
+
+    @property
+    def ylabels(self):
+        return self._data["group"]
+
     def __len__(self):
         """Return the number of batches generated."""
         return int(np.ceil(self.epoch_size / float(self.batch_size)))
@@ -475,6 +526,10 @@ def fcs_merged(x):
     """1x1 convolutions on raw FCS data."""
     x = layers.Conv1D(64, 1, strides=1, activation="relu")(x)
     x = layers.GlobalAveragePooling1D()(x)
+    x = layers.Dense(64)(x)
+    x = layers.Dropout(0.2)(x)
+    x = layers.Dense(64)(x)
+    x = layers.Dropout(0.2)(x)
     x = layers.Dense(64)(x)
     x = layers.Dropout(0.2)(x)
     x = layers.Dense(64)(x)
@@ -610,8 +665,10 @@ def classify_fcs(train, test, weights=None, groups=None, *args, **kwargs):
     xoutputs = [
         FCSLoader.create_inferred(train, tubes=[1, 2], subsample=200),
     ]
-    trainseq = SOMMapDataset(train, xoutputs, batch_size=16, draw_method="shuffle", groups=groups)
-    testseq = SOMMapDataset(test, xoutputs, batch_size=16, draw_method="shuffle", groups=groups)
+    trainseq = SOMMapDataset(
+        train, xoutputs, batch_size=16, draw_method="balanced", groups=groups, epoch_size=8000)
+    testseq = SOMMapDataset(
+        test, xoutputs, batch_size=16, draw_method="sequential", groups=groups)
 
     model = create_model_fcs(*trainseq.shape)
 
@@ -634,7 +691,7 @@ def run_save_model(model, trainseq, testseq, path="mll-sommaps/models", name="0"
     """Run and predict using the given model. Also save the model in the given
     path with specified name."""
     history = model.fit_generator(
-        trainseq, epochs=100,
+        trainseq, epochs=1000,
         callbacks=[
             # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min")
         ],
@@ -662,8 +719,8 @@ def run_save_model(model, trainseq, testseq, path="mll-sommaps/models", name="0"
         pickle.dump(history.history, hfile)
 
     pred_df = pd.DataFrame(
-        pred_mat, columns=trainseq.groups, index=data.loc[test_index, "label"])
-    pred_df["correct"] = ytest.tolist()
+        pred_mat, columns=trainseq.groups, index=testseq.labels)
+    pred_df["correct"] = testseq.ylabels
     pred_df.to_csv(modelpath / f"predictions_{name}.csv")
     create_metrics_from_pred(pred_df)
     return pred_df
@@ -759,15 +816,15 @@ def split_data(data, test_num=0.2):
 
 
 def main():
-    indata = load_dataset(
-        "mll-sommaps/sample_maps/selected5_toroid_s32",
-        histopath="../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217",
-        fcspath="s3://mll-flowdata/CLL-9F"
-    )
-    # save the data
-    with open("indata_selected5_somgated_fcs.p", "wb") as f:
-        pickle.dump(indata, f)
-    return
+    # indata = load_dataset(
+    #     "mll-sommaps/sample_maps/selected5_toroid_s32",
+    #     histopath="../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217",
+    #     fcspath="s3://mll-flowdata/CLL-9F"
+    # )
+    # # save the data
+    # with open("indata_selected5_somgated_fcs.p", "wb") as f:
+    #     pickle.dump(indata, f)
+    # return
 
     # load the data again
     with open("indata_selected5_somgated_fcs.p", "rb") as f:
