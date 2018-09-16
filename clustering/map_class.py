@@ -1,3 +1,4 @@
+import os
 import pickle
 import pathlib
 import functools
@@ -27,8 +28,8 @@ from classification import plotting
 from clustering import collection as cc
 from clustering import utils
 
-
-utils.TMP_PATH = "/home/zhao/tmp"
+# always put the tmp folder in the home directory for now
+utils.TMP_PATH = f"{os.environ['HOME']}/tmp"
 
 CACHEDIR = "cache"
 
