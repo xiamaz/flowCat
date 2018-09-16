@@ -332,7 +332,9 @@ class Map2DLoader(LoaderMixin):
     @property
     def shape(self):
         return (
-            self.gridsize, self.gridsize, len(self.channels) + bool(self.sel_count)
+            self.gridsize + self.pad_width * 2,
+            self.gridsize + self.pad_width * 2,
+            len(self.channels) + bool(self.sel_count)
         )
 
     def __call__(self, data):
@@ -389,7 +391,7 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
         elif self.draw_method == "balanced":
             sample_num = epoch_size or len(data)
             self._data = data.groupby("group").apply(lambda x: x.sample(
-                n=sample_num, replace=True)).reset_index(drop=True).sample(frac=1)
+                n=sample_num, replace=True)).reset_index(0, drop=True).sample(frac=1)
         else:
             raise RuntimeError(
                 f"Unknown draw method: {self.draw_method}. "
@@ -495,10 +497,13 @@ def sommap_tube(x):
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
 
+    x = layers.Conv2D(filters=64, kernel_size=1, activation="relu", strides=1)(x)
     x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=1)(x)
-    x = layers.GlobalMaxPooling2D()(x)
+    x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
+
+    x = layers.Flatten()(x)
     return x
 
 
@@ -509,31 +514,30 @@ def sommap_merged(t1, t2):
     x = layers.concatenate([t1, t2])
 
     x = layers.Dense(
-        units=256, activation="relu", kernel_initializer="uniform",
+        units=64, activation="relu", kernel_initializer="uniform",
         kernel_regularizer=regularizers.l2(0.001)
     )(x)
-    x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
     x = layers.Dense(
-        units=128, activation="relu", kernel_initializer="uniform",
+        units=64, activation="relu", kernel_initializer="uniform",
         kernel_regularizer=regularizers.l2(0.001)
     )(x)
-    x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
     return x
 
 
 def fcs_merged(x):
     """1x1 convolutions on raw FCS data."""
-    x = layers.Conv1D(64, 1, strides=1, activation="relu")(x)
+    x = layers.Conv1D(128, 1, strides=1, activation="relu")(x)
     x = layers.GlobalAveragePooling1D()(x)
+    x = layers.BatchNormalization()(x)
     x = layers.Dense(64)(x)
     x = layers.Dropout(0.2)(x)
     x = layers.Dense(64)(x)
     x = layers.Dropout(0.2)(x)
-    x = layers.Dense(64)(x)
+    x = layers.Dense(32)(x)
     x = layers.Dropout(0.2)(x)
-    x = layers.Dense(64)(x)
+    x = layers.Dense(32)(x)
     x = layers.Dropout(0.2)(x)
     return x
 
@@ -601,6 +605,41 @@ def create_model_fcs(xshape, yshape):
     return model
 
 
+def create_model_mapfcs(xshape, yshape):
+    """Create model combining fcs processing and map cnn."""
+    fcsinput = layers.Input(shape=xshape[0])
+    m1input = layers.Input(shape=xshape[1])
+    m2input = layers.Input(shape=xshape[2])
+
+    fm = fcs_merged(fcsinput)
+    mm = sommap_merged(m1input, m2input)
+    x = layers.concatenate([fm, mm])
+    final = layers.Dense(yshape, activation="softmax")(x)
+
+    model = models.Model(inputs=[fcsinput, m1input, m2input], outputs=final)
+    return model
+
+
+def create_model_all(xshape, yshape):
+    """Create model combining fcs, histogram and sommap information."""
+    fcsinput = layers.Input(shape=xshape[0])
+    m1input = layers.Input(shape=xshape[1])
+    m2input = layers.Input(shape=xshape[2])
+    t1input = layers.Input(shape=xshape[3])
+    t2input = layers.Input(shape=xshape[4])
+
+    fm = fcs_merged(fcsinput)
+    mm = sommap_merged(m1input, m2input)
+    hm = histogram_merged(t1input, t2input)
+    x = layers.concatenate([fm, mm, hm])
+    x = layers.Dense(32)(x)
+    final = layers.Dense(yshape, activation="softmax")(x)
+
+    model = models.Model(
+        inputs=[fcsinput, m1input, m2input, t1input, t2input], outputs=final)
+    return model
+
+
 def classify_histogram(train, test, groups=None, weights=None, *args, **kwargs):
     """Extremely simple sequential neural network with two
     inputs for the 10x10x12 data
@@ -612,7 +651,7 @@ def classify_histogram(train, test, groups=None, weights=None, *args, **kwargs):
             train, tube=2, version="dataframe"),
     ]
 
-    trainseq = SOMMapDataset(train, xoutputs, batch_size=64, draw_method="shuffle", groups=groups)
+    trainseq = SOMMapDataset(train, xoutputs, batch_size=64, draw_method="balanced", groups=groups, epoch_size=8000)
     testseq = SOMMapDataset(test, xoutputs, batch_size=128, draw_method="sequential", groups=groups)
 
     model = create_model_histo(*trainseq.shape)
@@ -681,7 +720,79 @@ def classify_fcs(train, test, weights=None, groups=None, *args, **kwargs):
     model.compile(
         loss=lossfun,
         optimizer=optimizers.Adam(
-            lr=0.0001, decay=0.0, epsilon=0.00001
+            lr=0.0001, decay=0.0, epsilon=0.001
+        ),
+        metrics=["acc"]
+    )
+    return run_save_model(model, trainseq, testseq, *args, **kwargs)
+
+
+def classify_mapfcs(
+        train, test, weights=None, toroidal=False, groups=None, *args, **kwargs
+):
+    pad_width = 1 if toroidal else 0
+    xoutputs = [
+        FCSLoader.create_inferred(train, tubes=[1, 2], subsample=200),
+        Map2DLoader.create_inferred(
+            train, tube=1, pad_width=pad_width, sel_count=None),
+        Map2DLoader.create_inferred(
+            train, tube=2, pad_width=pad_width, sel_count=None),
+    ]
+    trainseq = SOMMapDataset(
+        train, xoutputs, batch_size=32, draw_method="balanced", groups=groups,
+        epoch_size=8000)
+    testseq = SOMMapDataset(
+        test, xoutputs, batch_size=32, draw_method="sequential", groups=groups)
+
+    model = create_model_mapfcs(*trainseq.shape)
+
+    if weights is None:
+        lossfun = "categorical_crossentropy"
+    else:
+        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
+            weights=weights)
+    model.compile(
+        loss=lossfun,
+        optimizer=optimizers.Adam(
+            lr=0.0001, decay=0.0, epsilon=0.001
+        ),
+        metrics=["acc"]
+    )
+    return run_save_model(model, trainseq, testseq, *args, **kwargs)
+
+
+def classify_all(
+        train, test, weights=None, toroidal=False, groups=None, *args, **kwargs
+):
+    pad_width = 1 if toroidal else 0
+    xoutputs = [
+        FCSLoader.create_inferred(train, tubes=[1, 2], subsample=200),
+        Map2DLoader.create_inferred(
+            train, tube=1, pad_width=pad_width, sel_count=None),
+        Map2DLoader.create_inferred(
+            train, tube=2, pad_width=pad_width, sel_count=None),
+        CountLoader.create_inferred(
+            train, tube=1, version="dataframe"),
+        CountLoader.create_inferred(
+            train, tube=2, version="dataframe"),
+    ]
+    trainseq = SOMMapDataset(
+        train, xoutputs, batch_size=32, draw_method="balanced", groups=groups,
+        epoch_size=8000)
+    testseq = SOMMapDataset(
+        test, xoutputs, batch_size=32, draw_method="sequential", groups=groups)
+
+    model = create_model_all(*trainseq.shape)
+
+    if weights is None:
+        lossfun = "categorical_crossentropy"
+    else:
+        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
+            weights=weights)
+    model.compile(
+        loss=lossfun,
+        optimizer=optimizers.Adam(
+            lr=0.0001, decay=0.0, epsilon=0.001
         ),
         metrics=["acc"]
     )
@@ -871,7 +982,7 @@ def main():
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "selected5_toroid_8class_60test_ep100"
+    name = "all_ensemble"
 
     train, test = split_data(indata, test_num=60)
 
@@ -880,12 +991,19 @@ def main():
     # )
 
     # pred_dfs = classify_convolutional(
-    #     train, test, toroidal=False, weights=weights,
+    #     train, test, toroidal=True, weights=weights,
     #     groups=groups, path=f"mll-sommaps/models/{name}")
 
-    pred_dfs = classify_fcs(
-        train, test, groups=groups, path=f"mll-sommaps/models/{name}")
-    return
+    # pred_dfs = classify_fcs(
+    #     train, test, groups=groups, path=f"mll-sommaps/models/{name}")
+
+    # pred_dfs = classify_mapfcs(
+    #     train, test, toroidal=True, weights=weights,
+    #     groups=groups, path=f"mll-sommaps/models/{name}")
+
+    pred_dfs = classify_all(
+        train, test, toroidal=True, weights=weights,
+        groups=groups, path=f"mll-sommaps/models/{name}")
 
     # pred_df_8class = pd.read_csv(
     #     "mll-sommaps/models/cllall1_planar_8class_60test_ep100/predictions_0.csv",
