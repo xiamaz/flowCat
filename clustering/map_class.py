@@ -539,24 +539,26 @@ def sommap_merged(t1, t2):
 
 def fcs_merged(x):
     """1x1 convolutions on raw FCS data."""
-    xa = layers.Conv1D(64, 1, strides=1, activation="relu")(x)
+    xa = layers.Conv1D(32, 1, strides=1, activation="elu")(x)
+    xa = layers.Conv1D(16, 1, strides=1, activation="elu")(x)
     xa = layers.GlobalAveragePooling1D()(xa)
     # xa = layers.BatchNormalization()(xa)
 
-    xb = layers.Conv1D(16, 1, strides=1, activation="relu")(x)
+    xb = layers.Conv1D(16, 1, strides=1, activation="elu")(x)
+    xb = layers.Conv1D(8, 1, strides=1, activation="elu")(x)
     xb = layers.GlobalMaxPooling1D()(xb)
-    xb = layers.BatchNormalization()(xb)
+    # xb = layers.BatchNormalization()(xb)
 
     x = layers.concatenate([xa, xb])
 
-    x = layers.Dense(32)(x)
-    x = layers.Dropout(0.2)(x)
-    x = layers.Dense(32)(x)
-    x = layers.Dropout(0.2)(x)
-    x = layers.Dense(16)(x)
-    x = layers.Dropout(0.2)(x)
-    x = layers.Dense(16)(x)
-    x = layers.Dropout(0.2)(x)
+    x = layers.Dense(64, activation="elu")(x)
+    # x = layers.Dropout(0.2)(x)
+    x = layers.Dense(32, activation="elu")(x)
+    # x = layers.Dropout(0.2)(x)
+    # x = layers.Dense(16)(x)
+    # x = layers.Dropout(0.2)(x)
+    # x = layers.Dense(16)(x)
+    # x = layers.Dropout(0.2)(x)
     return x
 
 
@@ -877,7 +879,7 @@ def run_save_model(model, trainseq, testseq, path="mll-sommaps/models", name="0"
     """Run and predict using the given model. Also save the model in the given
     path with specified name."""
     history = model.fit_generator(
-        trainseq, epochs=30,
+        trainseq, epochs=100,
         callbacks=[
             # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min")
         ],
@@ -1064,7 +1066,7 @@ def main():
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "threemodel"
+    name = "fcsmarkus"
 
     train, test = split_data(indata, test_num=0.2)
 
@@ -1080,12 +1082,12 @@ def main():
     #     train, test, toroidal=True, weights=weights,
     #     groups=groups, path=f"mll-sommaps/models/{name}")
 
-    # pred_df = classify_fcs(
-    #     train, test, groups=groups, path=f"mll-sommaps/models/{name}")
+    pred_df = classify_fcs(
+        train, test, groups=groups, path=f"mll-sommaps/models/{name}")
 
-    pred_df = classify_mapfcs(
-        train, test, toroidal=True, weights=weights,
-        groups=groups, path=f"mll-sommaps/models/{name}")
+    # pred_df = classify_mapfcs(
+    #     train, test, toroidal=True, weights=weights,
+    #     groups=groups, path=f"mll-sommaps/models/{name}")
 
     # pred_df = classify_all(
     #     train, test, toroidal=True, weights=weights,
