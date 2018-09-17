@@ -565,13 +565,13 @@ def fcs_merged(x):
 def histogram_tube(x):
     """Processing of histogram information using dense neural net."""
     x = layers.Dense(
-        units=32, activation="relu", kernel_initializer="uniform")(x)
-    x = layers.Dropout(rate=0.01)(x)
+        units=16, activation="elu", kernel_initializer="uniform")(x)
+    # x = layers.Dropout(rate=0.01)(x)
     x = layers.Dense(
-        units=32, activation="relu", kernel_initializer="uniform",
+        units=16, activation="elu",
         kernel_regularizer=regularizers.l1(.01))(x)
-    x = layers.Dropout(rate=0.01)(x)
-    x = layers.BatchNormalization()(x)
+    # x = layers.Dropout(rate=0.01)(x)
+    # x = layers.BatchNormalization()(x)
     return x
 
 
@@ -580,8 +580,7 @@ def histogram_merged(t1, t2):
     t1 = histogram_tube(t1)
     t2 = histogram_tube(t2)
     x = layers.concatenate([t1, t2])
-    x = layers.Dense(
-        units=16, activation="relu", kernel_initializer="uniform")(x)
+    x = layers.Dense(units=16, activation="elu")(x)
     return x
 
 
@@ -1045,6 +1044,9 @@ def main():
         "PL": "MP",
     }
 
+    groups = groups6
+    group_map = g6_map
+
     indata["orig_group"] = indata["group"]
     indata = modify_groups(indata, mapping=group_map)
     indata = indata.loc[indata["group"].isin(groups), :]
@@ -1066,13 +1068,13 @@ def main():
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "fcsmarkus"
+    name = "orighisto_direct6"
 
     train, test = split_data(indata, test_num=0.2)
 
-    # pred_df = classify_histogram(
-    #     train, test, weights=weights, groups=groups, path=f"mll-sommaps/models/{name}",
-    # )
+    pred_df = classify_histogram(
+        train, test, weights=weights, groups=groups, path=f"mll-sommaps/models/{name}",
+    )
 
     # pred_df = classify_convolutional(
     #     train, test, toroidal=True, weights=weights,
@@ -1082,8 +1084,8 @@ def main():
     #     train, test, toroidal=True, weights=weights,
     #     groups=groups, path=f"mll-sommaps/models/{name}")
 
-    pred_df = classify_fcs(
-        train, test, groups=groups, path=f"mll-sommaps/models/{name}")
+    # pred_df = classify_fcs(
+    #     train, test, groups=groups, path=f"mll-sommaps/models/{name}")
 
     # pred_df = classify_mapfcs(
     #     train, test, toroidal=True, weights=weights,
@@ -1097,20 +1099,23 @@ def main():
     outpath.mkdir(parents=True, exist_ok=True)
 
     # normal f(8)
-    conf_8, stats_8 = create_metrics_from_pred(pred_df, mapping=None)
-    plotting.plot_confusion_matrix(
-        conf_8.values, groups, normalize=True,
-        filename=outpath / "confusion_8class", dendroname=None)
+    if len(groups) == 8:
+        conf_8, stats_8 = create_metrics_from_pred(pred_df, mapping=None)
+        plotting.plot_confusion_matrix(
+            conf_8.values, groups, normalize=True,
+            filename=outpath / "confusion_8class", dendroname=None)
     # merged f(6)
-    conf_6, stats_6 = create_metrics_from_pred(pred_df, mapping=g6_map)
-    plotting.plot_confusion_matrix(
-        conf_6.values, groups6, normalize=True,
-        filename=outpath / "confusion_6class", dendroname=None)
+    if len(groups) >= 6:
+        conf_6, stats_6 = create_metrics_from_pred(pred_df, mapping=g6_map)
+        plotting.plot_confusion_matrix(
+            conf_6.values, groups6, normalize=True,
+            filename=outpath / "confusion_6class", dendroname=None)
     # merged f(5)
-    conf_5, stats_5 = create_metrics_from_pred(pred_df, mapping=g5_map)
-    plotting.plot_confusion_matrix(
-        conf_5.values, groups5, normalize=True,
-        filename=outpath / "confusion_5class", dendroname=None)
+    if len(groups) >= 5:
+        conf_5, stats_5 = create_metrics_from_pred(pred_df, mapping=g5_map)
+        plotting.plot_confusion_matrix(
+            conf_5.values, groups5, normalize=True,
+            filename=outpath / "confusion_5class", dendroname=None)
 
 
 if __name__ == "__main__":
