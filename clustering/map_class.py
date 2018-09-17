@@ -46,6 +46,8 @@ COLS = "grcmyk"
 
 def inverse_binarize(y, classes):
     classes = np.asarray(classes)
+    if isinstance(y, pd.DataFrame):
+        y = y.values
     if len(classes) > 2:
         return classes.take(y.argmax(axis=1), mode="clip")
 
@@ -698,7 +700,7 @@ def classify_convolutional(
         Map2DLoader.create_inferred(
             train, tube=2, pad_width=pad_width, sel_count=None),
     ]
-    trainseq = SOMMapDataset(train, xoutputs, batch_size=64, draw_method="shuffle", groups=groups)
+    trainseq = SOMMapDataset(train, xoutputs, batch_size=64, draw_method="balanced", groups=groups, epoch_size=8000)
     testseq = SOMMapDataset(test, xoutputs, batch_size=128, draw_method="sequential", groups=groups)
 
     model = create_model_convolutional(*trainseq.shape)
@@ -711,7 +713,7 @@ def classify_convolutional(
     model.compile(
         loss=lossfun,
         optimizer=optimizers.Adam(
-            lr=0.0001, decay=0.0, epsilon=0.00001
+            lr=0.0001, decay=0.0, epsilon=0.0001
         ),
         metrics=["acc"]
     )
@@ -820,7 +822,7 @@ def run_save_model(model, trainseq, testseq, path="mll-sommaps/models", name="0"
     """Run and predict using the given model. Also save the model in the given
     path with specified name."""
     history = model.fit_generator(
-        trainseq, epochs=1000,
+        trainseq, epochs=30,
         callbacks=[
             # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min")
         ],
@@ -851,7 +853,6 @@ def run_save_model(model, trainseq, testseq, path="mll-sommaps/models", name="0"
         pred_mat, columns=trainseq.groups, index=testseq.labels)
     pred_df["correct"] = testseq.ylabels
     pred_df.to_csv(modelpath / f"predictions_{name}.csv")
-    create_metrics_from_pred(pred_df)
     return pred_df
 
 
@@ -943,19 +944,19 @@ def split_data(data, test_num=0.2):
 
 
 def main():
-    # indata = load_dataset(
-    #     "mll-sommaps/sample_maps/completeretrain_toroid_s32",
-    #     histopath="../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217",
-    #     fcspath="s3://mll-flowdata/CLL-9F"
-    # )
+    indata = load_dataset(
+        "mll-sommaps/sample_maps/selected1_toroid_s32",
+        histopath="../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217",
+        fcspath="s3://mll-flowdata/CLL-9F"
+    )
     # # save the data
     # with open("indata_selected5_somgated_fcs.p", "wb") as f:
     #     pickle.dump(indata, f)
     # return
 
-    # load the data again
-    with open("indata_selected5_somgated_fcs.p", "rb") as f:
-        indata = pickle.load(f)
+    # # load the data again
+    # with open("indata_selected5_somgated_fcs.p", "rb") as f:
+    #     indata = pickle.load(f)
 
     # groups = ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"]
     # 8-class
@@ -966,8 +967,8 @@ def main():
     }
 
     # # 6-class
-    merged_groups = ["CM", "MP", "LM", "FL", "HCL", "normal"]
-    merged_group_map = {
+    groups6 = ["CM", "MP", "LM", "FL", "HCL", "normal"]
+    g6_map = {
         "CLL": "CM",
         "MBL": "CM",
         "MZL": "LM",
@@ -975,6 +976,18 @@ def main():
         "MCL": "MP",
         "PL": "MP",
     }
+    # 5-class
+    groups5 = ["CM", "MP", "LMF", "HCL", "normal"]
+    g5_map = {
+        "CLL": "CM",
+        "MBL": "CM",
+        "MZL": "LMF",
+        "LPL": "LMF",
+        "FL": "LMF",
+        "MCL": "MP",
+        "PL": "MP",
+    }
+
     indata["orig_group"] = indata["group"]
     indata = modify_groups(indata, mapping=group_map)
     indata = indata.loc[indata["group"].isin(groups), :]
@@ -996,20 +1009,20 @@ def main():
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "all_ensemble"
+    name = "convolutional"
 
-    train, test = split_data(indata, test_num=60)
+    train, test = split_data(indata, test_num=0.2)
 
     # pred_dfs = classify_histogram(
     #     train, test, weights=weights, groups=groups, path=f"mll-sommaps/models/{name}",
     # )
 
-    # pred_dfs = classify_convolutional(
-    #     train, test, toroidal=True, weights=weights,
-    #     groups=groups, path=f"mll-sommaps/models/{name}")
+    pred_df = classify_convolutional(
+        train, test, toroidal=True, weights=weights,
+        groups=groups, path=f"mll-sommaps/models/{name}")
 
-    pred_dfs = classify_fcs(
-        train, test, groups=groups, path=f"mll-sommaps/models/{name}")
+    # pred_dfs = classify_fcs(
+    #     train, test, groups=groups, path=f"mll-sommaps/models/{name}")
 
     # pred_dfs = classify_mapfcs(
     #     train, test, toroidal=True, weights=weights,
@@ -1018,17 +1031,25 @@ def main():
     # pred_dfs = classify_all(
     #     train, test, toroidal=True, weights=weights,
     #     groups=groups, path=f"mll-sommaps/models/{name}")
-    pred_df = pd.concat(pred_dfs)
-
-    confusion, stats = create_metrics_from_pred(pred_df)
 
     outpath = pathlib.Path(f"output/{name}_{validation}")
     outpath.mkdir(parents=True, exist_ok=True)
 
+    # normal f(8)
+    conf_8, stats_8 = create_metrics_from_pred(pred_df, mapping=None)
     plotting.plot_confusion_matrix(
-        confusion, groups, normalize=True,
-        filename=outpath / "confusion_merged_weighted", dendroname=outpath / "dendro_merged_weighted"
-    )
+        conf_8.values, groups, normalize=True,
+        filename=outpath / "confusion_8class", dendroname=None)
+    # merged f(6)
+    conf_6, stats_6 = create_metrics_from_pred(pred_df, mapping=g6_map)
+    plotting.plot_confusion_matrix(
+        conf_6.values, groups6, normalize=True,
+        filename=outpath / "confusion_6class", dendroname=None)
+    # merged f(5)
+    conf_5, stats_5 = create_metrics_from_pred(pred_df, mapping=g5_map)
+    plotting.plot_confusion_matrix(
+        conf_5.values, groups5, normalize=True,
+        filename=outpath / "confusion_5class", dendroname=None)
 
 
 if __name__ == "__main__":
