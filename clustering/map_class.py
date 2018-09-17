@@ -43,6 +43,15 @@ NAME_MAP = {
 
 COLS = "grcmyk"
 
+
+def inverse_binarize(y, classes):
+    classes = np.asarray(classes)
+    if len(classes) > 2:
+        return classes.take(y.argmax(axis=1), mode="clip")
+
+    raise RuntimeError("Inverse binary not implemented yet.")
+
+
 def get_tubepaths(label, cases):
     matched = None
     for case in cases:
@@ -405,9 +414,6 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
 
         self.groups = groups
 
-        self.binarizer = preprocessing.LabelBinarizer()
-        self.binarizer.fit(groups)
-
         if toroidal:
             pad_width = 1
         else:
@@ -422,8 +428,10 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
 
     @property
     def yshape(self):
-        """Return shape of yvalues."""
-        return len(self.binarizer.classes_)
+        """Return shape of yvalues. If we only have 2 classes use simple
+        binary encoding.
+        """
+        return len(self.groups)
 
     @property
     def shape(self):
@@ -449,7 +457,7 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
         xdata = [x(batch_data) for x in self._xoutputs]
 
         ydata = batch_data["group"]
-        ybinary = self.binarizer.transform(ydata)
+        ybinary = preprocessing.label_binarize(ydata, classes=self.groups)
         return xdata, ybinary
 
 
@@ -849,10 +857,8 @@ def run_save_model(model, trainseq, testseq, path="mll-sommaps/models", name="0"
 
 def create_metrics_from_pred(pred_df, mapping=None):
     """Create metrics from pred df."""
-    lb = preprocessing.LabelBinarizer()
     groups = [c for c in pred_df.columns if c != "correct"]
-    lb.fit(groups)
-    pred = lb.inverse_transform(pred_df.loc[:, groups].values)
+    pred = inverse_binarize(pred_df.loc[:, groups].values, classes=groups)
     corr = pred_df["correct"].values
 
     if mapping is not None:
