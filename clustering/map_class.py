@@ -291,7 +291,8 @@ class FCSLoader(LoaderMixin):
             data.drop([c for c in data.columns if "nix" in c], axis=1, inplace=True)
 
             data = pd.DataFrame(
-                preprocessing.MinMaxScaler().fit_transform(data),
+                # preprocessing.MinMaxScaler().fit_transform(data),
+                preprocessing.StandardScaler().fit_transform(data),
                 columns=data.columns)
 
             data = data.sample(n=subsample)
@@ -884,7 +885,7 @@ def run_save_model(model, trainseq, testseq, path="mll-sommaps/models", name="0"
     """Run and predict using the given model. Also save the model in the given
     path with specified name."""
     history = model.fit_generator(
-        trainseq, epochs=100,
+        trainseq, epochs=200,
         callbacks=[
             # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min")
         ],
@@ -1074,7 +1075,8 @@ def main():
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "convolutional_direct6"
+    name = "fcsmarkus_direct6_stdscale"
+>>>>>>> Stashed changes
 
     train, test = split_data(indata, test_num=0.2)
 
@@ -1090,8 +1092,8 @@ def main():
     #     train, test, toroidal=True, weights=weights,
     #     groups=groups, path=f"mll-sommaps/models/{name}")
 
-    # pred_df = classify_fcs(
-    #     train, test, groups=groups, path=f"mll-sommaps/models/{name}")
+    pred_df = classify_fcs(
+        train, test, groups=groups, path=f"mll-sommaps/models/{name}")
 
     # pred_df = classify_mapfcs(
     #     train, test, toroidal=True, weights=weights,
