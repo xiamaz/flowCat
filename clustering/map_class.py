@@ -1047,12 +1047,13 @@ def main():
         "MZL": "LMF",
         "LPL": "LMF",
         "FL": "LMF",
+        "LM": "LMF",
         "MCL": "MP",
         "PL": "MP",
     }
 
-    groups = groups6
-    group_map = g6_map
+    # groups = groups6
+    # group_map = g6_map
 
     indata["orig_group"] = indata["group"]
     indata = modify_groups(indata, mapping=group_map)
@@ -1075,8 +1076,7 @@ def main():
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "fcsmarkus_direct6_stdscale"
->>>>>>> Stashed changes
+    name = "convolutional_direct8"
 
     train, test = split_data(indata, test_num=0.2)
 
