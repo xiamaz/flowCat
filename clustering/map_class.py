@@ -502,14 +502,19 @@ def decomposition(dataset):
 
 def sommap_tube(x):
     """Block to process a single tube."""
-    x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=1)(x)
-    x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=2)(x)
+    x = layers.Conv2D(
+        filters=32, kernel_size=2, activation="relu", strides=1,
+        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
+    x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=2,
+        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
     x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
 
-    x = layers.Conv2D(filters=32, kernel_size=1, activation="relu", strides=1)(x)
-    x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=1)(x)
+    x = layers.Conv2D(filters=32, kernel_size=1, activation="relu", strides=1,
+        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
+    x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=1,
+        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
     x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
@@ -526,13 +531,13 @@ def sommap_merged(t1, t2):
 
     x = layers.Dense(
         units=64, activation="relu", kernel_initializer="uniform",
-        kernel_regularizer=regularizers.l2(0.001)
+        kernel_regularizer=regularizers.l2(0.0001 / 2)
     )(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
     x = layers.Dense(
         units=64, activation="relu", kernel_initializer="uniform",
-        kernel_regularizer=regularizers.l2(0.001)
+        kernel_regularizer=regularizers.l2(0.0001 / 2)
     )(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
@@ -577,11 +582,12 @@ def fcs_merged(x):
 def histogram_tube(x):
     """Processing of histogram information using dense neural net."""
     x = layers.Dense(
-        units=16, activation="elu", kernel_initializer="uniform")(x)
+        units=16, activation="elu", kernel_initializer="uniform",
+        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
     # x = layers.Dropout(rate=0.01)(x)
     x = layers.Dense(
         units=16, activation="elu",
-        kernel_regularizer=regularizers.l1(.01))(x)
+        kernel_regularizer=regularizers.l2(l=.0001 / 2))(x)
     # x = layers.Dropout(rate=0.01)(x)
     # x = layers.BatchNormalization()(x)
     return x
@@ -592,7 +598,9 @@ def histogram_merged(t1, t2):
     t1 = histogram_tube(t1)
     t2 = histogram_tube(t2)
     x = layers.concatenate([t1, t2])
-    x = layers.Dense(units=16, activation="elu")(x)
+    x = layers.Dense(
+        units=16, activation="elu",
+        kernel_regularizer=regularizers.l2(.0001 / 2))(x)
     return x
 
 
@@ -643,7 +651,7 @@ def create_model_maphisto(xshape, yshape):
     m2input = layers.Input(shape=xshape[1])
     t1input = layers.Input(shape=xshape[2])
     t2input = layers.Input(shape=xshape[3])
- 
+
     mm = sommap_merged(m1input, m2input)
     hm = histogram_merged(t1input, t2input)
     x = layers.concatenate([mm, hm])
@@ -682,7 +690,7 @@ def create_model_all(xshape, yshape):
     mm = sommap_merged(m1input, m2input)
     hm = histogram_merged(t1input, t2input)
     x = layers.concatenate([fm, mm, hm])
-    x = layers.Dense(32)(x)
+    x = layers.Dense(32, kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
     final = layers.Dense(yshape, activation="softmax")(x)
 
     model = models.Model(
@@ -880,9 +888,10 @@ def classify_all(
             weights=weights)
     model.compile(
         loss=lossfun,
-        optimizer=optimizers.Adam(
-            lr=0.0001, decay=0.0, epsilon=0.00001
-        ),
+        optimizer="adam",
+        # optimizer=optimizers.Adam(
+        #     lr=0.0001, decay=0.0, epsilon=0.00001
+        # ),
         metrics=["acc"]
     )
     return run_save_model(model, trainseq, testseq, *args, **kwargs)
@@ -1118,7 +1127,7 @@ def main():
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "fcsmarkus_direct6_decay"
+    name = "threemodel_revised_global_decay"
 
     train, test = split_data(indata, test_num=0.2)
 
@@ -1134,16 +1143,16 @@ def main():
     #     train, test, toroidal=True, weights=weights,
     #     groups=groups, path=f"mll-sommaps/models/{name}")
 
-    pred_df = classify_fcs(
-        train, test, groups=groups, path=f"mll-sommaps/models/{name}")
+    # pred_df = classify_fcs(
+    #     train, test, groups=groups, path=f"mll-sommaps/models/{name}")
 
     # pred_df = classify_mapfcs(
     #     train, test, toroidal=True, weights=weights,
     #     groups=groups, path=f"mll-sommaps/models/{name}")
 
-    # pred_df = classify_all(
-    #     train, test, toroidal=True, weights=weights,
-    #     groups=groups, path=f"mll-sommaps/models/{name}")
+    pred_df = classify_all(
+        train, test, toroidal=True, weights=weights,
+        groups=groups, path=f"mll-sommaps/models/{name}")
 
     outpath = pathlib.Path(f"output/{name}_{validation}")
     outpath.mkdir(parents=True, exist_ok=True)
