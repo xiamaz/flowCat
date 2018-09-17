@@ -539,21 +539,23 @@ def sommap_merged(t1, t2):
 
 def fcs_merged(x):
     """1x1 convolutions on raw FCS data."""
-    xa = layers.Conv1D(32, 1, strides=1, activation="elu")(x)
-    xa = layers.Conv1D(16, 1, strides=1, activation="elu")(x)
+    xa = layers.Conv1D(50, 1, strides=1, activation="elu")(x)
+    xa = layers.Conv1D(50, 1, strides=1, activation="elu")(x)
     xa = layers.GlobalAveragePooling1D()(xa)
+    x = xa
     # xa = layers.BatchNormalization()(xa)
 
-    xb = layers.Conv1D(16, 1, strides=1, activation="elu")(x)
-    xb = layers.Conv1D(8, 1, strides=1, activation="elu")(x)
-    xb = layers.GlobalMaxPooling1D()(xb)
+    # xb = layers.Conv1D(16, 1, strides=1, activation="elu")(x)
+    # xb = layers.Conv1D(8, 1, strides=1, activation="elu")(x)
+    # xb = layers.GlobalMaxPooling1D()(xb)
     # xb = layers.BatchNormalization()(xb)
 
-    x = layers.concatenate([xa, xb])
+    # x = layers.concatenate([xa, xb])
 
-    x = layers.Dense(64, activation="elu")(x)
+    x = layers.Dense(50, activation="elu")(x)
     # x = layers.Dropout(0.2)(x)
-    x = layers.Dense(32, activation="elu")(x)
+    x = layers.Dense(50, activation="elu")(x)
+    # x = layers.Dense(32, activation="elu")(x)
     # x = layers.Dropout(0.2)(x)
     # x = layers.Dense(16)(x)
     # x = layers.Dropout(0.2)(x)
@@ -757,9 +759,10 @@ def classify_fcs(train, test, weights=None, groups=None, *args, **kwargs):
             weights=weights)
     model.compile(
         loss=lossfun,
-        optimizer=optimizers.Adam(
-            lr=0.0001, decay=0.0, epsilon=0.00001
-        ),
+        optimizer="adam",
+        # optimizer=optimizers.Adam(
+        #     lr=0.0001, decay=0.0, epsilon=0.00001
+        # ),
         metrics=["acc"]
     )
     return run_save_model(model, trainseq, testseq, *args, **kwargs)
