@@ -624,6 +624,24 @@ def create_model_fcs(xshape, yshape):
     return model
 
 
+def create_model_maphisto(xshape, yshape):
+    """Create model using both histogram and SOM map information."""
+    m1input = layers.Input(shape=xshape[0])
+    m2input = layers.Input(shape=xshape[1])
+    t1input = layers.Input(shape=xshape[2])
+    t2input = layers.Input(shape=xshape[3])
+
+    mm = sommap_merged(m1input, m2input)
+    hm = histogram_merged(t1input, t2input)
+    x = layers.concatenate([mm, hm])
+    x = layers.Dense(32)(x)
+    final = layers.Dense(yshape, activation="softmax")(x)
+
+    model = models.Model(
+        inputs=[m1input, m2input, t1input, t2input], outputs=final)
+    return model
+
+
 def create_model_mapfcs(xshape, yshape):
     """Create model combining fcs processing and map cnn."""
     fcsinput = layers.Input(shape=xshape[0])
@@ -739,7 +757,7 @@ def classify_fcs(train, test, weights=None, groups=None, *args, **kwargs):
     model.compile(
         loss=lossfun,
         optimizer=optimizers.Adam(
-            lr=0.0001, decay=0.0, epsilon=0.1
+            lr=0.0001, decay=0.0, epsilon=0.00001
         ),
         metrics=["acc"]
     )
@@ -751,7 +769,7 @@ def classify_mapfcs(
 ):
     pad_width = 1 if toroidal else 0
     xoutputs = [
-        FCSLoader.create_inferred(train, tubes=[1, 2], subsample=200),
+        FCSLoader.create_inferred(train, tubes=[1, 2], subsample=500),
         Map2DLoader.create_inferred(
             train, tube=1, pad_width=pad_width, sel_count=None),
         Map2DLoader.create_inferred(
@@ -773,7 +791,44 @@ def classify_mapfcs(
     model.compile(
         loss=lossfun,
         optimizer=optimizers.Adam(
-            lr=0.0001, decay=0.0, epsilon=0.001
+            lr=0.0001, decay=0.0, epsilon=0.00001
+        ),
+        metrics=["acc"]
+    )
+    return run_save_model(model, trainseq, testseq, *args, **kwargs)
+
+
+def classify_maphisto(
+        train, test, weights=None, toroidal=False, groups=None, *args, **kwargs
+):
+    pad_width = 1 if toroidal else 0
+    xoutputs = [
+        Map2DLoader.create_inferred(
+            train, tube=1, pad_width=pad_width, sel_count=None),
+        Map2DLoader.create_inferred(
+            train, tube=2, pad_width=pad_width, sel_count=None),
+        CountLoader.create_inferred(
+            train, tube=1, version="dataframe"),
+        CountLoader.create_inferred(
+            train, tube=2, version="dataframe"),
+    ]
+    trainseq = SOMMapDataset(
+        train, xoutputs, batch_size=32, draw_method="balanced", groups=groups,
+        epoch_size=8000)
+    testseq = SOMMapDataset(
+        test, xoutputs, batch_size=32, draw_method="sequential", groups=groups)
+
+    model = create_model_maphisto(*trainseq.shape)
+
+    if weights is None:
+        lossfun = "categorical_crossentropy"
+    else:
+        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
+            weights=weights)
+    model.compile(
+        loss=lossfun,
+        optimizer=optimizers.Adam(
+            lr=0.0001, decay=0.0, epsilon=0.0001
         ),
         metrics=["acc"]
     )
@@ -785,7 +840,7 @@ def classify_all(
 ):
     pad_width = 1 if toroidal else 0
     xoutputs = [
-        FCSLoader.create_inferred(train, tubes=[1, 2], subsample=200),
+        FCSLoader.create_inferred(train, tubes=[1, 2], subsample=500),
         Map2DLoader.create_inferred(
             train, tube=1, pad_width=pad_width, sel_count=None),
         Map2DLoader.create_inferred(
@@ -811,7 +866,7 @@ def classify_all(
     model.compile(
         loss=lossfun,
         optimizer=optimizers.Adam(
-            lr=0.0001, decay=0.0, epsilon=0.1
+            lr=0.0001, decay=0.0, epsilon=0.00001
         ),
         metrics=["acc"]
     )
@@ -1009,26 +1064,30 @@ def main():
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "convolutional"
+    name = "threemodel"
 
     train, test = split_data(indata, test_num=0.2)
 
-    # pred_dfs = classify_histogram(
+    # pred_df = classify_histogram(
     #     train, test, weights=weights, groups=groups, path=f"mll-sommaps/models/{name}",
     # )
 
-    pred_df = classify_convolutional(
-        train, test, toroidal=True, weights=weights,
-        groups=groups, path=f"mll-sommaps/models/{name}")
-
-    # pred_dfs = classify_fcs(
-    #     train, test, groups=groups, path=f"mll-sommaps/models/{name}")
-
-    # pred_dfs = classify_mapfcs(
+    # pred_df = classify_convolutional(
     #     train, test, toroidal=True, weights=weights,
     #     groups=groups, path=f"mll-sommaps/models/{name}")
 
-    # pred_dfs = classify_all(
+    # pred_df = classify_maphisto(
+    #     train, test, toroidal=True, weights=weights,
+    #     groups=groups, path=f"mll-sommaps/models/{name}")
+
+    # pred_df = classify_fcs(
+    #     train, test, groups=groups, path=f"mll-sommaps/models/{name}")
+
+    pred_df = classify_mapfcs(
+        train, test, toroidal=True, weights=weights,
+        groups=groups, path=f"mll-sommaps/models/{name}")
+
+    # pred_df = classify_all(
     #     train, test, toroidal=True, weights=weights,
     #     groups=groups, path=f"mll-sommaps/models/{name}")
 
