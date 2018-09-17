@@ -291,8 +291,7 @@ class FCSLoader(LoaderMixin):
             data.drop([c for c in data.columns if "nix" in c], axis=1, inplace=True)
 
             data = pd.DataFrame(
-                # preprocessing.MinMaxScaler().fit_transform(data),
-                preprocessing.StandardScaler().fit_transform(data),
+                preprocessing.MinMaxScaler().fit_transform(data),
                 columns=data.columns)
 
             data = data.sample(n=subsample)
@@ -542,8 +541,12 @@ def sommap_merged(t1, t2):
 
 def fcs_merged(x):
     """1x1 convolutions on raw FCS data."""
-    xa = layers.Conv1D(50, 1, strides=1, activation="elu")(x)
-    xa = layers.Conv1D(50, 1, strides=1, activation="elu")(x)
+    xa = layers.Conv1D(
+        50, 1, strides=1, activation="elu",
+        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
+    xa = layers.Conv1D(
+        50, 1, strides=1, activation="elu",
+        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
     xa = layers.GlobalAveragePooling1D()(xa)
     x = xa
     # xa = layers.BatchNormalization()(xa)
@@ -555,9 +558,13 @@ def fcs_merged(x):
 
     # x = layers.concatenate([xa, xb])
 
-    x = layers.Dense(50, activation="elu")(x)
+    x = layers.Dense(
+        50, activation="elu",
+        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
     # x = layers.Dropout(0.2)(x)
-    x = layers.Dense(50, activation="elu")(x)
+    x = layers.Dense(
+        50, activation="elu",
+        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
     # x = layers.Dense(32, activation="elu")(x)
     # x = layers.Dropout(0.2)(x)
     # x = layers.Dense(16)(x)
@@ -636,7 +643,7 @@ def create_model_maphisto(xshape, yshape):
     m2input = layers.Input(shape=xshape[1])
     t1input = layers.Input(shape=xshape[2])
     t2input = layers.Input(shape=xshape[3])
-
+ 
     mm = sommap_merged(m1input, m2input)
     hm = histogram_merged(t1input, t2input)
     x = layers.concatenate([mm, hm])
@@ -881,6 +888,38 @@ def classify_all(
     return run_save_model(model, trainseq, testseq, *args, **kwargs)
 
 
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+
+
+def plot_train_history(path, data):
+    """Plot the training history of the given data."""
+
+    fig = Figure(figsize=(8, 8), dpi=300)
+    ax = fig.add_subplot(111)
+
+    # Traning dataset loss and accuracy metrics
+    ax.plot(
+        range(len(data["loss"])), data["loss"],
+        c="red", linestyle="-", label="Loss")
+    ax.plot(
+        range(len(data["loss"])), data["val_loss"],
+        c="red", linestyle="-", label="Validation Loss")
+
+    # Testing dataset loss and accuracy metrics
+    ax.plot(
+        range(len(data["acc"])), data["acc"],
+        c="blue", linestyle="--", label="Accuracy")
+    ax.plot(
+        range(len(data["val_acc"])),
+        data["val_acc"],
+        c="blue", linestyle="--", label="Validation Accuracy")
+
+    FigureCanvas(fig)
+
+    fig.savefig(path)
+
+
 def run_save_model(model, trainseq, testseq, path="mll-sommaps/models", name="0"):
     """Run and predict using the given model. Also save the model in the given
     path with specified name."""
@@ -894,7 +933,7 @@ def run_save_model(model, trainseq, testseq, path="mll-sommaps/models", name="0"
         #     0: 1.0,  # CM
         #     1: 2.0,  # MCL
         #     2: 2.0,  # PL
-        #     3: 2.0,  # LPL
+        #     3: 2.0,  # LP
         #     4: 2.0,  # MZL
         #     5: 50.0,  # FL
         #     6: 50.0,  # HCL
@@ -911,6 +950,9 @@ def run_save_model(model, trainseq, testseq, path="mll-sommaps/models", name="0"
     model.save(modelpath / f"model_{name}.h5")
     with open(str(modelpath / f"history_{name}.p"), "wb") as hfile:
         pickle.dump(history.history, hfile)
+
+    trainhistory_path = modelpath / f"trainhistory_{name}"
+    plot_train_history(trainhistory_path, history.history)
 
     pred_df = pd.DataFrame(
         pred_mat, columns=trainseq.groups, index=testseq.labels)
@@ -1076,7 +1118,7 @@ def main():
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "convolutional_direct8"
+    name = "fcsmarkus_direct6_decay"
 
     train, test = split_data(indata, test_num=0.2)
 
@@ -1084,9 +1126,9 @@ def main():
     #     train, test, weights=weights, groups=groups, path=f"mll-sommaps/models/{name}",
     # )
 
-    pred_df = classify_convolutional(
-        train, test, toroidal=True, weights=weights,
-        groups=groups, path=f"mll-sommaps/models/{name}")
+    # pred_df = classify_convolutional(
+    #     train, test, toroidal=True, weights=weights,
+    #     groups=groups, path=f"mll-sommaps/models/{name}")
 
     # pred_df = classify_maphisto(
     #     train, test, toroidal=True, weights=weights,
