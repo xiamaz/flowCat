@@ -503,13 +503,13 @@ def decomposition(dataset):
 def sommap_tube(x):
     """Block to process a single tube."""
     x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=1)(x)
-    x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=2)(x)
+    x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=2)(x)
     x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
 
-    x = layers.Conv2D(filters=64, kernel_size=1, activation="relu", strides=1)(x)
-    x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=1)(x)
+    x = layers.Conv2D(filters=32, kernel_size=1, activation="relu", strides=1)(x)
+    x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=1)(x)
     x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
@@ -528,11 +528,13 @@ def sommap_merged(t1, t2):
         units=64, activation="relu", kernel_initializer="uniform",
         kernel_regularizer=regularizers.l2(0.001)
     )(x)
+    x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
     x = layers.Dense(
         units=64, activation="relu", kernel_initializer="uniform",
         kernel_regularizer=regularizers.l2(0.001)
     )(x)
+    x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
     return x
 
@@ -721,8 +723,8 @@ def classify_convolutional(
         Map2DLoader.create_inferred(
             train, tube=2, pad_width=pad_width, sel_count=None),
     ]
-    trainseq = SOMMapDataset(train, xoutputs, batch_size=64, draw_method="balanced", groups=groups, epoch_size=8000)
-    testseq = SOMMapDataset(test, xoutputs, batch_size=128, draw_method="sequential", groups=groups)
+    trainseq = SOMMapDataset(train, xoutputs, batch_size=16, draw_method="balanced", groups=groups, epoch_size=8000)
+    testseq = SOMMapDataset(test, xoutputs, batch_size=32, draw_method="sequential", groups=groups)
 
     model = create_model_convolutional(*trainseq.shape)
 
@@ -733,9 +735,10 @@ def classify_convolutional(
             weights=weights)
     model.compile(
         loss=lossfun,
-        optimizer=optimizers.Adam(
-            lr=0.0001, decay=0.0, epsilon=0.0001
-        ),
+        optimizer="adam",
+        # optimizer=optimizers.Adam(
+        #     lr=0.0001, decay=0.0, epsilon=0.0001
+        # ),
         metrics=["acc"]
     )
     return run_save_model(model, trainseq, testseq, *args, **kwargs)
@@ -1047,8 +1050,8 @@ def main():
         "PL": "MP",
     }
 
-    # groups = groups6
-    # group_map = g6_map
+    groups = groups6
+    group_map = g6_map
 
     indata["orig_group"] = indata["group"]
     indata = modify_groups(indata, mapping=group_map)
@@ -1071,17 +1074,17 @@ def main():
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "orighisto_direct8"
+    name = "convolutional_direct6"
 
     train, test = split_data(indata, test_num=0.2)
 
-    pred_df = classify_histogram(
-        train, test, weights=weights, groups=groups, path=f"mll-sommaps/models/{name}",
-    )
+    # pred_df = classify_histogram(
+    #     train, test, weights=weights, groups=groups, path=f"mll-sommaps/models/{name}",
+    # )
 
-    # pred_df = classify_convolutional(
-    #     train, test, toroidal=True, weights=weights,
-    #     groups=groups, path=f"mll-sommaps/models/{name}")
+    pred_df = classify_convolutional(
+        train, test, toroidal=True, weights=weights,
+        groups=groups, path=f"mll-sommaps/models/{name}")
 
     # pred_df = classify_maphisto(
     #     train, test, toroidal=True, weights=weights,
