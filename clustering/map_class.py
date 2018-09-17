@@ -75,13 +75,14 @@ def load_dataset(mappath, histopath, fcspath):
     sommap_count = pd.DataFrame(1, index=sommap_labels.index, columns=["count"])
     histo_count = load_histolabels(histopath)
     both_count = sommap_count.add(histo_count, fill_value=0)
-    both_count = both_count.loc[both_count["count"] == 3, :]
+    # both_count = both_count.loc[both_count["count"] == 3, :]
 
     assert not both_count.empty, "No data having both histo and sommap info."
 
     cdict = {}
     cases = cc.CaseCollection(fcspath, tubes=[1, 2])
-    for case in cases:
+    caseview = cases.create_view(counts=10000)
+    for case in caseview:
         try:
             assert both_count.loc[(case.id, case.group), "count"] == 3, "Not all data available."
             cdict[case.id] = {
@@ -90,12 +91,12 @@ def load_dataset(mappath, histopath, fcspath):
                 "fcspath": {k: utils.get_file_path(v[-1].path) for k, v in case.tubepaths.items()},
                 "histopath": f"{histopath}/tube{{tube}}.csv",
             }
-        except KeyError:
-            print(f"Skipped {case.group}")
+        except KeyError as e:
+            print(f"{e} - Not found in histo or sommap")
             continue
-        except AssertionError:
-            print("WTF")
-            raise
+        except AssertionError as e:
+            print(f"{case.id}|{case.group} - {e}")
+            continue
 
     dataset = pd.DataFrame.from_dict(cdict, orient="index")
     return dataset
@@ -279,7 +280,7 @@ class FCSLoader(LoaderMixin):
             data.drop([c for c in data.columns if "nix" in c], axis=1, inplace=True)
 
             data = pd.DataFrame(
-                preprocessing.StandardScaler().fit_transform(data),
+                preprocessing.MinMaxScaler().fit_transform(data),
                 columns=data.columns)
 
             data = data.sample(n=subsample)
@@ -528,16 +529,23 @@ def sommap_merged(t1, t2):
 
 def fcs_merged(x):
     """1x1 convolutions on raw FCS data."""
-    x = layers.Conv1D(128, 1, strides=1, activation="relu")(x)
-    x = layers.GlobalAveragePooling1D()(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.Dense(64)(x)
-    x = layers.Dropout(0.2)(x)
-    x = layers.Dense(64)(x)
-    x = layers.Dropout(0.2)(x)
+    xa = layers.Conv1D(64, 1, strides=1, activation="relu")(x)
+    xa = layers.GlobalAveragePooling1D()(xa)
+    # xa = layers.BatchNormalization()(xa)
+
+    xb = layers.Conv1D(16, 1, strides=1, activation="relu")(x)
+    xb = layers.GlobalMaxPooling1D()(xb)
+    xb = layers.BatchNormalization()(xb)
+
+    x = layers.concatenate([xa, xb])
+
     x = layers.Dense(32)(x)
     x = layers.Dropout(0.2)(x)
     x = layers.Dense(32)(x)
+    x = layers.Dropout(0.2)(x)
+    x = layers.Dense(16)(x)
+    x = layers.Dropout(0.2)(x)
+    x = layers.Dense(16)(x)
     x = layers.Dropout(0.2)(x)
     return x
 
@@ -545,9 +553,10 @@ def fcs_merged(x):
 def histogram_tube(x):
     """Processing of histogram information using dense neural net."""
     x = layers.Dense(
-        units=128, activation="relu", kernel_initializer="uniform")(x)
+        units=32, activation="relu", kernel_initializer="uniform")(x)
     x = layers.Dropout(rate=0.01)(x)
-    x = layers.Dense(units=64, activation="relu", kernel_initializer="uniform",
+    x = layers.Dense(
+        units=32, activation="relu", kernel_initializer="uniform",
         kernel_regularizer=regularizers.l1(.01))(x)
     x = layers.Dropout(rate=0.01)(x)
     x = layers.BatchNormalization()(x)
@@ -560,7 +569,7 @@ def histogram_merged(t1, t2):
     t2 = histogram_tube(t2)
     x = layers.concatenate([t1, t2])
     x = layers.Dense(
-        units=64, activation="relu", kernel_initializer="uniform")(x)
+        units=16, activation="relu", kernel_initializer="uniform")(x)
     return x
 
 
@@ -703,7 +712,7 @@ def classify_convolutional(
 
 def classify_fcs(train, test, weights=None, groups=None, *args, **kwargs):
     xoutputs = [
-        FCSLoader.create_inferred(train, tubes=[1, 2], subsample=200),
+        FCSLoader.create_inferred(train, tubes=[1, 2], subsample=500),
     ]
     trainseq = SOMMapDataset(
         train, xoutputs, batch_size=16, draw_method="balanced", groups=groups, epoch_size=8000)
@@ -720,7 +729,7 @@ def classify_fcs(train, test, weights=None, groups=None, *args, **kwargs):
     model.compile(
         loss=lossfun,
         optimizer=optimizers.Adam(
-            lr=0.0001, decay=0.0, epsilon=0.001
+            lr=0.0001, decay=0.0, epsilon=0.1
         ),
         metrics=["acc"]
     )
@@ -792,7 +801,7 @@ def classify_all(
     model.compile(
         loss=lossfun,
         optimizer=optimizers.Adam(
-            lr=0.0001, decay=0.0, epsilon=0.001
+            lr=0.0001, decay=0.0, epsilon=0.1
         ),
         metrics=["acc"]
     )
@@ -929,7 +938,7 @@ def split_data(data, test_num=0.2):
 
 def main():
     # indata = load_dataset(
-    #     "mll-sommaps/sample_maps/selected5_toroid_s32",
+    #     "mll-sommaps/sample_maps/completeretrain_toroid_s32",
     #     histopath="../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217",
     #     fcspath="s3://mll-flowdata/CLL-9F"
     # )
@@ -963,7 +972,6 @@ def main():
     indata["orig_group"] = indata["group"]
     indata = modify_groups(indata, mapping=group_map)
     indata = indata.loc[indata["group"].isin(groups), :]
-    # indata.reset_index(drop=True, inplace=True)
 
     # Group weights are a dict mapping tuples to tuples. Weights are for
     # false classifications in the given direction.
@@ -994,31 +1002,25 @@ def main():
     #     train, test, toroidal=True, weights=weights,
     #     groups=groups, path=f"mll-sommaps/models/{name}")
 
-    # pred_dfs = classify_fcs(
-    #     train, test, groups=groups, path=f"mll-sommaps/models/{name}")
+    pred_dfs = classify_fcs(
+        train, test, groups=groups, path=f"mll-sommaps/models/{name}")
 
     # pred_dfs = classify_mapfcs(
     #     train, test, toroidal=True, weights=weights,
     #     groups=groups, path=f"mll-sommaps/models/{name}")
 
-    pred_dfs = classify_all(
-        train, test, toroidal=True, weights=weights,
-        groups=groups, path=f"mll-sommaps/models/{name}")
+    # pred_dfs = classify_all(
+    #     train, test, toroidal=True, weights=weights,
+    #     groups=groups, path=f"mll-sommaps/models/{name}")
+    pred_df = pd.concat(pred_dfs)
 
-    # pred_df_8class = pd.read_csv(
-    #     "mll-sommaps/models/cllall1_planar_8class_60test_ep100/predictions_0.csv",
-    #     index_col=0)
-    # n6_merged = create_metrics_from_pred(pred_df_8class, merged_group_map)
-    # pred_df_6class = pd.read_csv(
-    #     "mll-sommaps/models/cllall1_planar_60test_ep100/predictions_0.csv",
-    #     index_col=0)
-    # n6_direct = create_metrics_from_pred(pred_df_6class)
+    confusion, stats = create_metrics_from_pred(pred_df)
 
     outpath = pathlib.Path(f"output/{name}_{validation}")
     outpath.mkdir(parents=True, exist_ok=True)
 
     plotting.plot_confusion_matrix(
-        sum_confusion, groups, normalize=True,
+        confusion, groups, normalize=True,
         filename=outpath / "confusion_merged_weighted", dendroname=outpath / "dendro_merged_weighted"
     )
 
