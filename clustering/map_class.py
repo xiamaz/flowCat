@@ -1047,8 +1047,8 @@ def main():
         "PL": "MP",
     }
 
-    groups = groups6
-    group_map = g6_map
+    # groups = groups6
+    # group_map = g6_map
 
     indata["orig_group"] = indata["group"]
     indata = modify_groups(indata, mapping=group_map)
@@ -1057,21 +1057,21 @@ def main():
     # Group weights are a dict mapping tuples to tuples. Weights are for
     # false classifications in the given direction.
     # (a, b) --> (a>b, b>a)
-    group_weights = {
-        ("normal", None): (10.0, 100.0),
-        ("MZL", "LPL"): (2, 2),
-        ("MCL", "PL"): (2, 2),
-        ("FL", "LPL"): (3, 5),
-        ("FL", "MZL"): (3, 5),
-    }
-    weights = create_weight_matrix(group_weights, groups, base_weight=5)
+    # group_weights = {
+    #     ("normal", None): (10.0, 100.0),
+    #     ("MZL", "LPL"): (2, 2),
+    #     ("MCL", "PL"): (2, 2),
+    #     ("FL", "LPL"): (3, 5),
+    #     ("FL", "MZL"): (3, 5),
+    # }
+    # weights = create_weight_matrix(group_weights, groups, base_weight=5)
     weights = None
 
     # plotpath = pathlib.Path("sommaps/output/lotta")
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "orighisto_direct6"
+    name = "orighisto_direct8"
 
     train, test = split_data(indata, test_num=0.2)
 
