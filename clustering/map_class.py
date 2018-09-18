@@ -533,11 +533,11 @@ def decomposition(dataset):
 def sommap_tube(x):
     """Block to process a single tube."""
     x = layers.Conv2D(
-        filters=32, kernel_size=3, activation="relu", strides=2,
+        filters=32, kernel_size=3, activation="relu", strides=1,
         kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
     x = layers.Conv2D(filters=64, kernel_size=3, activation="relu", strides=2,
         kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
-    x = layers.MaxPooling2D(pool_size=2, strides=1)(x)
+    # x = layers.MaxPooling2D(pool_size=2, strides=1)(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
 
@@ -545,11 +545,14 @@ def sommap_tube(x):
         kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
     x = layers.Conv2D(filters=128, kernel_size=2, activation="relu", strides=2,
         kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
-    x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
+    # x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
+
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
 
-    x = layers.Flatten()(x)
+    x = layers.GlobalAveragePooling2D()(x)
+
+    # x = layers.Flatten()(x)
     return x
 
 
@@ -560,13 +563,13 @@ def sommap_merged(t1, t2):
     x = layers.concatenate([t1, t2])
 
     x = layers.Dense(
-        units=64, activation="relu", kernel_initializer="uniform",
+        units=256, activation="relu", kernel_initializer="uniform",
         kernel_regularizer=regularizers.l2(0.0001 / 2)
     )(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
     x = layers.Dense(
-        units=64, activation="relu", kernel_initializer="uniform",
+        units=128, activation="relu", kernel_initializer="uniform",
         kernel_regularizer=regularizers.l2(0.0001 / 2)
     )(x)
     x = layers.BatchNormalization()(x)
@@ -965,7 +968,7 @@ def main():
         "draw_method": "sequential",
         "epoch_size": None,
     }
-    c_train_epochs = 2
+    c_train_epochs = 200
     # Data modifications
     c_dataoptions = {
         CountLoader.__name__: {
