@@ -4,6 +4,7 @@ import pickle
 import pathlib
 import functools
 import hashlib
+import logging
 
 import numpy as np
 import pandas as pd
@@ -43,6 +44,9 @@ NAME_MAP = {
 }
 
 COLS = "grcmyk"
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def inverse_binarize(y, classes):
@@ -104,10 +108,10 @@ def load_dataset(mappath, histopath, fcspath):
                 "histopath": f"{histopath}/tube{{tube}}.csv",
             }
         except KeyError as e:
-            print(f"{e} - Not found in histo or sommap")
+            LOGGER.debug(f"{e} - Not found in histo or sommap")
             continue
         except AssertionError as e:
-            print(f"{case.id}|{case.group} - {e}")
+            LOGGER.debug(f"{case.id}|{case.group} - {e}")
             continue
 
     dataset = pd.DataFrame.from_dict(cdict, orient="index")
@@ -219,7 +223,7 @@ class CountLoader(LoaderMixin):
             sel_rows = self.data.loc[label_group, :]
             missing = sel_rows.loc[sel_rows["1"].isna(), :]
             if not missing.empty:
-                print(missing)
+                LOGGER.error(missing)
                 raise RuntimeError()
             counts = sel_rows.values
         return counts
@@ -292,7 +296,8 @@ class FCSLoader(LoaderMixin):
             data.drop([c for c in data.columns if "nix" in c], axis=1, inplace=True)
 
             data = pd.DataFrame(
-                preprocessing.MinMaxScaler().fit_transform(data),
+                preprocessing.MinMaxScaler().fit_transform(
+                    preprocessing.StandardScaler().fit_transform(data)),
                 columns=data.columns)
 
             data = data.sample(n=subsample)
@@ -699,127 +704,6 @@ def create_model_all(xshape, yshape):
     return model
 
 
-def classify_histogram(train, test, groups=None, *args, **kwargs):
-    """Extremely simple sequential neural network with two
-    inputs for the 10x10x12 data
-    """
-    xoutputs = [
-        CountLoader.create_inferred(
-            train, tube=1, version="dataframe"),
-        CountLoader.create_inferred(
-            train, tube=2, version="dataframe"),
-    ]
-
-    trainseq = SOMMapDataset(train, xoutputs, batch_size=64, draw_method="balanced", groups=groups, epoch_size=8000)
-    testseq = SOMMapDataset(test, xoutputs, batch_size=128, draw_method="sequential", groups=groups)
-
-    model = create_model_histo(*trainseq.shape)
-    return run_save_model(model, trainseq, testseq, weights=weights, *args, **kwargs)
-
-
-def classify_convolutional(train, test, toroidal=False, groups=None, *args, **kwargs):
-    # wrap pad input matrix if we use toroidal input data
-    pad_width = 1 if toroidal else 0
-
-    xoutputs = [
-        Map2DLoader.create_inferred(
-            train, tube=1, pad_width=pad_width, sel_count=None),
-        Map2DLoader.create_inferred(
-            train, tube=2, pad_width=pad_width, sel_count=None),
-    ]
-    trainseq = SOMMapDataset(train, xoutputs, batch_size=16, draw_method="balanced", groups=groups, epoch_size=16000)
-    testseq = SOMMapDataset(test, xoutputs, batch_size=32, draw_method="sequential", groups=groups)
-
-    model = create_model_convolutional(*trainseq.shape)
-
-    return run_save_model(model, trainseq, testseq, *args, **kwargs)
-
-
-def classify_fcs(train, test, groups=None, *args, **kwargs):
-    xoutputs = [
-        FCSLoader.create_inferred(train, tubes=[1, 2], subsample=100),
-    ]
-    trainseq = SOMMapDataset(
-        train, xoutputs, batch_size=16, draw_method="balanced", groups=groups, epoch_size=8000)
-    testseq = SOMMapDataset(
-        test, xoutputs, batch_size=16, draw_method="sequential", groups=groups)
-
-    model = create_model_fcs(*trainseq.shape)
-    return run_save_model(model, trainseq, testseq, *args, **kwargs)
-
-
-def classify_mapfcs(
-        train, test, toroidal=False, groups=None, *args, **kwargs
-):
-    pad_width = 1 if toroidal else 0
-    xoutputs = [
-        FCSLoader.create_inferred(train, tubes=[1, 2], subsample=500),
-        Map2DLoader.create_inferred(
-            train, tube=1, pad_width=pad_width, sel_count=None),
-        Map2DLoader.create_inferred(
-            train, tube=2, pad_width=pad_width, sel_count=None),
-    ]
-    trainseq = SOMMapDataset(
-        train, xoutputs, batch_size=32, draw_method="balanced", groups=groups,
-        epoch_size=8000)
-    testseq = SOMMapDataset(
-        test, xoutputs, batch_size=32, draw_method="sequential", groups=groups)
-
-    model = create_model_mapfcs(*trainseq.shape)
-
-    return run_save_model(model, trainseq, testseq, *args, **kwargs)
-
-
-def classify_maphisto(
-        train, test, toroidal=False, groups=None, *args, **kwargs
-):
-    pad_width = 1 if toroidal else 0
-    xoutputs = [
-        Map2DLoader.create_inferred(
-            train, tube=1, pad_width=pad_width, sel_count=None),
-        Map2DLoader.create_inferred(
-            train, tube=2, pad_width=pad_width, sel_count=None),
-        CountLoader.create_inferred(
-            train, tube=1, version="dataframe"),
-        CountLoader.create_inferred(
-            train, tube=2, version="dataframe"),
-    ]
-    trainseq = SOMMapDataset(
-        train, xoutputs, batch_size=32, draw_method="balanced", groups=groups,
-        epoch_size=8000)
-    testseq = SOMMapDataset(
-        test, xoutputs, batch_size=32, draw_method="sequential", groups=groups)
-
-    model = create_model_maphisto(*trainseq.shape)
-
-    return run_save_model(model, trainseq, testseq, *args, **kwargs)
-
-
-def classify_all(
-        train, test, toroidal=False, groups=None, *args, **kwargs
-):
-    pad_width = 1 if toroidal else 0
-    xoutputs = [
-        FCSLoader.create_inferred(train, tubes=[1, 2], subsample=500),
-        Map2DLoader.create_inferred(
-            train, tube=1, pad_width=pad_width, sel_count=None),
-        Map2DLoader.create_inferred(
-            train, tube=2, pad_width=pad_width, sel_count=None),
-        CountLoader.create_inferred(
-            train, tube=1, version="dataframe"),
-        CountLoader.create_inferred(
-            train, tube=2, version="dataframe"),
-    ]
-    trainseq = SOMMapDataset(
-        train, xoutputs, batch_size=32, draw_method="balanced", groups=groups,
-        epoch_size=8000)
-    testseq = SOMMapDataset(
-        test, xoutputs, batch_size=32, draw_method="sequential", groups=groups)
-
-    model = create_model_all(*trainseq.shape)
-    return run_save_model(model, trainseq, testseq, *args, **kwargs)
-
-
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib import cm
@@ -862,8 +746,6 @@ def run_save_model(model, trainseq, testseq, weights=None, path="mll-sommaps/mod
     # save the model weights after training
     modelpath = pathlib.Path(path)
     modelpath.mkdir(parents=True, exist_ok=True)
-
-    print(weights)
 
     if weights is None:
         lossfun = "categorical_crossentropy"
@@ -946,13 +828,13 @@ def create_metrics_from_pred(pred_df, mapping=None):
     mcc = metrics.matthews_corrcoef(corr, pred)
     stats["weighted_f1"] = weighted_f1
     stats["mcc"] = mcc
-    print("F1: ", weighted_f1)
-    print("MCC: ", mcc)
+    LOGGER.info("F1: ", weighted_f1)
+    LOGGER.info("MCC: ", mcc)
 
     confusion = metrics.confusion_matrix(corr, pred, groups,)
     confusion = pd.DataFrame(confusion, columns=groups, index=groups)
-    print("Confusion matrix")
-    print(confusion)
+    LOGGER.info("Confusion matrix")
+    LOGGER.info(confusion)
     return confusion, stats
 
 
@@ -1014,7 +896,7 @@ def split_data(data, test_num=None, test_labels=None, train_labels=None):
             group_sizes = grouped.size()
             if any(group_sizes <= test_num):
                 insuff = group_sizes[group_sizes <= test_num]
-                print("Insufficient sizes: ", insuff)
+                LOGGER.warning("Insufficient sizes: ", insuff)
                 raise RuntimeError("Some cohorts are too small.")
             test = grouped.apply(lambda d: d.sample(n=test_num)).reset_index(level=0, drop=True)
         train = data.drop(test.index, axis=0)
@@ -1035,84 +917,146 @@ def save_json(data, outpath):
 
 
 def main():
-    predefined_split = True
-    indata = load_dataset(
-        "mll-sommaps/sample_maps/selected1_toroid_s32",
-        histopath="../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217",
-        fcspath="s3://mll-flowdata/CLL-9F"
-    )
-    # # save the data
-    # with open("indata_selected5_somgated_fcs.p", "wb") as f:
-    #     pickle.dump(indata, f)
-    # return
-
-    # # load the data again
-    # with open("indata_selected5_somgated_fcs.p", "rb") as f:
-    #     indata = pickle.load(f)
-
-    # groups = ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"]
-    # 8-class
-    groups = ["CM", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"]
-    group_map = {
-        "CLL": "CM",
-        "MBL": "CM",
+    ## CONFIGURATION VARIABLES
+    c_uniq_name = "perftest"
+    c_model = "sommap"
+    c_groupmap = "8class"
+    c_weights = "weighted"
+    # output locations
+    c_output_results = "mll-sommaps/output"
+    c_output_model = "mll-sommaps/models"
+    # file locations
+    c_dataindex = None  # use pregenerated dataindex instead
+    c_sommap_data = "mll-sommaps/sample_maps/selected1_toroid_s32"
+    c_histo_data = "../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"
+    c_fcs_data = "s3://mll-flowdata/CLL-9F"
+    # split train, test using predefined split
+    c_predefined_split = True
+    c_train_labels = "data/train_labels.json"
+    c_test_labels = "data/test_labels.json"
+    c_trainargs = {
+        "draw_method": "balanced",
+        "epoch_size": 16000,
     }
-
-    # # 6-class
-    groups6 = ["CM", "MP", "LM", "FL", "HCL", "normal"]
-    g6_map = {
-        "CLL": "CM",
-        "MBL": "CM",
-        "MZL": "LM",
-        "LPL": "LM",
-        "MCL": "MP",
-        "PL": "MP",
+    c_testargs = {
+        "draw_method": "sequential",
+        "epoch_size": None,
     }
-    # 5-class
-    groups5 = ["CM", "MP", "LMF", "HCL", "normal"]
-    g5_map = {
-        "CLL": "CM",
-        "MBL": "CM",
-        "MZL": "LMF",
-        "LPL": "LMF",
-        "FL": "LMF",
-        "LM": "LMF",
-        "MCL": "MP",
-        "PL": "MP",
+    # Data modifications
+    c_dataoptions = {
+        CountLoader.__name__: {
+            "subsample": 100,
+        },
+        FCSLoader.__name__: {
+            "version": "dataframe",
+        },
+        Map2DLoader.__name__: {
+            "sel_count": None,  # use count in SOM map as just another channel
+            "pad_width": 1 if "toroid" in c_sommap_data else 0  # do something more elaborate later
+        },
     }
+    ## END CONFIGURATION VARIABLES
 
-    # groups = groups6
-    # group_map = g6_map
+    # save configuration variables
+    config_dict = locals()
+
+    name = f"{c_uniq_name}_{c_model}_{c_groupmap}"
+
+    # configure logging
+    outpath = pathlib.Path(f"{c_output_results}/{name}")
+    outpath.mkdir(parents=True, exist_ok=True)
+
+    # save the currently used configuration
+    save_json(config_dict, outpath / "config.json")
+
+    filelog = logging.FileHandler(outpath / f"{name}.log")
+    filelog.setLevel(logging.DEBUG)
+    printlog = logging.StreamHandler()
+    printlog.setLevel(logging.INFO)
+
+    fileform = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    filelog.setFormatter(fileform)
+    printform = logging.Formatter("%(levelname)s - %(message)s")
+    printlog.setFormatter(printform)
+
+    LOGGER.setLevel(logging.DEBUG)
+    LOGGER.addHandler(filelog)
+    LOGGER.addHandler(printlog)
+    modulelog = logging.getLogger("clustering")
+    modulelog.setLevel(logging.INFO)
+    modulelog.addHandler(filelog)
+
+    if c_dataindex is None:
+        indata = load_dataset(mappath=c_sommap_data, histopath=c_histo_data, fcspath=c_fcs_data)
+        # save the datainfo into the output folder
+        with open(str(outpath / "data_paths.p"), "wb") as f:
+            pickle.dump(indata, f)
+    else:
+        # load the data again
+        with open(c_dataindex, "rb") as f:
+            indata = pickle.load(f)
+
+    group_maps = {
+        "8class": {
+            "groups": ["CM", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
+            "map": {"CLL": "CM", "MBL": "CM"}
+        },
+        "6class": {
+            "groups": ["CM", "MP", "LM", "FL", "HCL", "normal"],
+            "map": {
+                "CLL": "CM",
+                "MBL": "CM",
+                "MZL": "LM",
+                "LPL": "LM",
+                "MCL": "MP",
+                "PL": "MP",
+            }
+        },
+        "5class": {
+            "groups": ["CM", "MP", "LMF", "HCL", "normal"],
+            "map": {
+                "CLL": "CM",
+                "MBL": "CM",
+                "MZL": "LMF",
+                "LPL": "LMF",
+                "FL": "LMF",
+                "LM": "LMF",
+                "MCL": "MP",
+                "PL": "MP",
+            }
+        }
+    }
+    groups = group_maps[c_groupmap]["groups"]
+    group_map = group_maps[c_groupmap]["map"]
 
     indata["orig_group"] = indata["group"]
     indata = modify_groups(indata, mapping=group_map)
     indata = indata.loc[indata["group"].isin(groups), :]
 
-    # Group weights are a dict mapping tuples to tuples. Weights are for
-    # false classifications in the given direction.
-    # (a, b) --> (a>b, b>a)
-    group_weights = {
-        ("normal", None): (5.0, 10.0),
-        ("MZL", "LPL"): (2, 2),
-        ("MCL", "PL"): (2, 2),
-        ("FL", "LPL"): (3, 5),
-        ("FL", "MZL"): (3, 5),
-    }
-    weights = create_weight_matrix(group_weights, groups, base_weight=5)
-    # weights = None
+    if c_weights == "weighted":
+        # Group weights are a dict mapping tuples to tuples. Weights are for
+        # false classifications in the given direction.
+        # (a, b) --> (a>b, b>a)
+        group_weights = {
+            ("normal", None): (5.0, 10.0),
+            ("MZL", "LPL"): (2, 2),
+            ("MCL", "PL"): (2, 2),
+            ("FL", "LPL"): (3, 5),
+            ("FL", "MZL"): (3, 5),
+        }
+        weights = create_weight_matrix(group_weights, groups, base_weight=5)
+    elif c_weights == "simpleweights":
+    ## simpler group weights
+        group_weights = {
+            ("normal", None): (1.0, 20.0),
+        }
+        weights = create_weight_matrix(group_weights, groups, base_weight=1)
+    else:
+        weights = None
 
-    # plotpath = pathlib.Path("sommaps/output/lotta")
-    # tf1, tf2, y = decomposition(indata)
-    # plot_transformed(plotpath, tf1, tf2, y)
-    validation = "holdout"
-    name = "fcs_split01_100sample_weighted"
-
-    outpath = pathlib.Path(f"output/{name}_{validation}")
-    outpath.mkdir(parents=True, exist_ok=True)
-
-    if predefined_split:
+    if c_predefined_split:
         train, test = split_data(
-            indata, train_labels="data/train_labels.json", test_labels="data/test_labels.json")
+            indata, train_labels=c_train_labels, test_labels=c_test_labels)
     else:
         train, test = split_data(indata, test_num=0.1)
 
@@ -1120,31 +1064,77 @@ def main():
     save_json(list(train.index), outpath / "train_labels.json")
     save_json(list(test.index), outpath / "test_labels.json")
 
-    # pred_df = classify_histogram(
-    #     train, test, weights=weights, groups=groups, path=f"mll-sommaps/models/{name}",
-    # )
+    if "toroidal" in c_sommap_data:
+        toroidal = True
+    else:
+        toroidal = False
 
-    # pred_df = classify_convolutional(
-    #     train, test, toroidal=True, weights=weights,
-    #     groups=groups, path=f"mll-sommaps/models/{name}")
+    if c_model == "histogram":
+        xoutputs = [
+            CountLoader.create_inferred(train, tube=1, **c_dataoptions[CountLoader.__name__]),
+            CountLoader.create_inferred(train, tube=2, **c_dataoptions[CountLoader.__name__]),
+        ]
+        train_batch = 64
+        test_batch = 128
+        modelfun = create_model_histo
+    elif c_model == "sommap":
+        xoutputs = [
+            Map2DLoader.create_inferred(train, tube=1, **c_dataoptions[Map2DLoader.__name__]),
+            Map2DLoader.create_inferred(train, tube=2, **c_dataoptions[Map2DLoader.__name__]),
+        ]
+        train_batch = 16
+        test_batch = 32
+        modelfun = create_model_convolutional
+    elif c_model == "maphisto":
+        xoutputs = [
+            Map2DLoader.create_inferred(train, tube=1, **c_dataoptions[Map2DLoader.__name__]),
+            Map2DLoader.create_inferred(train, tube=2, **c_dataoptions[Map2DLoader.__name__]),
+            CountLoader.create_inferred(train, tube=1, **c_dataoptions[CountLoader.__name__]),
+            CountLoader.create_inferred(train, tube=2, **c_dataoptions[CountLoader.__name__]),
+        ]
+        train_batch = 32
+        test_batch = 32
+        modelfun = create_model_maphisto
+    elif c_model == "etefcs":
+        xoutputs = [
+            FCSLoader.create_inferred(train, tubes=[1, 2], **c_dataoptions[FCSLoader.__name__]),
+        ]
+        train_batch = 16
+        test_batch = 16
+        modelfun = create_model_fcs
+    elif c_model == "mapfcs":
+        xoutputs = [
+            FCSLoader.create_inferred(train, tubes=[1, 2], **c_dataoptions[FCSLoader.__name__]),
+            Map2DLoader.create_inferred(train, tube=1, **c_dataoptions[Map2DLoader.__name__]),
+            Map2DLoader.create_inferred(train, tube=2, **c_dataoptions[Map2DLoader.__name__]),
+        ]
+        train_batch = 32
+        test_batch = 32
+        modelfun = create_model_mapfcs
+    elif c_model == "maphistofcs":
+        xoutputs = [
+            FCSLoader.create_inferred(train, tubes=[1, 2], **c_dataoptions[FCSLoader.__name__]),
+            Map2DLoader.create_inferred(train, tube=1, **c_dataoptions[Map2DLoader.__name__]),
+            Map2DLoader.create_inferred(train, tube=2, **c_dataoptions[Map2DLoader.__name__]),
+            CountLoader.create_inferred(train, tube=1, **c_dataoptions[CountLoader.__name__]),
+            CountLoader.create_inferred(train, tube=2, **c_dataoptions[CountLoader.__name__]),
+        ]
+        train_batch = 32
+        test_batch = 32
+        modelfun = create_model_all
+    else:
+        raise RuntimeError(f"Unknown model {c_model}")
 
-    # pred_df = classify_maphisto(
-    #     train, test, toroidal=True, weights=weights,
-    #     groups=groups, path=f"mll-sommaps/models/{name}")
+    modelpath = pathlib.Path(f"{c_output_model}/{name}")
+    trainseq = SOMMapDataset(train, xoutputs, batch_size=train_batch, **c_trainargs)
+    testseq = SOMMapDataset(test, xoutputs, batch_size=test_batch, **c_testargs)
+    model = modelfun(*trainseq.shape)
+    run_save_model(model, trainseq, testseq, weights=weights, path=modelpath, name="0")
 
-    pred_df = classify_fcs(
-        train, test, groups=groups, path=f"mll-sommaps/models/{name}", weights=weights)
-
-    # pred_df = classify_mapfcs(
-    #     train, test, toroidal=True, weights=weights,
-    #     groups=groups, path=f"mll-sommaps/models/{name}")
-
-    # pred_df = classify_all(
-    #     train, test, toroidal=True, weights=weights,
-    #     groups=groups, path=f"mll-sommaps/models/{name}")
-
+    LOGGER.info(f"Statistics results for {name}")
     # normal f(8)
     if len(groups) == 8:
+        LOGGER.info("-- 8 class --")
         conf_8, stats_8 = create_metrics_from_pred(pred_df, mapping=None)
         plotting.plot_confusion_matrix(
             conf_8.values, groups, normalize=True,
@@ -1155,6 +1145,7 @@ def main():
             json.dump(stats_8, jsfile)
     # merged f(6)
     if len(groups) >= 6:
+        LOGGER.info("-- 6 class --")
         conf_6, stats_6 = create_metrics_from_pred(pred_df, mapping=g6_map)
         plotting.plot_confusion_matrix(
             conf_6.values, groups6, normalize=True,
@@ -1165,6 +1156,7 @@ def main():
             json.dump(stats_6, jsfile)
     # merged f(5)
     if len(groups) >= 5:
+        LOGGER.info("-- 5 class --")
         conf_5, stats_5 = create_metrics_from_pred(pred_df, mapping=g5_map)
         plotting.plot_confusion_matrix(
             conf_5.values, groups5, normalize=True,
