@@ -1,3 +1,4 @@
+import json
 import os
 import pickle
 import pathlib
@@ -986,7 +987,7 @@ def create_weight_matrix(group_map, groups, base_weight=5):
     return weights
 
 
-def split_data(data, test_num=0.2):
+def split_data(data, test_num=None, test_labels=None, train_labels=None):
     """Split data in stratified fashion by group.
     Args:
         data: Dataset to be split. Label should be contained in 'group' column.
@@ -994,21 +995,49 @@ def split_data(data, test_num=0.2):
     Returns:
         (train, test) with same columns as input data.
     """
-    grouped = data.groupby("group")
-    if test_num < 1:
-        test = grouped.apply(lambda d: d.sample(frac=test_num)).reset_index(level=0, drop=True)
-    else:
-        group_sizes = grouped.size()
-        if any(group_sizes <= test_num):
-            insuff = group_sizes[group_sizes <= test_num]
-            print("Insufficient sizes: ", insuff)
-            raise RuntimeError("Some cohorts are too small.")
-        test = grouped.apply(lambda d: d.sample(n=test_num)).reset_index(level=0, drop=True)
-    train = data.drop(test.index, axis=0)
+    if test_labels is not None:
+        test = data.loc[test_labels, :]
+    if train_labels is not None:
+        train = data.loc[train_labels, :]
+    if test_num is not None:
+        assert test_labels is None and train_labels is None, "Cannot use num with specified labels"
+        grouped = data.groupby("group")
+        if test_num < 1:
+            test = grouped.apply(lambda d: d.sample(frac=test_num)).reset_index(level=0, drop=True)
+        else:
+            group_sizes = grouped.size()
+            if any(group_sizes <= test_num):
+                insuff = group_sizes[group_sizes <= test_num]
+                print("Insufficient sizes: ", insuff)
+                raise RuntimeError("Some cohorts are too small.")
+            test = grouped.apply(lambda d: d.sample(n=test_num)).reset_index(level=0, drop=True)
+        train = data.drop(test.index, axis=0)
     return train, test
 
 
+def load_predefined(data, train_path, test_path):
+    train_labels = load_json(train_path)
+    test_labels = load_json(test_path)
+
+    train, test = split_data(data, train_labels=train_labels, test_labels=test_labels)
+    return train, test
+
+
+def load_json(jspath):
+    with open(str(jspath), "r") as jsfile:
+        data = json.load(jsfile)
+
+    return data
+
+
+def save_json(data, outpath):
+    """Save a json file to the specified path."""
+    with open(str(outpath), "w") as jsfile:
+        json.dump(data, jsfile)
+
+
 def main():
+    predefined_split = True
     indata = load_dataset(
         "mll-sommaps/sample_maps/selected1_toroid_s32",
         histopath="../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217",
@@ -1078,9 +1107,18 @@ def main():
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "convolutional_01split_weighted"
+    name = "fcs_split01_100sample_weighted"
 
-    train, test = split_data(indata, test_num=0.1)
+    outpath = pathlib.Path(f"output/{name}_{validation}")
+    outpath.mkdir(parents=True, exist_ok=True)
+
+    if predefined_split:
+        train, test = load_predefined(
+            indata, "data/train_labels.json", "data/test_labels.json")
+    else:
+        train, test = split_data(indata, test_num=0.1)
+        save_json(list(train.index), outpath / "train_labels.json")
+        save_json(list(test.index), outpath / "test_labels.json")
 
     # pred_df = classify_histogram(
     #     train, test, weights=weights, groups=groups, path=f"mll-sommaps/models/{name}",
@@ -1094,8 +1132,8 @@ def main():
     #     train, test, toroidal=True, weights=weights,
     #     groups=groups, path=f"mll-sommaps/models/{name}")
 
-    # pred_df = classify_fcs(
-    #     train, test, groups=groups, path=f"mll-sommaps/models/{name}")
+    pred_df = classify_fcs(
+        train, test, groups=groups, path=f"mll-sommaps/models/{name}")
 
     # pred_df = classify_mapfcs(
     #     train, test, toroidal=True, weights=weights,
@@ -1105,27 +1143,36 @@ def main():
     #     train, test, toroidal=True, weights=weights,
     #     groups=groups, path=f"mll-sommaps/models/{name}")
 
-    outpath = pathlib.Path(f"output/{name}_{validation}")
-    outpath.mkdir(parents=True, exist_ok=True)
-
     # normal f(8)
     if len(groups) == 8:
         conf_8, stats_8 = create_metrics_from_pred(pred_df, mapping=None)
         plotting.plot_confusion_matrix(
             conf_8.values, groups, normalize=True,
+            title=f"Confusion matrix (f1 {stats_8['f1']:.2f} mcc {stats_8['mcc']:.2f})",
             filename=outpath / "confusion_8class", dendroname=None)
+        conf_8.to_csv(outpath / "confusion_8class.csv")
+        with open(str(outpath / "stats_8class.json"), "w") as jsfile:
+            json.dump(stats_8, jsfile)
     # merged f(6)
     if len(groups) >= 6:
         conf_6, stats_6 = create_metrics_from_pred(pred_df, mapping=g6_map)
         plotting.plot_confusion_matrix(
             conf_6.values, groups6, normalize=True,
+            title=f"Confusion matrix (f1 {stats_6['f1']:.2f} mcc {stats_6['mcc']:.2f})",
             filename=outpath / "confusion_6class", dendroname=None)
+        conf_6.to_csv(outpath / "confusion_6class.csv")
+        with open(str(outpath / "stats_6class.json"), "w") as jsfile:
+            json.dump(stats_6, jsfile)
     # merged f(5)
     if len(groups) >= 5:
         conf_5, stats_5 = create_metrics_from_pred(pred_df, mapping=g5_map)
         plotting.plot_confusion_matrix(
             conf_5.values, groups5, normalize=True,
+            title=f"Confusion matrix (f1 {stats_5['f1']:.2f} mcc {stats_5['mcc']:.2f})",
             filename=outpath / "confusion_5class", dendroname=None)
+        conf_5.to_csv(outpath / "confusion_5class.csv")
+        with open(str(outpath / "stats_5class.json"), "w") as jsfile:
+            json.dump(stats_5, jsfile)
 
 
 if __name__ == "__main__":
