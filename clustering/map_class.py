@@ -863,16 +863,18 @@ def run_save_model(model, trainseq, testseq, weights=None, path="mll-sommaps/mod
     modelpath = pathlib.Path(path)
     modelpath.mkdir(parents=True, exist_ok=True)
 
+    print(weights)
+
     if weights is None:
         lossfun = "categorical_crossentropy"
     else:
         lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
             weights=weights.values)
 
-        weights.to_csv(modelpath / f"weights_{name}")
+        weights.to_csv(modelpath / f"weights_{name}.csv")
         plotting.plot_confusion_matrix(
-            weights.values, groups, normalize=False, cm=cm.Reds,
-            filename=outpath / f"weightsplot_{name}", dendroname=None)
+            weights.values, weights.columns, normalize=False, cmap=cm.Reds,
+            filename=modelpath / f"weightsplot_{name}", dendroname=None)
 
     model.compile(
         loss=lossfun,
@@ -996,8 +998,12 @@ def split_data(data, test_num=None, test_labels=None, train_labels=None):
         (train, test) with same columns as input data.
     """
     if test_labels is not None:
+        if not isinstance(test_labels, list):
+            test_labels = load_json(test_labels)
         test = data.loc[test_labels, :]
     if train_labels is not None:
+        if not isinstance(train_labels, list):
+            train_labels = load_json(train_labels)
         train = data.loc[train_labels, :]
     if test_num is not None:
         assert test_labels is None and train_labels is None, "Cannot use num with specified labels"
@@ -1012,14 +1018,6 @@ def split_data(data, test_num=None, test_labels=None, train_labels=None):
                 raise RuntimeError("Some cohorts are too small.")
             test = grouped.apply(lambda d: d.sample(n=test_num)).reset_index(level=0, drop=True)
         train = data.drop(test.index, axis=0)
-    return train, test
-
-
-def load_predefined(data, train_path, test_path):
-    train_labels = load_json(train_path)
-    test_labels = load_json(test_path)
-
-    train, test = split_data(data, train_labels=train_labels, test_labels=test_labels)
     return train, test
 
 
@@ -1113,27 +1111,29 @@ def main():
     outpath.mkdir(parents=True, exist_ok=True)
 
     if predefined_split:
-        train, test = load_predefined(
-            indata, "data/train_labels.json", "data/test_labels.json")
+        train, test = split_data(
+            indata, train_labels="data/train_labels.json", test_labels="data/test_labels.json")
     else:
         train, test = split_data(indata, test_num=0.1)
-        save_json(list(train.index), outpath / "train_labels.json")
-        save_json(list(test.index), outpath / "test_labels.json")
+
+    # always save the labels used for training and testing
+    save_json(list(train.index), outpath / "train_labels.json")
+    save_json(list(test.index), outpath / "test_labels.json")
 
     # pred_df = classify_histogram(
     #     train, test, weights=weights, groups=groups, path=f"mll-sommaps/models/{name}",
     # )
 
-    pred_df = classify_convolutional(
-        train, test, toroidal=True, weights=weights,
-        groups=groups, path=f"mll-sommaps/models/{name}")
+    # pred_df = classify_convolutional(
+    #     train, test, toroidal=True, weights=weights,
+    #     groups=groups, path=f"mll-sommaps/models/{name}")
 
     # pred_df = classify_maphisto(
     #     train, test, toroidal=True, weights=weights,
     #     groups=groups, path=f"mll-sommaps/models/{name}")
 
     pred_df = classify_fcs(
-        train, test, groups=groups, path=f"mll-sommaps/models/{name}")
+        train, test, groups=groups, path=f"mll-sommaps/models/{name}", weights=weights)
 
     # pred_df = classify_mapfcs(
     #     train, test, toroidal=True, weights=weights,

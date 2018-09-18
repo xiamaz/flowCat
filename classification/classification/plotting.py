@@ -32,11 +32,11 @@ def plot_confusion_matrix(
     http://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html#sphx-glr-auto-examples-model-selection-plot-confusion-matrix-py
     """
     if normalize:
-        confusion_matrix = confusion_matrix.astype('float') / \
-            confusion_matrix.sum(axis=1)[:, np.newaxis]
+        confusion_matrix = confusion_matrix.astype('float') / confusion_matrix.sum(axis=1)[:, np.newaxis]
         print("Normalized confusion matrix")
     else:
         print('Confusion matrix, without normalization')
+        confusion_matrix = confusion_matrix.astype('int')
 
     fig = Figure()
     axes = fig.add_subplot(111)
