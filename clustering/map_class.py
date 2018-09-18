@@ -858,11 +858,21 @@ def run_save_model(model, trainseq, testseq, weights=None, path="mll-sommaps/mod
     """Run and predict using the given model. Also save the model in the given
     path with specified name."""
 
+    # save the model weights after training
+    modelpath = pathlib.Path(path)
+    modelpath.mkdir(parents=True, exist_ok=True)
+
     if weights is None:
         lossfun = "categorical_crossentropy"
     else:
         lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
-            weights=weights)
+            weights=weights.values)
+
+        weights.to_csv(modelpath / f"weights_{name}")
+        plotting.plot_confusion_matrix(
+            weights.values, groups, normalize=False, cm=cm.Reds,
+            filename=outpath / f"weightsplot_{name}", dendroname=None)
+
     model.compile(
         loss=lossfun,
         optimizer="adam",
@@ -893,18 +903,9 @@ def run_save_model(model, trainseq, testseq, weights=None, path="mll-sommaps/mod
     )
     pred_mat = model.predict_generator(testseq, workers=4, use_multiprocessing=True)
 
-    # save the model weights after training
-    modelpath = pathlib.Path(path)
-    modelpath.mkdir(parents=True, exist_ok=True)
     model.save(modelpath / f"model_{name}.h5")
     with open(str(modelpath / f"history_{name}.p"), "wb") as hfile:
         pickle.dump(history.history, hfile)
-
-    if weights is not None:
-        weights.to_csv(modelpath / f"weights_{name}")
-        plotting.plot_confusion_matrix(
-            weights.values, groups, normalize=False, cm=cm.Reds,
-            filename=outpath / f"weightsplot_{name}", dendroname=None)
 
     # plot a model diagram
     keras.utils.plot_model(model, modelpath / f"modelplot_{name}.png", show_shapes=True)
@@ -981,6 +982,7 @@ def create_weight_matrix(group_map, groups, base_weight=5):
     for (group_a, group_b), (ab_err, ba_err) in expanded_groups.items():
         weights[groups.index(group_a), groups.index(group_b)] = ab_err
         weights[groups.index(group_b), groups.index(group_a)] = ba_err
+    weights = pd.DataFrame(weights, columns=groups, index=groups)
     return weights
 
 
