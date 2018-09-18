@@ -1148,7 +1148,7 @@ def main():
         conf_8, stats_8 = create_metrics_from_pred(pred_df, mapping=None)
         plotting.plot_confusion_matrix(
             conf_8.values, groups, normalize=True,
-            title=f"Confusion matrix (f1 {stats_8['f1']:.2f} mcc {stats_8['mcc']:.2f})",
+            title=f"Confusion matrix (f1 {stats_8['weighted_f1']:.2f} mcc {stats_8['mcc']:.2f})",
             filename=outpath / "confusion_8class", dendroname=None)
         conf_8.to_csv(outpath / "confusion_8class.csv")
         with open(str(outpath / "stats_8class.json"), "w") as jsfile:
@@ -1158,7 +1158,7 @@ def main():
         conf_6, stats_6 = create_metrics_from_pred(pred_df, mapping=g6_map)
         plotting.plot_confusion_matrix(
             conf_6.values, groups6, normalize=True,
-            title=f"Confusion matrix (f1 {stats_6['f1']:.2f} mcc {stats_6['mcc']:.2f})",
+            title=f"Confusion matrix (f1 {stats_6['weighted_f1']:.2f} mcc {stats_6['mcc']:.2f})",
             filename=outpath / "confusion_6class", dendroname=None)
         conf_6.to_csv(outpath / "confusion_6class.csv")
         with open(str(outpath / "stats_6class.json"), "w") as jsfile:
@@ -1168,7 +1168,7 @@ def main():
         conf_5, stats_5 = create_metrics_from_pred(pred_df, mapping=g5_map)
         plotting.plot_confusion_matrix(
             conf_5.values, groups5, normalize=True,
-            title=f"Confusion matrix (f1 {stats_5['f1']:.2f} mcc {stats_5['mcc']:.2f})",
+            title=f"Confusion matrix (f1 {stats_5['weighted_f1']:.2f} mcc {stats_5['mcc']:.2f})",
             filename=outpath / "confusion_5class", dendroname=None)
         conf_5.to_csv(outpath / "confusion_5class.csv")
         with open(str(outpath / "stats_5class.json"), "w") as jsfile:
