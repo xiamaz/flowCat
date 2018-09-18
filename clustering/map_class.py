@@ -778,6 +778,7 @@ def run_save_model(model, trainseq, testseq, weights=None, path="mll-sommaps/mod
         weights.to_csv(modelpath / f"weights_{name}.csv")
         plotting.plot_confusion_matrix(
             weights.values, weights.columns, normalize=False, cmap=cm.Reds,
+            title="Weight Matrix",
             filename=modelpath / f"weightsplot_{name}", dendroname=None)
 
     model.compile(
