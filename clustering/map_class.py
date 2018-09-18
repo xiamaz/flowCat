@@ -533,17 +533,17 @@ def decomposition(dataset):
 def sommap_tube(x):
     """Block to process a single tube."""
     x = layers.Conv2D(
-        filters=32, kernel_size=2, activation="relu", strides=1,
+        filters=32, kernel_size=3, activation="relu", strides=2,
         kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
-    x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=2,
+    x = layers.Conv2D(filters=64, kernel_size=3, activation="relu", strides=2,
         kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
-    x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
+    x = layers.MaxPooling2D(pool_size=2, strides=1)(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
 
-    x = layers.Conv2D(filters=32, kernel_size=1, activation="relu", strides=1,
+    x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=1,
         kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
-    x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=1,
+    x = layers.Conv2D(filters=128, kernel_size=2, activation="relu", strides=2,
         kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
     x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
     x = layers.BatchNormalization()(x)
@@ -761,7 +761,7 @@ def plot_train_history(path, data):
     fig.savefig(path)
 
 
-def run_save_model(model, trainseq, testseq, weights=None, path="mll-sommaps/models", name="0"):
+def run_save_model(model, trainseq, testseq, train_epochs=200, weights=None, path="mll-sommaps/models", name="0"):
     """Run and predict using the given model. Also save the model in the given
     path with specified name."""
 
@@ -790,8 +790,11 @@ def run_save_model(model, trainseq, testseq, weights=None, path="mll-sommaps/mod
         metrics=["acc"]
     )
 
+    # plot a model diagram
+    keras.utils.plot_model(model, modelpath / f"modelplot_{name}.png", show_shapes=True)
+
     history = model.fit_generator(
-        trainseq, epochs=200,
+        trainseq, epochs=train_epochs,
         callbacks=[
             # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min")
         ],
@@ -814,9 +817,6 @@ def run_save_model(model, trainseq, testseq, weights=None, path="mll-sommaps/mod
     model.save(modelpath / f"model_{name}.h5")
     with open(str(modelpath / f"history_{name}.p"), "wb") as hfile:
         pickle.dump(history.history, hfile)
-
-    # plot a model diagram
-    keras.utils.plot_model(model, modelpath / f"modelplot_{name}.png", show_shapes=True)
 
     trainhistory_path = modelpath / f"trainhistory_{name}"
     plot_train_history(trainhistory_path, history.history)
@@ -851,8 +851,8 @@ def create_metrics_from_pred(pred_df, mapping=None):
     mcc = metrics.matthews_corrcoef(corr, pred)
     stats["weighted_f1"] = weighted_f1
     stats["mcc"] = mcc
-    LOGGER.info("F1: ", weighted_f1)
-    LOGGER.info("MCC: ", mcc)
+    LOGGER.info("F1: %f", weighted_f1)
+    LOGGER.info("MCC: %f", mcc)
 
     confusion = metrics.confusion_matrix(corr, pred, groups,)
     confusion = pd.DataFrame(confusion, columns=groups, index=groups)
@@ -941,10 +941,10 @@ def save_json(data, outpath):
 
 def main():
     ## CONFIGURATION VARIABLES
-    c_uniq_name = "perftest"
+    c_uniq_name = "deepershift"
     c_model = "sommap"
     c_groupmap = "8class"
-    c_weights = None
+    c_weights = "weighted"
     # output locations
     c_output_results = "mll-sommaps/output"
     c_output_model = "mll-sommaps/models"
@@ -954,7 +954,7 @@ def main():
     c_histo_data = "../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"
     c_fcs_data = "s3://mll-flowdata/CLL-9F"
     # split train, test using predefined split
-    c_predefined_split = False
+    c_predefined_split = True
     c_train_labels = "data/train_labels.json"
     c_test_labels = "data/test_labels.json"
     c_trainargs = {
@@ -965,6 +965,7 @@ def main():
         "draw_method": "sequential",
         "epoch_size": None,
     }
+    c_train_epochs = 2
     # Data modifications
     c_dataoptions = {
         CountLoader.__name__: {
@@ -1152,42 +1153,25 @@ def main():
     trainseq = SOMMapDataset(train, xoutputs, batch_size=train_batch, groups=groups, **c_trainargs)
     testseq = SOMMapDataset(test, xoutputs, batch_size=test_batch, groups=groups, **c_testargs)
     model = modelfun(*trainseq.shape)
-    run_save_model(model, trainseq, testseq, weights=weights, path=modelpath, name="0")
+    pred_df = run_save_model(
+        model, trainseq, testseq,
+        weights=weights, train_epochs=c_train_epochs, path=modelpath, name="0")
 
     LOGGER.info(f"Statistics results for {name}")
-    # normal f(8)
-    if len(groups) == 8:
-        LOGGER.info("-- 8 class --")
-        conf_8, stats_8 = create_metrics_from_pred(pred_df, mapping=None)
+    for gname, groupstat in group_maps.items():
+        # skip if our cohorts are larger
+        if len(groups) < len(groupstat["groups"]):
+            continue
+
+        LOGGER.info(f"-- {len(groupstat['groups'])} --")
+        conf, stats = create_metrics_from_pred(pred_df, mapping=groupstat["map"])
         plotting.plot_confusion_matrix(
-            conf_8.values, groups, normalize=True,
-            title=f"Confusion matrix (f1 {stats_8['weighted_f1']:.2f} mcc {stats_8['mcc']:.2f})",
-            filename=outpath / "confusion_8class", dendroname=None)
-        conf_8.to_csv(outpath / "confusion_8class.csv")
-        with open(str(outpath / "stats_8class.json"), "w") as jsfile:
-            json.dump(stats_8, jsfile)
-    # merged f(6)
-    if len(groups) >= 6:
-        LOGGER.info("-- 6 class --")
-        conf_6, stats_6 = create_metrics_from_pred(pred_df, mapping=g6_map)
-        plotting.plot_confusion_matrix(
-            conf_6.values, groups6, normalize=True,
-            title=f"Confusion matrix (f1 {stats_6['weighted_f1']:.2f} mcc {stats_6['mcc']:.2f})",
-            filename=outpath / "confusion_6class", dendroname=None)
-        conf_6.to_csv(outpath / "confusion_6class.csv")
-        with open(str(outpath / "stats_6class.json"), "w") as jsfile:
-            json.dump(stats_6, jsfile)
-    # merged f(5)
-    if len(groups) >= 5:
-        LOGGER.info("-- 5 class --")
-        conf_5, stats_5 = create_metrics_from_pred(pred_df, mapping=g5_map)
-        plotting.plot_confusion_matrix(
-            conf_5.values, groups5, normalize=True,
-            title=f"Confusion matrix (f1 {stats_5['weighted_f1']:.2f} mcc {stats_5['mcc']:.2f})",
-            filename=outpath / "confusion_5class", dendroname=None)
-        conf_5.to_csv(outpath / "confusion_5class.csv")
-        with open(str(outpath / "stats_5class.json"), "w") as jsfile:
-            json.dump(stats_5, jsfile)
+            conf.values, groupstat["groups"], normalize=True,
+            title=f"Confusion matrix (f1 {stats['weighted_f1']:.2f} mcc {stats['mcc']:.2f})",
+            filename=outpath / f"confusion_{gname}", dendroname=None)
+        conf.to_csv(outpath / f"confusion_{gname}.csv")
+        with open(str(outpath / f"stats_{gname}.json"), "w") as jsfile:
+            json.dump(stats, jsfile)
 
 
 if __name__ == "__main__":
