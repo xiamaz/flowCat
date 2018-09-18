@@ -19,6 +19,7 @@ from keras_applications import resnet50
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+from matplotlib import cm
 
 import fcsparser
 
@@ -162,6 +163,36 @@ def select_drop_counts(data, sel_count=None):
     return data
 
 
+def args_hasher(*args, **kwargs):
+    """Use at own discretion. Will simply concatenate all input args as
+    strings to generate keys."""
+    h = hashlib.blake2b()
+    hashstr = "".join(str(a) for a in args) + "".join(str(k) + str(v) for k, v in kwargs.items())
+    h.update(hashstr.encode())
+    return h.hexdigest()
+
+
+def disk_cache(fun):
+
+    cachepath = pathlib.Path(CACHEDIR) / fun.__name__
+    cachepath.mkdir(parents=True, exist_ok=True)
+
+    @functools.wraps(fun)
+    def wrapper(*args, **kwargs):
+        hashed = args_hasher(*args, **kwargs)
+        filepath = cachepath / hashed
+        if filepath.exists():
+            with open(filepath, "rb") as f:
+                result = pickle.load(f)
+        else:
+            result = fun(*args, **kwargs)
+            with open(filepath, "wb") as f:
+                pickle.dump(result, f)
+        return result
+
+    return wrapper
+
+
 class LoaderMixin:
     datacol = "sommappath"
     histocol = "histopath"
@@ -227,36 +258,6 @@ class CountLoader(LoaderMixin):
                 raise RuntimeError()
             counts = sel_rows.values
         return counts
-
-
-def args_hasher(*args, **kwargs):
-    """Use at own discretion. Will simply concatenate all input args as
-    strings to generate keys."""
-    h = hashlib.blake2b()
-    hashstr = "".join(str(a) for a in args) + "".join(str(k) + str(v) for k, v in kwargs.items())
-    h.update(hashstr.encode())
-    return h.hexdigest()
-
-
-def disk_cache(fun):
-
-    cachepath = pathlib.Path(CACHEDIR) / fun.__name__
-    cachepath.mkdir(parents=True, exist_ok=True)
-
-    @functools.wraps(fun)
-    def wrapper(*args, **kwargs):
-        hashed = args_hasher(*args, **kwargs)
-        filepath = cachepath / hashed
-        if filepath.exists():
-            with open(filepath, "rb") as f:
-                result = pickle.load(f)
-        else:
-            result = fun(*args, **kwargs)
-            with open(filepath, "wb") as f:
-                pickle.dump(result, f)
-        return result
-
-    return wrapper
 
 
 
@@ -704,11 +705,6 @@ def create_model_all(xshape, yshape):
     return model
 
 
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from matplotlib.figure import Figure
-from matplotlib import cm
-
-
 def plot_train_history(path, data):
     """Plot the training history of the given data."""
 
@@ -718,7 +714,7 @@ def plot_train_history(path, data):
     # Traning dataset loss and accuracy metrics
     ax.plot(
         range(len(data["loss"])), data["loss"],
-        c="red", linestyle="-", label="Loss")
+        c="blue", linestyle="--", label="Loss")
     ax.plot(
         range(len(data["loss"])), data["val_loss"],
         c="red", linestyle="--", label="Validation Loss")
@@ -730,7 +726,10 @@ def plot_train_history(path, data):
     ax.plot(
         range(len(data["val_acc"])),
         data["val_acc"],
-        c="blue", linestyle="--", label="Validation Accuracy")
+        c="red", linestyle="-", label="Validation Accuracy")
+
+    ax.set_xlabel("No. Epoch")
+    ax.set_ylabel("Loss value / Acc")
 
     ax.legend()
 
