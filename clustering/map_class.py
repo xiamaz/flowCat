@@ -551,7 +551,7 @@ def fcs_merged(x):
         kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
     xa = layers.Conv1D(
         50, 1, strides=1, activation="elu",
-        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
+        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(xa)
     xa = layers.GlobalAveragePooling1D()(xa)
     x = xa
     # xa = layers.BatchNormalization()(xa)
@@ -736,7 +736,7 @@ def classify_convolutional(train, test, toroidal=False, groups=None, *args, **kw
 
 def classify_fcs(train, test, groups=None, *args, **kwargs):
     xoutputs = [
-        FCSLoader.create_inferred(train, tubes=[1, 2], subsample=500),
+        FCSLoader.create_inferred(train, tubes=[1, 2], subsample=100),
     ]
     trainseq = SOMMapDataset(
         train, xoutputs, batch_size=16, draw_method="balanced", groups=groups, epoch_size=8000)
@@ -821,6 +821,7 @@ def classify_all(
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+from matplotlib import cm
 
 
 def plot_train_history(path, data):
@@ -835,16 +836,18 @@ def plot_train_history(path, data):
         c="red", linestyle="-", label="Loss")
     ax.plot(
         range(len(data["loss"])), data["val_loss"],
-        c="red", linestyle="-", label="Validation Loss")
+        c="red", linestyle="--", label="Validation Loss")
 
     # Testing dataset loss and accuracy metrics
     ax.plot(
         range(len(data["acc"])), data["acc"],
-        c="blue", linestyle="--", label="Accuracy")
+        c="blue", linestyle="-", label="Accuracy")
     ax.plot(
         range(len(data["val_acc"])),
         data["val_acc"],
         c="blue", linestyle="--", label="Validation Accuracy")
+
+    ax.legend()
 
     FigureCanvas(fig)
 
@@ -899,6 +902,12 @@ def run_save_model(model, trainseq, testseq, weights=None, path="mll-sommaps/mod
 
     if weights is not None:
         weights.to_csv(modelpath / f"weights_{name}")
+        plotting.plot_confusion_matrix(
+            weights.values, groups, normalize=False, cm=cm.Reds,
+            filename=outpath / f"weightsplot_{name}", dendroname=None)
+
+    # plot a model diagram
+    keras.utils.plot_model(model, modelpath / f"modelplot_{name}.png", show_shapes=True)
 
     trainhistory_path = modelpath / f"trainhistory_{name}"
     plot_train_history(trainhistory_path, history.history)
