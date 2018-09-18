@@ -698,7 +698,7 @@ def create_model_all(xshape, yshape):
     return model
 
 
-def classify_histogram(train, test, groups=None, weights=None, *args, **kwargs):
+def classify_histogram(train, test, groups=None, *args, **kwargs):
     """Extremely simple sequential neural network with two
     inputs for the 10x10x12 data
     """
@@ -713,23 +713,10 @@ def classify_histogram(train, test, groups=None, weights=None, *args, **kwargs):
     testseq = SOMMapDataset(test, xoutputs, batch_size=128, draw_method="sequential", groups=groups)
 
     model = create_model_histo(*trainseq.shape)
-
-    if weights is None:
-        lossfun = "categorical_crossentropy"
-    else:
-        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
-            weights=weights)
-    model.compile(
-        loss=lossfun,
-        optimizer="adam",
-        metrics=["acc"]
-    )
-    return run_save_model(model, trainseq, testseq, *args, **kwargs)
+    return run_save_model(model, trainseq, testseq, weights=weights, *args, **kwargs)
 
 
-def classify_convolutional(
-        train, test, weights=None, toroidal=False, groups=None, *args, **kwargs
-):
+def classify_convolutional(train, test, toroidal=False, groups=None, *args, **kwargs):
     # wrap pad input matrix if we use toroidal input data
     pad_width = 1 if toroidal else 0
 
@@ -739,28 +726,15 @@ def classify_convolutional(
         Map2DLoader.create_inferred(
             train, tube=2, pad_width=pad_width, sel_count=None),
     ]
-    trainseq = SOMMapDataset(train, xoutputs, batch_size=16, draw_method="balanced", groups=groups, epoch_size=8000)
+    trainseq = SOMMapDataset(train, xoutputs, batch_size=16, draw_method="balanced", groups=groups, epoch_size=16000)
     testseq = SOMMapDataset(test, xoutputs, batch_size=32, draw_method="sequential", groups=groups)
 
     model = create_model_convolutional(*trainseq.shape)
 
-    if weights is None:
-        lossfun = "categorical_crossentropy"
-    else:
-        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
-            weights=weights)
-    model.compile(
-        loss=lossfun,
-        optimizer="adam",
-        # optimizer=optimizers.Adam(
-        #     lr=0.0001, decay=0.0, epsilon=0.0001
-        # ),
-        metrics=["acc"]
-    )
     return run_save_model(model, trainseq, testseq, *args, **kwargs)
 
 
-def classify_fcs(train, test, weights=None, groups=None, *args, **kwargs):
+def classify_fcs(train, test, groups=None, *args, **kwargs):
     xoutputs = [
         FCSLoader.create_inferred(train, tubes=[1, 2], subsample=500),
     ]
@@ -770,25 +744,11 @@ def classify_fcs(train, test, weights=None, groups=None, *args, **kwargs):
         test, xoutputs, batch_size=16, draw_method="sequential", groups=groups)
 
     model = create_model_fcs(*trainseq.shape)
-
-    if weights is None:
-        lossfun = "categorical_crossentropy"
-    else:
-        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
-            weights=weights)
-    model.compile(
-        loss=lossfun,
-        optimizer="adam",
-        # optimizer=optimizers.Adam(
-        #     lr=0.0001, decay=0.0, epsilon=0.00001
-        # ),
-        metrics=["acc"]
-    )
     return run_save_model(model, trainseq, testseq, *args, **kwargs)
 
 
 def classify_mapfcs(
-        train, test, weights=None, toroidal=False, groups=None, *args, **kwargs
+        train, test, toroidal=False, groups=None, *args, **kwargs
 ):
     pad_width = 1 if toroidal else 0
     xoutputs = [
@@ -806,23 +766,11 @@ def classify_mapfcs(
 
     model = create_model_mapfcs(*trainseq.shape)
 
-    if weights is None:
-        lossfun = "categorical_crossentropy"
-    else:
-        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
-            weights=weights)
-    model.compile(
-        loss=lossfun,
-        optimizer=optimizers.Adam(
-            lr=0.0001, decay=0.0, epsilon=0.00001
-        ),
-        metrics=["acc"]
-    )
     return run_save_model(model, trainseq, testseq, *args, **kwargs)
 
 
 def classify_maphisto(
-        train, test, weights=None, toroidal=False, groups=None, *args, **kwargs
+        train, test, toroidal=False, groups=None, *args, **kwargs
 ):
     pad_width = 1 if toroidal else 0
     xoutputs = [
@@ -843,23 +791,11 @@ def classify_maphisto(
 
     model = create_model_maphisto(*trainseq.shape)
 
-    if weights is None:
-        lossfun = "categorical_crossentropy"
-    else:
-        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
-            weights=weights)
-    model.compile(
-        loss=lossfun,
-        optimizer=optimizers.Adam(
-            lr=0.0001, decay=0.0, epsilon=0.0001
-        ),
-        metrics=["acc"]
-    )
     return run_save_model(model, trainseq, testseq, *args, **kwargs)
 
 
 def classify_all(
-        train, test, weights=None, toroidal=False, groups=None, *args, **kwargs
+        train, test, toroidal=False, groups=None, *args, **kwargs
 ):
     pad_width = 1 if toroidal else 0
     xoutputs = [
@@ -880,20 +816,6 @@ def classify_all(
         test, xoutputs, batch_size=32, draw_method="sequential", groups=groups)
 
     model = create_model_all(*trainseq.shape)
-
-    if weights is None:
-        lossfun = "categorical_crossentropy"
-    else:
-        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
-            weights=weights)
-    model.compile(
-        loss=lossfun,
-        optimizer="adam",
-        # optimizer=optimizers.Adam(
-        #     lr=0.0001, decay=0.0, epsilon=0.00001
-        # ),
-        metrics=["acc"]
-    )
     return run_save_model(model, trainseq, testseq, *args, **kwargs)
 
 
@@ -929,9 +851,24 @@ def plot_train_history(path, data):
     fig.savefig(path)
 
 
-def run_save_model(model, trainseq, testseq, path="mll-sommaps/models", name="0"):
+def run_save_model(model, trainseq, testseq, weights=None, path="mll-sommaps/models", name="0"):
     """Run and predict using the given model. Also save the model in the given
     path with specified name."""
+
+    if weights is None:
+        lossfun = "categorical_crossentropy"
+    else:
+        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
+            weights=weights)
+    model.compile(
+        loss=lossfun,
+        optimizer="adam",
+        # optimizer=optimizers.Adam(
+        #     lr=0.0001, decay=0.0, epsilon=0.00001
+        # ),
+        metrics=["acc"]
+    )
+
     history = model.fit_generator(
         trainseq, epochs=200,
         callbacks=[
@@ -959,6 +896,9 @@ def run_save_model(model, trainseq, testseq, path="mll-sommaps/models", name="0"
     model.save(modelpath / f"model_{name}.h5")
     with open(str(modelpath / f"history_{name}.p"), "wb") as hfile:
         pickle.dump(history.history, hfile)
+
+    if weights is not None:
+        weights.to_csv(modelpath / f"weights_{name}")
 
     trainhistory_path = modelpath / f"trainhistory_{name}"
     plot_train_history(trainhistory_path, history.history)
@@ -1113,31 +1053,31 @@ def main():
     # Group weights are a dict mapping tuples to tuples. Weights are for
     # false classifications in the given direction.
     # (a, b) --> (a>b, b>a)
-    # group_weights = {
-    #     ("normal", None): (10.0, 100.0),
-    #     ("MZL", "LPL"): (2, 2),
-    #     ("MCL", "PL"): (2, 2),
-    #     ("FL", "LPL"): (3, 5),
-    #     ("FL", "MZL"): (3, 5),
-    # }
-    # weights = create_weight_matrix(group_weights, groups, base_weight=5)
-    weights = None
+    group_weights = {
+        ("normal", None): (5.0, 10.0),
+        ("MZL", "LPL"): (2, 2),
+        ("MCL", "PL"): (2, 2),
+        ("FL", "LPL"): (3, 5),
+        ("FL", "MZL"): (3, 5),
+    }
+    weights = create_weight_matrix(group_weights, groups, base_weight=5)
+    # weights = None
 
     # plotpath = pathlib.Path("sommaps/output/lotta")
     # tf1, tf2, y = decomposition(indata)
     # plot_transformed(plotpath, tf1, tf2, y)
     validation = "holdout"
-    name = "threemodel_revised_global_decay"
+    name = "convolutional_01split_weighted"
 
-    train, test = split_data(indata, test_num=0.2)
+    train, test = split_data(indata, test_num=0.1)
 
     # pred_df = classify_histogram(
     #     train, test, weights=weights, groups=groups, path=f"mll-sommaps/models/{name}",
     # )
 
-    # pred_df = classify_convolutional(
-    #     train, test, toroidal=True, weights=weights,
-    #     groups=groups, path=f"mll-sommaps/models/{name}")
+    pred_df = classify_convolutional(
+        train, test, toroidal=True, weights=weights,
+        groups=groups, path=f"mll-sommaps/models/{name}")
 
     # pred_df = classify_maphisto(
     #     train, test, toroidal=True, weights=weights,
@@ -1150,9 +1090,9 @@ def main():
     #     train, test, toroidal=True, weights=weights,
     #     groups=groups, path=f"mll-sommaps/models/{name}")
 
-    pred_df = classify_all(
-        train, test, toroidal=True, weights=weights,
-        groups=groups, path=f"mll-sommaps/models/{name}")
+    # pred_df = classify_all(
+    #     train, test, toroidal=True, weights=weights,
+    #     groups=groups, path=f"mll-sommaps/models/{name}")
 
     outpath = pathlib.Path(f"output/{name}_{validation}")
     outpath.mkdir(parents=True, exist_ok=True)
