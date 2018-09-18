@@ -107,6 +107,7 @@ def load_dataset(mappath, histopath, fcspath):
                 "sommappath": str(mappath / f"{case.id}_t{{tube}}.csv"),
                 "fcspath": {k: utils.get_file_path(v[-1].path) for k, v in case.tubepaths.items()},
                 "histopath": f"{histopath}/tube{{tube}}.csv",
+                "sureness": case.sureness,
             }
         except KeyError as e:
             LOGGER.debug(f"{e} - Not found in histo or sommap")
@@ -192,6 +193,23 @@ def disk_cache(fun):
 
     return wrapper
 
+
+def mem_cache(fun):
+    """Cache function output inside the calling object."""
+
+    @functools.wraps(fun)
+    def wrapper(self, *args, **kwargs):
+        if not hasattr(self, "_cache"):
+            self._cache = {}
+        hashed = args_hasher(*args, **kwargs)
+        if hashed in self._cache:
+            result = self._cache[hashed]
+        else:
+            result = fun(self, *args, **kwargs)
+            self._cache[hashed] = result
+        return result
+
+    return wrapper
 
 class LoaderMixin:
     datacol = "sommappath"
@@ -326,13 +344,14 @@ class FCSLoader(LoaderMixin):
 
 class Map2DLoader(LoaderMixin):
     """2-Dimensional SOM maps for 2D-Convolutional processing."""
-    def __init__(self, tube, gridsize, channels, sel_count=None, pad_width=0):
+    def __init__(self, tube, gridsize, channels, sel_count=None, pad_width=0, cached=False):
         """Object to transform input rows into the specified format."""
         self.tube = tube
         self.gridsize = gridsize
         self.channels = channels
         self.sel_count = sel_count
         self.pad_width = pad_width
+        self._cache = {}
 
     @classmethod
     def create_inferred(cls, data, tube, *args, **kwargs):
@@ -356,20 +375,24 @@ class Map2DLoader(LoaderMixin):
             len(self.channels) + bool(self.sel_count)
         )
 
+    @staticmethod
+    @disk_cache
+    def _load_sommap(path, tube, sel_count, pad_width, gridsize):
+        mapdata = Map2DLoader.load_data(path, tube)
+        mapdata = select_drop_counts(mapdata, sel_count)
+        mapdata = reshape_dataframe(mapdata, m=gridsize, n=gridsize, pad_width=pad_width)
+        return mapdata
+
+    def _get_mapdata(self, pathlist):
+        map_list = []
+        for path in pathlist:
+            data = self._load_sommap(path, self.tube, self.sel_count, self.pad_width, self.gridsize)
+            map_list.append(data)
+        return np.stack(map_list)
+
     def __call__(self, data):
         """Output specified format."""
-        map_list = []
-        for path in data[self.datacol]:
-            mapdata = self.load_data(path, self.tube)
-            mapdata = select_drop_counts(mapdata, self.sel_count)
-            data = reshape_dataframe(
-                mapdata,
-                m=self.gridsize,
-                n=self.gridsize,
-                pad_width=self.pad_width)
-            map_list.append(data)
-
-        return np.stack(map_list)
+        return self._get_mapdata(list(data[self.datacol]))
 
 
 class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
@@ -920,7 +943,7 @@ def main():
     c_uniq_name = "perftest"
     c_model = "sommap"
     c_groupmap = "8class"
-    c_weights = "weighted"
+    c_weights = None
     # output locations
     c_output_results = "mll-sommaps/output"
     c_output_model = "mll-sommaps/models"
@@ -930,7 +953,7 @@ def main():
     c_histo_data = "../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"
     c_fcs_data = "s3://mll-flowdata/CLL-9F"
     # split train, test using predefined split
-    c_predefined_split = True
+    c_predefined_split = False
     c_train_labels = "data/train_labels.json"
     c_test_labels = "data/test_labels.json"
     c_trainargs = {
@@ -1045,7 +1068,7 @@ def main():
         }
         weights = create_weight_matrix(group_weights, groups, base_weight=5)
     elif c_weights == "simpleweights":
-    ## simpler group weights
+        ## simpler group weights
         group_weights = {
             ("normal", None): (1.0, 20.0),
         }
@@ -1125,8 +1148,8 @@ def main():
         raise RuntimeError(f"Unknown model {c_model}")
 
     modelpath = pathlib.Path(f"{c_output_model}/{name}")
-    trainseq = SOMMapDataset(train, xoutputs, batch_size=train_batch, **c_trainargs)
-    testseq = SOMMapDataset(test, xoutputs, batch_size=test_batch, **c_testargs)
+    trainseq = SOMMapDataset(train, xoutputs, batch_size=train_batch, groups=groups, **c_trainargs)
+    testseq = SOMMapDataset(test, xoutputs, batch_size=test_batch, groups=groups, **c_testargs)
     model = modelfun(*trainseq.shape)
     run_save_model(model, trainseq, testseq, weights=weights, path=modelpath, name="0")
 
