@@ -50,6 +50,9 @@ COLS = "grcmyk"
 LOGGER = logging.getLogger(__name__)
 
 
+GLOBAL_DECAY = 0.001 / 2  # division by two for usage in l2 regularization
+
+
 def inverse_binarize(y, classes):
     classes = np.asarray(classes)
     if isinstance(y, pd.DataFrame):
@@ -534,17 +537,17 @@ def sommap_tube(x):
     """Block to process a single tube."""
     x = layers.Conv2D(
         filters=32, kernel_size=3, activation="relu", strides=1,
-        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
+        kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
     x = layers.Conv2D(filters=64, kernel_size=3, activation="relu", strides=2,
-        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
+        kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
     # x = layers.MaxPooling2D(pool_size=2, strides=1)(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
 
     x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=1,
-        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
+        kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
     x = layers.Conv2D(filters=128, kernel_size=2, activation="relu", strides=2,
-        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
+        kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
     # x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
 
     x = layers.BatchNormalization()(x)
@@ -564,13 +567,13 @@ def sommap_merged(t1, t2):
 
     x = layers.Dense(
         units=256, activation="relu", kernel_initializer="uniform",
-        kernel_regularizer=regularizers.l2(0.0001 / 2)
+        kernel_regularizer=regularizers.l2(GLOBAL_DECAY)
     )(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
     x = layers.Dense(
         units=128, activation="relu", kernel_initializer="uniform",
-        kernel_regularizer=regularizers.l2(0.0001 / 2)
+        kernel_regularizer=regularizers.l2(GLOBAL_DECAY)
     )(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
@@ -581,10 +584,10 @@ def fcs_merged(x):
     """1x1 convolutions on raw FCS data."""
     xa = layers.Conv1D(
         50, 1, strides=1, activation="elu",
-        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
+        kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
     xa = layers.Conv1D(
         50, 1, strides=1, activation="elu",
-        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(xa)
+        kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(xa)
     xa = layers.GlobalAveragePooling1D()(xa)
     x = xa
     # xa = layers.BatchNormalization()(xa)
@@ -598,11 +601,11 @@ def fcs_merged(x):
 
     x = layers.Dense(
         50, activation="elu",
-        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
+        kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
     # x = layers.Dropout(0.2)(x)
     x = layers.Dense(
         50, activation="elu",
-        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
+        kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
     # x = layers.Dense(32, activation="elu")(x)
     # x = layers.Dropout(0.2)(x)
     # x = layers.Dense(16)(x)
@@ -616,11 +619,11 @@ def histogram_tube(x):
     """Processing of histogram information using dense neural net."""
     x = layers.Dense(
         units=16, activation="elu", kernel_initializer="uniform",
-        kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
+        kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
     # x = layers.Dropout(rate=0.01)(x)
     x = layers.Dense(
         units=16, activation="elu",
-        kernel_regularizer=regularizers.l2(l=.0001 / 2))(x)
+        kernel_regularizer=regularizers.l2(l=GLOBAL_DECAY))(x)
     # x = layers.Dropout(rate=0.01)(x)
     # x = layers.BatchNormalization()(x)
     return x
@@ -633,7 +636,7 @@ def histogram_merged(t1, t2):
     x = layers.concatenate([t1, t2])
     x = layers.Dense(
         units=16, activation="elu",
-        kernel_regularizer=regularizers.l2(.0001 / 2))(x)
+        kernel_regularizer=regularizers.l2(GLOBAL_DECAY))(x)
     return x
 
 
@@ -723,7 +726,7 @@ def create_model_all(xshape, yshape):
     mm = sommap_merged(m1input, m2input)
     hm = histogram_merged(t1input, t2input)
     x = layers.concatenate([fm, mm, hm])
-    x = layers.Dense(32, kernel_regularizer=keras.regularizers.l2(l=0.0001 / 2))(x)
+    x = layers.Dense(32, kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
     final = layers.Dense(yshape, activation="softmax")(x)
 
     model = models.Model(
@@ -764,7 +767,8 @@ def plot_train_history(path, data):
     fig.savefig(path)
 
 
-def run_save_model(model, trainseq, testseq, train_epochs=200, weights=None, path="mll-sommaps/models", name="0"):
+def run_save_model(
+        model, trainseq, testseq, train_epochs=200, initial_rate=1e-3, drop=0.5, epochs_drop=100, weights=None, path="mll-sommaps/models", name="0"):
     """Run and predict using the given model. Also save the model in the given
     path with specified name."""
 
@@ -784,13 +788,26 @@ def run_save_model(model, trainseq, testseq, train_epochs=200, weights=None, pat
             title="Weight Matrix",
             filename=modelpath / f"weightsplot_{name}", dendroname=None)
 
+    def top2_acc(y_true, y_pred):
+        return keras.metrics.top_k_categorical_accuracy(y_true, y_pred, k=2)
+
+    def create_stepped(initial_rate=1e-3, drop=0.5, epochs_drop=100):
+
+        def scheduler(epoch):
+            lrate = initial_lrate * math.pow(drop, math.floor((1+epoch)/epochs_drop))
+            return lrate
+
+        return keras.callbacks.LearningRateScheduler(scheduler)
+
+
     model.compile(
         loss=lossfun,
-        optimizer="adam",
-        # optimizer=optimizers.Adam(
-        #     lr=0.0001, decay=0.0, epsilon=0.00001
-        # ),
-        metrics=["acc"]
+        # optimizer="adam",
+        optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=1e-5),  # lr and decay set by callback
+        metrics=[
+            "acc",
+            top2_acc,
+        ]
     )
 
     # plot a model diagram
@@ -799,7 +816,8 @@ def run_save_model(model, trainseq, testseq, train_epochs=200, weights=None, pat
     history = model.fit_generator(
         trainseq, epochs=train_epochs,
         callbacks=[
-            # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min")
+            # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min"),
+            create_stepped(initial_rate, drop, epochs_drop),
         ],
         validation_data=testseq,
         # class_weight={
@@ -944,10 +962,10 @@ def save_json(data, outpath):
 
 def main():
     ## CONFIGURATION VARIABLES
-    c_uniq_name = "deepershift"
+    c_uniq_name = "deepershift_counts_noweight_moreregu_sloweradam"
     c_model = "sommap"
     c_groupmap = "8class"
-    c_weights = "weighted"
+    c_weights = None
     # output locations
     c_output_results = "mll-sommaps/output"
     c_output_model = "mll-sommaps/models"
@@ -968,7 +986,13 @@ def main():
         "draw_method": "sequential",
         "epoch_size": None,
     }
-    c_train_epochs = 200
+    c_runargs = {
+        "train_epochs": 200,
+        "initial_rate": 1e-3,
+        "drop": 0.5,
+        "epochs_drop": 100,
+    }
+    c_train_epochs = 400
     # Data modifications
     c_dataoptions = {
         CountLoader.__name__: {
@@ -978,7 +1002,7 @@ def main():
             "version": "dataframe",
         },
         Map2DLoader.__name__: {
-            "sel_count": None,  # use count in SOM map as just another channel
+            "sel_count": "counts",  # use count in SOM map as just another channel
             "pad_width": 1 if "toroid" in c_sommap_data else 0  # do something more elaborate later
         },
     }
@@ -1157,8 +1181,7 @@ def main():
     testseq = SOMMapDataset(test, xoutputs, batch_size=test_batch, groups=groups, **c_testargs)
     model = modelfun(*trainseq.shape)
     pred_df = run_save_model(
-        model, trainseq, testseq,
-        weights=weights, train_epochs=c_train_epochs, path=modelpath, name="0")
+        model, trainseq, testseq, weights=weights, path=modelpath, name="0", **c_runargs)
 
     LOGGER.info(f"Statistics results for {name}")
     for gname, groupstat in group_maps.items():
