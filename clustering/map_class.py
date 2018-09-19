@@ -1,3 +1,4 @@
+import math
 import json
 import os
 import pickle
@@ -794,7 +795,7 @@ def run_save_model(
     def create_stepped(initial_rate=1e-3, drop=0.5, epochs_drop=100):
 
         def scheduler(epoch):
-            lrate = initial_lrate * math.pow(drop, math.floor((1+epoch)/epochs_drop))
+            lrate = initial_rate * math.pow(drop, math.floor((1+epoch)/epochs_drop))
             return lrate
 
         return keras.callbacks.LearningRateScheduler(scheduler)
@@ -991,11 +992,10 @@ def main():
     }
     c_runargs = {
         "train_epochs": 200,
-        "initial_rate": 1e-3,
+        "initial_rate": 5e-3,
         "drop": 0.5,
-        "epochs_drop": 100,
+        "epochs_drop": 50,
     }
-    c_train_epochs = 400
     # Data modifications
     c_dataoptions = {
         CountLoader.__name__: {
