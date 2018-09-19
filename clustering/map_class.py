@@ -408,7 +408,7 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
     def __init__(
             self, data, xoutputs,
             batch_size=32, draw_method="shuffle", epoch_size=None,
-            groups=None, toroidal=False
+            groups=None, group_nums=None
     ):
         """
         Args:
@@ -420,10 +420,12 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
                     'shuffle', # shuffle all data and return batches
                     'sequential',  # return data in sequence
                     'balanced'  # present balanced representation of data in one epoch
+                    'groupnums'  # specified number of samples per group
                 ]
             epoch_size: Number of samples in a single epoch. Is data length if None or 0.
             groups: List of groups to transform the labels into binary matrix.
-            toroidal: Pad data in toroidal manner.
+            group_nums: Number of samples per group for balanced sampling. If
+                not given, will evenly distribute the epoch size among all groups.
         Returns:
             SOMMapDataset object.
         """
@@ -431,19 +433,14 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
         self.draw_method = draw_method
 
         self._all_data = data
+        if groups is None:
+            groups = list(self._all_data["group"].unique())
+        self.groups = groups
+        self.group_nums = group_nums
 
         self._data = self._sample_data(data, epoch_size)
         self.epoch_size = self._data.shape[0]
 
-        if groups is None:
-            groups = list(self._all_data["group"].unique())
-
-        self.groups = groups
-
-        if toroidal:
-            pad_width = 1
-        else:
-            pad_width = 0
         self._xoutputs = xoutputs
 
     def _sample_data(self, data, epoch_size=None):
@@ -452,9 +449,12 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
         elif self.draw_method == "sequential":
             selection = data
         elif self.draw_method == "balanced":
-            sample_num = epoch_size or len(data)
+            sample_num = int((epoch_size or len(data)) / len(self.groups))
             selection = data.groupby("group").apply(lambda x: x.sample(
                 n=sample_num, replace=True)).reset_index(0, drop=True).sample(frac=1)
+        elif self.draw_method == "groupnum":
+            selection = data.groupby("orig_group").apply(lambda x: x.sample(
+                n=self.group_nums[x.name], replace=True)).reset_index(0, drop=True).sample(frac=1)
         else:
             raise RuntimeError(
                 f"Unknown draw method: {self.draw_method}. "
@@ -853,7 +853,7 @@ def run_save_model(
     plot_train_history(trainhistory_path, history.history)
 
     pred_df = pd.DataFrame(
-        pred_mat, columns=trainseq.groups, index=testseq.labels)
+        pred_mat, columns=testseq.groups, index=testseq.labels)
     pred_df["correct"] = testseq.ylabels
     pred_df.to_csv(modelpath / f"predictions_{name}.csv")
     return pred_df
@@ -968,9 +968,6 @@ def save_json(data, outpath):
     """Save a json file to the specified path."""
     with open(str(outpath), "w") as jsfile:
         json.dump(data, jsfile)
-
-
-MLL_DATADIR = os.environ["MLLDATADIR"]
 
 
 def main():
