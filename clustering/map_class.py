@@ -769,7 +769,7 @@ def plot_train_history(path, data):
 
 
 def run_save_model(
-        model, trainseq, testseq, train_epochs=200, initial_rate=1e-3, drop=0.5, epochs_drop=100, weights=None, path="mll-sommaps/models", name="0"):
+        model, trainseq, testseq, train_epochs=200, epsilon=1e-8, initial_rate=1e-3, drop=0.5, epochs_drop=100, weights=None, path="mll-sommaps/models", name="0"):
     """Run and predict using the given model. Also save the model in the given
     path with specified name."""
 
@@ -804,10 +804,10 @@ def run_save_model(
     model.compile(
         loss=lossfun,
         # optimizer="adam",
-        optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=1e-8),  # lr and decay set by callback
+        optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=epsilon),  # lr and decay set by callback
         metrics=[
             "acc",
-            top2_acc,
+            # top2_acc,
         ]
     )
 
@@ -995,6 +995,7 @@ def main():
         "initial_rate": 1e-3,
         "drop": 0.5,
         "epochs_drop": 50,
+        "epsilon": 1e-8,
     }
     # Data modifications
     c_dataoptions = {
