@@ -537,22 +537,22 @@ def decomposition(dataset):
 def sommap_tube(x):
     """Block to process a single tube."""
     x = layers.Conv2D(
-        filters=32, kernel_size=3, activation="relu", strides=1,
+        filters=32, kernel_size=3, activation="elu", strides=1,
         kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
-    x = layers.Conv2D(filters=64, kernel_size=3, activation="relu", strides=2,
+    x = layers.Conv2D(filters=32, kernel_size=3, activation="elu", strides=2,
         kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
     # x = layers.MaxPooling2D(pool_size=2, strides=1)(x)
     x = layers.BatchNormalization()(x)
-    x = layers.Dropout(0.2)(x)
+    # x = layers.Dropout(0.2)(x)
 
-    x = layers.Conv2D(filters=64, kernel_size=2, activation="relu", strides=1,
+    x = layers.Conv2D(filters=64, kernel_size=2, activation="elu", strides=1,
         kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
-    x = layers.Conv2D(filters=128, kernel_size=2, activation="relu", strides=2,
+    x = layers.Conv2D(filters=64, kernel_size=2, activation="elu", strides=2,
         kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
     # x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
 
     x = layers.BatchNormalization()(x)
-    x = layers.Dropout(0.2)(x)
+    # x = layers.Dropout(0.2)(x)
 
     x = layers.GlobalAveragePooling2D()(x)
 
@@ -567,13 +567,13 @@ def sommap_merged(t1, t2):
     x = layers.concatenate([t1, t2])
 
     x = layers.Dense(
-        units=256, activation="relu", kernel_initializer="uniform",
+        units=256, activation="elu", kernel_initializer="uniform",
         kernel_regularizer=regularizers.l2(GLOBAL_DECAY)
     )(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
     x = layers.Dense(
-        units=128, activation="relu", kernel_initializer="uniform",
+        units=128, activation="elu", kernel_initializer="uniform",
         kernel_regularizer=regularizers.l2(GLOBAL_DECAY)
     )(x)
     x = layers.BatchNormalization()(x)
@@ -804,7 +804,7 @@ def run_save_model(
     model.compile(
         loss=lossfun,
         # optimizer="adam",
-        optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=1e-5),  # lr and decay set by callback
+        optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=1e-8),  # lr and decay set by callback
         metrics=[
             "acc",
             top2_acc,
@@ -966,7 +966,7 @@ MLL_DATADIR = os.environ["MLLDATADIR"]
 
 def main():
     ## CONFIGURATION VARIABLES
-    c_uniq_name = "deepershift_counts_noweight_moreregu_sloweradam"
+    c_uniq_name = "smallernet"
     c_model = "sommap"
     c_groupmap = "8class"
     c_weights = None
@@ -992,7 +992,7 @@ def main():
     }
     c_runargs = {
         "train_epochs": 200,
-        "initial_rate": 5e-3,
+        "initial_rate": 1e-3,
         "drop": 0.5,
         "epochs_drop": 50,
     }
