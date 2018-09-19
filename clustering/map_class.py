@@ -430,23 +430,13 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
         self.batch_size = batch_size
         self.draw_method = draw_method
 
-        if self.draw_method == "shuffle":
-            self._data = data.sample(frac=1)
-        elif self.draw_method == "sequential":
-            self._data = data
-        elif self.draw_method == "balanced":
-            sample_num = epoch_size or len(data)
-            self._data = data.groupby("group").apply(lambda x: x.sample(
-                n=sample_num, replace=True)).reset_index(0, drop=True).sample(frac=1)
-        else:
-            raise RuntimeError(
-                f"Unknown draw method: {self.draw_method}. "
-                "Valid options are: ['shuffle', 'sequential', 'balanced']")
+        self._all_data = data
 
-        self.epoch_size = epoch_size if epoch_size else len(self._data)
+        self._data = self._sample_data(data, epoch_size)
+        self.epoch_size = self._data.shape[0]
 
         if groups is None:
-            groups = list(self._data["group"].unique())
+            groups = list(self._all_data["group"].unique())
 
         self.groups = groups
 
@@ -455,6 +445,21 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
         else:
             pad_width = 0
         self._xoutputs = xoutputs
+
+    def _sample_data(self, data, epoch_size=None):
+        if self.draw_method == "shuffle":
+            selection = data.sample(frac=1)
+        elif self.draw_method == "sequential":
+            selection = data
+        elif self.draw_method == "balanced":
+            sample_num = epoch_size or len(data)
+            selection = data.groupby("group").apply(lambda x: x.sample(
+                n=sample_num, replace=True)).reset_index(0, drop=True).sample(frac=1)
+        else:
+            raise RuntimeError(
+                f"Unknown draw method: {self.draw_method}. "
+                "Valid options are: ['shuffle', 'sequential', 'balanced']")
+        return selection
 
     @property
     def xshape(self):
@@ -495,6 +500,10 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
         ydata = batch_data["group"]
         ybinary = preprocessing.label_binarize(ydata, classes=self.groups)
         return xdata, ybinary
+
+    def on_epoch_end(self):
+        """Randomly reshuffle data after end of epoch."""
+        self._data = self._sample_data(self._all_data, self.epoch_size)
 
 
 def plot_transformed(path, tf1, tf2, y):
