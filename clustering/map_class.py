@@ -998,10 +998,10 @@ def main():
     }
     # Data modifications
     c_dataoptions = {
-        CountLoader.__name__: {
+        FCSLoader.__name__: {
             "subsample": 100,
         },
-        FCSLoader.__name__: {
+        CountLoader.__name__: {
             "version": "dataframe",
         },
         Map2DLoader.__name__: {
