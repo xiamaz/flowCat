@@ -7,3 +7,4 @@ scipy
 graphviz
 networkx
 pydot
+git+git://github.com/jakob-he/keras-vis.git@multiinput
