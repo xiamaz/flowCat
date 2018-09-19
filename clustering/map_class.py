@@ -940,7 +940,7 @@ def split_data(data, test_num=None, test_labels=None, train_labels=None):
             group_sizes = grouped.size()
             if any(group_sizes <= test_num):
                 insuff = group_sizes[group_sizes <= test_num]
-                LOGGER.warning("Insufficient sizes: ", insuff)
+                LOGGER.warning("Insufficient sizes: %s", insuff)
                 raise RuntimeError("Some cohorts are too small.")
             test = grouped.apply(lambda d: d.sample(n=test_num)).reset_index(level=0, drop=True)
         train = data.drop(test.index, axis=0)
@@ -958,6 +958,9 @@ def save_json(data, outpath):
     """Save a json file to the specified path."""
     with open(str(outpath), "w") as jsfile:
         json.dump(data, jsfile)
+
+
+MLL_DATADIR = os.environ["MLLDATADIR"]
 
 
 def main():
