@@ -439,7 +439,7 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
     def __init__(
             self, data, xoutputs,
             batch_size=32, draw_method="shuffle", epoch_size=None,
-            groups=None, group_nums=None
+            groups=None, group_nums=None, sample_weights=False,
     ):
         """
         Args:
@@ -457,11 +457,13 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
             groups: List of groups to transform the labels into binary matrix.
             group_nums: Number of samples per group for balanced sampling. If
                 not given, will evenly distribute the epoch size among all groups.
+            sample_weights: Use sample weights in training.
         Returns:
             SOMMapDataset object.
         """
         self.batch_size = batch_size
         self.draw_method = draw_method
+        self.sample_weights = sample_weights
 
         self._all_data = data
         if groups is None:
@@ -530,6 +532,9 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
 
         ydata = batch_data["group"]
         ybinary = preprocessing.label_binarize(ydata, classes=self.groups)
+        if self.sample_weights:
+            sample_weights = batch_data["sureness"].values
+            return xdata, ybinary, sample_weights
         return xdata, ybinary
 
     def on_epoch_end(self):
@@ -1133,7 +1138,7 @@ def get_model_type(modelname, dataoptions, data):
 
 def main():
     ## CONFIGURATION VARIABLES
-    c_uniq_name = "relunet_yesglobal_200epoch_rep01"
+    c_uniq_name = "relunet_yesglobal_200epoch_sample_weighted1510"
     c_model = "sommap"
     c_groupmap = "8class"
     c_weights = None
@@ -1162,6 +1167,7 @@ def main():
     c_trainargs = {
         "draw_method": "balanced",
         "epoch_size": 16000,
+        "sample_weights": True,
     }
     c_testargs = {
         "draw_method": "sequential",
