@@ -1,56 +1,24 @@
+import os
+import json
+import pickle
+
+import keras
 from keras.models import load_model
-from keras import activations
 
 from vis.utils import utils
 from vis.visualization import visualize_saliency, overlay
 from vis.visualization import visualize_cam
-from sklearn.preprocessing import MinMaxScaler
 
 from matplotlib import pyplot as plt
 import matplotlib.cm as cm
 import pandas as pd
 
 import numpy as np
-import os
 
+import map_class
+import consensus_cases
 from map_class import reshape_dataframe
 from map_class import CountLoader
-
-
-def transform_saliency_input(path: str, type: str, tube: int, label = 0, gridsize: int = 32, pad_width=0, columns=[]):
-    '''Outputs specifically formatted data based on input type'''
-    if type == 'h':
-        if label != 0:
-            return CountLoader.read_dataframe(path, tube=tube).loc[label]
-        else:
-            return CountLoader.read_dataframe(path, tube=tube).iloc[0]
-    elif type == 'm':
-        return transform_map_input(path, tube, gridsize, pad_width, columns)
-
-
-def transform_map_input(path, tube, gridsize, pad_width, columns):
-    map_list = []
-    mapdata = pd.read_csv(path, index_col=0)
-    if columns:
-        mapdata = mapdata[columns]
-    data = reshape_dataframe(
-        mapdata,
-        m=gridsize,
-        n=gridsize,
-        pad_width=pad_width)
-    map_list.append(data)
-    return np.stack(map_list)
-
-
-def scale_data(data, columns: int = 3):
-    '''Transforms each channel of a numpy array to values between 0 and 1'''
-    scaler = MinMaxScaler()
-    if columns == 1:
-        return scaler.fit_transform(data)
-    else:
-        for i in range(columns):
-            data[:, :, i] = scaler.fit_transform(data[:, :, i])
-        return data
 
 
 def calculate_saliency(model, input, layer_idx, filter_indices, backprop_modifier='guided'):
@@ -142,28 +110,78 @@ def generate_saliency_plots(model, input, layer_idx, filter_indices, input_types
         kappa_lambda_plot(input[tube2], plot_path)
 
 
+def dataset_from_config(datapath, labelpath, configpath, batch_size):
+    """Load dataset from config specifications."""
+    config = map_class.load_json(configpath)
+
+    data = map_class.load_pickle(datapath)
+    labels = map_class.load_json(labelpath)
+    data = data.loc[labels, :]
+    # modify mapping
+    groupinfo = map_class.GROUP_MAPS[config["c_groupmap"]]
+    data["orig_group"] = data["group"]
+    data = map_class.modify_groups(data, groupinfo["map"])
+    data = data.loc[data["group"].isin(groupinfo["groups"]), :]
+
+    # config["c_dataoptions"]["Map2DLoader"]["sel_count"] = None
+
+    modelfun, xoutputs, train_batch, test_batch = map_class.get_model_type(
+        config["c_model"], config["c_dataoptions"], data)
+
+    dataset = map_class.SOMMapDataset(
+        data, xoutputs, batch_size=1, draw_method="sequential", groups=groupinfo["groups"])
+
+    return dataset
+
+
 def main():
+    ## SALIENCY GENERATOR CONFIG
+    c_indata = "mll-sommaps/output/smallernet_double_yesglobal_epochrand_sommap_8class/data_paths.p"
+    c_model = "mll-sommaps/models/smallernet_double_noglobal_sommap_8class/model_0.h5"
+    # c_model = "mll-sommaps/models/smallernet_double_yesglobal_epochrand_sommap_8class/model_0.h5"
+    c_config = "mll-sommaps/output/smallernet_double_yesglobal_epochrand_sommap_8class/config.json"
+    c_labels = "mll-sommaps/output/smallernet_double_yesglobal_epochrand_sommap_8class/test_labels.json"
+    c_preds = "mll-sommaps/models/smallernet_double_yesglobal_epochrand_sommap_8class/predictions_0.csv"
 
-    # 2DMAP
-    # load map2d model from hd5 file
-    #model = load_model('/home/jakob/Documents/flowCAT/models/cllall1_planar_8class_60test_ep100/model_0.h5')
-    # map2d input
-    #input1 = '/home/jakob/Documents/flowCAT/cs-all1_planar_s32/0a1d2dfce8b39c9ef00c7dadc6279ce9a0c9579c_t1.csv'
-    #input2 = '/home/jakob/Documents/flowCAT/cs-all1_planar_s32/0a1d2dfce8b39c9ef00c7dadc6279ce9a0c9579c_t2.csv'
-    # compute gradients
-    #grads = generate_saliency_plots(model, [input1, input2], layer_idx=-1, filter_indices=2, plot_path="../../saliency_plots/2DMap/", kappa_lambda_idx=1)
+    # visualize the last layer
+    c_layer_idx = -1
 
-    # load histogram model from hdf5 file
-    #model = load_model('/home/jakob/Documents/flowCAT/models/histogram/model_0.h5')
-    # histgram input
-    #input1 = '/home/jakob/Documents/flowCAT/abstract_somgated_1_20180723_1217/tube1.csv'
-    #input2 = '/home/jakob/Documents/flowCAT/abstract_somgated_1_20180723_1217/tube2.csv'
-    # compute gradients
-    #grads = generate_saliency_plots(model, [input1,input2], layer_idx=-1,filter_indices=2, input_types = ['h','h'],plot_path="../../saliency_plots/histogram/")
+    ## LOAD existing model, data info and correct input data configuration.
+    model = keras.models.load_model(c_model)
 
-    # Histomap
-    model = load_model(
-        '/home/jakob/Documents/flowCAT/models/histomap/model_0.h5')
+    # modify model for saliency usage
+    # model.layers[c_layer_idx].activation = keras.activations.linear
+    # model = utils.apply_modifications(model)
+
+    dataset = dataset_from_config(c_indata, c_labels, c_config, batch_size=1)
+    preds = pd.read_csv(c_preds, index_col=0)
+    preds = consensus_cases.add_correct_magnitude(preds)
+
+    ## GENERATE Saliency values for the input data
+    all_labels = dataset.labels
+    selected_label = dataset.labels[0]
+    corr_group = preds.loc[selected_label, "correct"]
+    pred_group = preds.loc[selected_label, "pred"]
+    corr_idx = dataset.groups.index(corr_group)
+    pred_idx = dataset.groups.index(pred_group)
+    xdata, ydata = dataset[0]
+
+    result = model.predict(xdata)
+    print(result)
+
+    for data in xdata:
+        print(data.shape)
+    print(corr_idx)
+    grads_sal = visualize_saliency(
+        model, c_layer_idx, 2, seed_input=xdata, input_indices=[0, 1], backprop_modifier='guided')
+    for grad in grads_sal:
+        print(grad.max())
+    return
+
+    ## SAVE Saliency values for later usage
+
+    ## PLOT Saliency based information
+
     # histgram input
     input1 = '/home/jakob/Documents/flowCAT/abstract_somgated_1_20180723_1217/tube1.csv'
     input2 = '/home/jakob/Documents/flowCAT/abstract_somgated_1_20180723_1217/tube2.csv'
