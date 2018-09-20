@@ -45,6 +45,37 @@ NAME_MAP = {
     "CLLPL": "PL"
 }
 
+GROUP_MAPS = {
+    "8class": {
+        "groups": ["CM", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
+        "map": {"CLL": "CM", "MBL": "CM"}
+    },
+    "6class": {
+        "groups": ["CM", "MP", "LM", "FL", "HCL", "normal"],
+        "map": {
+            "CLL": "CM",
+            "MBL": "CM",
+            "MZL": "LM",
+            "LPL": "LM",
+            "MCL": "MP",
+            "PL": "MP",
+        }
+    },
+    "5class": {
+        "groups": ["CM", "MP", "LMF", "HCL", "normal"],
+        "map": {
+            "CLL": "CM",
+            "MBL": "CM",
+            "MZL": "LMF",
+            "LPL": "LMF",
+            "FL": "LMF",
+            "LM": "LMF",
+            "MCL": "MP",
+            "PL": "MP",
+        }
+    }
+}
+
 COLS = "grcmyk"
 
 
@@ -970,6 +1001,77 @@ def save_json(data, outpath):
         json.dump(data, jsfile)
 
 
+def save_pickle(data, outpath):
+    with open(str(outpath), "wb") as pfile:
+        pickle.dump(data, pfile)
+
+
+def load_pickle(path):
+    with open(str(path), "rb") as pfile:
+        data = pickle.load(pfile)
+    return data
+
+
+def get_model_type(modelname, dataoptions, data):
+    if modelname == "histogram":
+        xoutputs = [
+            CountLoader.create_inferred(data, tube=1, **dataoptions[CountLoader.__name__]),
+            CountLoader.create_inferred(data, tube=2, **dataoptions[CountLoader.__name__]),
+        ]
+        train_batch = 64
+        test_batch = 128
+        modelfun = create_model_histo
+    elif modelname == "sommap":
+        xoutputs = [
+            Map2DLoader.create_inferred(data, tube=1, **dataoptions[Map2DLoader.__name__]),
+            Map2DLoader.create_inferred(data, tube=2, **dataoptions[Map2DLoader.__name__]),
+        ]
+        train_batch = 16
+        test_batch = 32
+        modelfun = create_model_convolutional
+    elif modelname == "maphisto":
+        xoutputs = [
+            Map2DLoader.create_inferred(data, tube=1, **dataoptions[Map2DLoader.__name__]),
+            Map2DLoader.create_inferred(data, tube=2, **dataoptions[Map2DLoader.__name__]),
+            CountLoader.create_inferred(data, tube=1, **dataoptions[CountLoader.__name__]),
+            CountLoader.create_inferred(data, tube=2, **dataoptions[CountLoader.__name__]),
+        ]
+        train_batch = 32
+        test_batch = 32
+        modelfun = create_model_maphisto
+    elif modelname == "etefcs":
+        xoutputs = [
+            FCSLoader.create_inferred(data, tubes=[1, 2], **dataoptions[FCSLoader.__name__]),
+        ]
+        train_batch = 16
+        test_batch = 16
+        modelfun = create_model_fcs
+    elif modelname == "mapfcs":
+        xoutputs = [
+            FCSLoader.create_inferred(data, tubes=[1, 2], **dataoptions[FCSLoader.__name__]),
+            Map2DLoader.create_inferred(data, tube=1, **dataoptions[Map2DLoader.__name__]),
+            Map2DLoader.create_inferred(data, tube=2, **dataoptions[Map2DLoader.__name__]),
+        ]
+        train_batch = 32
+        test_batch = 32
+        modelfun = create_model_mapfcs
+    elif modelname == "maphistofcs":
+        xoutputs = [
+            FCSLoader.create_inferred(data, tubes=[1, 2], **dataoptions[FCSLoader.__name__]),
+            Map2DLoader.create_inferred(data, tube=1, **dataoptions[Map2DLoader.__name__]),
+            Map2DLoader.create_inferred(data, tube=2, **dataoptions[Map2DLoader.__name__]),
+            CountLoader.create_inferred(data, tube=1, **dataoptions[CountLoader.__name__]),
+            CountLoader.create_inferred(data, tube=2, **dataoptions[CountLoader.__name__]),
+        ]
+        train_batch = 32
+        test_batch = 32
+        modelfun = create_model_all
+    else:
+        raise RuntimeError(f"Unknown model {modelname}")
+
+    return modelfun, xoutputs, train_batch, test_batch
+
+
 def main():
     ## CONFIGURATION VARIABLES
     c_uniq_name = "smallernet"
@@ -1056,39 +1158,8 @@ def main():
         # load the data again
         with open(c_dataindex, "rb") as f:
             indata = pickle.load(f)
-
-    group_maps = {
-        "8class": {
-            "groups": ["CM", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
-            "map": {"CLL": "CM", "MBL": "CM"}
-        },
-        "6class": {
-            "groups": ["CM", "MP", "LM", "FL", "HCL", "normal"],
-            "map": {
-                "CLL": "CM",
-                "MBL": "CM",
-                "MZL": "LM",
-                "LPL": "LM",
-                "MCL": "MP",
-                "PL": "MP",
-            }
-        },
-        "5class": {
-            "groups": ["CM", "MP", "LMF", "HCL", "normal"],
-            "map": {
-                "CLL": "CM",
-                "MBL": "CM",
-                "MZL": "LMF",
-                "LPL": "LMF",
-                "FL": "LMF",
-                "LM": "LMF",
-                "MCL": "MP",
-                "PL": "MP",
-            }
-        }
-    }
-    groups = group_maps[c_groupmap]["groups"]
-    group_map = group_maps[c_groupmap]["map"]
+    groups = GROUP_MAPS[c_groupmap]["groups"]
+    group_map = GROUP_MAPS[c_groupmap]["map"]
 
     indata["orig_group"] = indata["group"]
     indata = modify_groups(indata, mapping=group_map)
@@ -1130,71 +1201,21 @@ def main():
     else:
         toroidal = False
 
-    if c_model == "histogram":
-        xoutputs = [
-            CountLoader.create_inferred(train, tube=1, **c_dataoptions[CountLoader.__name__]),
-            CountLoader.create_inferred(train, tube=2, **c_dataoptions[CountLoader.__name__]),
-        ]
-        train_batch = 64
-        test_batch = 128
-        modelfun = create_model_histo
-    elif c_model == "sommap":
-        xoutputs = [
-            Map2DLoader.create_inferred(train, tube=1, **c_dataoptions[Map2DLoader.__name__]),
-            Map2DLoader.create_inferred(train, tube=2, **c_dataoptions[Map2DLoader.__name__]),
-        ]
-        train_batch = 16
-        test_batch = 32
-        modelfun = create_model_convolutional
-    elif c_model == "maphisto":
-        xoutputs = [
-            Map2DLoader.create_inferred(train, tube=1, **c_dataoptions[Map2DLoader.__name__]),
-            Map2DLoader.create_inferred(train, tube=2, **c_dataoptions[Map2DLoader.__name__]),
-            CountLoader.create_inferred(train, tube=1, **c_dataoptions[CountLoader.__name__]),
-            CountLoader.create_inferred(train, tube=2, **c_dataoptions[CountLoader.__name__]),
-        ]
-        train_batch = 32
-        test_batch = 32
-        modelfun = create_model_maphisto
-    elif c_model == "etefcs":
-        xoutputs = [
-            FCSLoader.create_inferred(train, tubes=[1, 2], **c_dataoptions[FCSLoader.__name__]),
-        ]
-        train_batch = 16
-        test_batch = 16
-        modelfun = create_model_fcs
-    elif c_model == "mapfcs":
-        xoutputs = [
-            FCSLoader.create_inferred(train, tubes=[1, 2], **c_dataoptions[FCSLoader.__name__]),
-            Map2DLoader.create_inferred(train, tube=1, **c_dataoptions[Map2DLoader.__name__]),
-            Map2DLoader.create_inferred(train, tube=2, **c_dataoptions[Map2DLoader.__name__]),
-        ]
-        train_batch = 32
-        test_batch = 32
-        modelfun = create_model_mapfcs
-    elif c_model == "maphistofcs":
-        xoutputs = [
-            FCSLoader.create_inferred(train, tubes=[1, 2], **c_dataoptions[FCSLoader.__name__]),
-            Map2DLoader.create_inferred(train, tube=1, **c_dataoptions[Map2DLoader.__name__]),
-            Map2DLoader.create_inferred(train, tube=2, **c_dataoptions[Map2DLoader.__name__]),
-            CountLoader.create_inferred(train, tube=1, **c_dataoptions[CountLoader.__name__]),
-            CountLoader.create_inferred(train, tube=2, **c_dataoptions[CountLoader.__name__]),
-        ]
-        train_batch = 32
-        test_batch = 32
-        modelfun = create_model_all
-    else:
-        raise RuntimeError(f"Unknown model {c_model}")
-
     modelpath = pathlib.Path(f"{c_output_model}/{name}")
+
+    # get model input and settings depending on model type
+    modelfun, xoutputs, train_batch, test_batch = get_model_type(c_model, c_dataoptions, train)
+    # create datasets
     trainseq = SOMMapDataset(train, xoutputs, batch_size=train_batch, groups=groups, **c_trainargs)
     testseq = SOMMapDataset(test, xoutputs, batch_size=test_batch, groups=groups, **c_testargs)
+    # create model using training data shape
     model = modelfun(*trainseq.shape)
+    # fit the model
     pred_df = run_save_model(
         model, trainseq, testseq, weights=weights, path=modelpath, name="0", **c_runargs)
 
     LOGGER.info(f"Statistics results for {name}")
-    for gname, groupstat in group_maps.items():
+    for gname, groupstat in GROUP_MAPS.items():
         # skip if our cohorts are larger
         if len(groups) < len(groupstat["groups"]):
             continue
