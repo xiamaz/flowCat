@@ -6,42 +6,39 @@ Visualization of misclassifications
 3. Modify model for visualization.
 4. Generate visualizations for data.
 """
+import os
+import pathlib
+
+import numpy as np
 import pandas as pd
 
 from sklearn import preprocessing
 import keras
 
-import matplotlib as mpl
-mpl.use("Agg")
-import matplotlib.pyplot as plt
+# import matplotlib as mpl
+# mpl.use("Agg")
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+# import matplotlib.pyplot as plt
 import seaborn as sns
 
 from clustering import collection as cc
+from clustering import plotting as cp
 from map_class import inverse_binarize
+import map_class
+
+
+if "MLLDATA" in os.environ:
+    MLLDATA = pathlib.Path(os.environ["MLLDATA"])
+else:
+    MLLDATA = pathlib.Path()
 
 
 def split_correctness(prediction):
-    values = prediction.drop("correct", axis=1)
-    truth = prediction["correct"]
-    groups = [c for c in prediction.columns if c != "correct"]
-
-    preds = inverse_binarize(values, groups)
-
-    correct = truth == preds
+    correct = prediction["correct"] == prediction["pred"]
     incorrect_data = prediction.loc[~correct, :].copy()
     correct_data = prediction.loc[correct, :].copy()
     return correct_data, incorrect_data
-
-
-def sel_high(data):
-    sortdata = data.sort_values(data.name, ascending=False)
-    seldata = sortdata.iloc[0:5, :]
-    return seldata
-
-
-def get_high_classified(prediction):
-    high = prediction.groupby("correct").apply(sel_high)
-    return high
 
 
 def add_infiltration(data, cases):
@@ -50,34 +47,67 @@ def add_infiltration(data, cases):
     for case in cases:
         if case.id in labels:
             found.append(case)
-    found.sort(key=lambda c:labels.index(c.id))
+    found.sort(key=lambda c: labels.index(c.id))
     infiltrations = [c.infiltration for c in found]
     data["infiltration"] = infiltrations
     return data
 
 
-def plot_grouped_density(data, groupcol):
-    ax = plt.gca()
-    data = data.loc[data["infiltration"] > 0, :]
-    for name, gdata in data.groupby(groupcol):
-        sns.distplot(gdata["infiltration"], hist=False, ax=ax, label=name)
+def add_correct_magnitude(data):
+    newdata = data.copy()
+    valcols = [c for c in data.columns if c != "correct"]
+    selval = np.vectorize(lambda i: valcols[i])
+    newdata["largest"] = data[valcols].max(axis=1)
+    newdata["pred"] = selval(data[valcols].values.argmax(axis=1))
+    return newdata
 
-    plt.savefig("testdensity.png")
+# def plot_grouped_density(data, groupcol):
+#     ax = plt.gca()
+#     data = data.loc[data["infiltration"] > 0, :]
+#     for name, gdata in data.groupby(groupcol):
+#         sns.distplot(gdata["infiltration"], hist=False, ax=ax, label=name)
+# 
+#     plt.savefig("testdensity.png")
+
+
+def plot_tube(case, tube):
+    tubecase = case.get_tube(tube)
+    fcsdata = tubecase.data
+
+    tubegates = cp.ALL_GATINGS[tube]
+
+    fig = Figure()
+
+
+    FigureCanvas(fig)
+    fig.savefig("test.png")
 
 
 def main():
-    cases = cc.CaseCollection("/home/zhao/tmp/CLL-9F", tubes=[1, 2])
+    cases = cc.CaseCollection(MLLDATA / "mll-flowdata/CLL-9F", tubes=[1, 2])
     # model = keras.models.load_model("mll-sommaps/models/convolutional/model_0.h5")
 
-    predictions = pd.read_csv("mll-sommaps/models/convolutional/predictions_0.csv", index_col=0)
+    predictions = pd.read_csv(
+        MLLDATA / "mll-sommaps/models/smallernet_double_yesglobal_epochrand_mergemult_sommap_8class/predictions_0.csv",
+        index_col=0)
+
+    # merged_predictions = merge_predictions(predictions, map_class.GROUP_MAPS["6class"])
+    result = map_class.create_metrics_from_pred(predictions, map_class.GROUP_MAPS["6class"]["map"])
+    print(result)
+    return
+
+    predictions = add_correct_magnitude(predictions)
+    predictions = add_infiltration(predictions, cases)
 
     correct, wrong = split_correctness(predictions)
 
-    high_correct = get_high_classified(correct)
+    false_negative = wrong.loc[wrong["pred"] == "normal", :]
+    # print(false_negative.loc[:, ["infiltration", "correct", "largest"]])
 
-    wrong_infil = add_infiltration(wrong, cases)
-
-    plot_grouped_density(wrong_infil, "correct")
+    high_infil_false = false_negative.loc[false_negative["infiltration"] > 5.0, :]
+    sel_high = high_infil_false.iloc[1, :]
+    case = cases.get_label(sel_high.name)
+    plot_tube(case, 1)
 
 
 if __name__ == "__main__":
