@@ -577,26 +577,25 @@ def decomposition(dataset):
 def sommap_tube(x):
     """Block to process a single tube."""
     x = layers.Conv2D(
-        filters=32, kernel_size=3, activation="elu", strides=1,
+        filters=32, kernel_size=2, activation="relu", strides=1,
         kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
-    x = layers.Conv2D(filters=32, kernel_size=3, activation="elu", strides=2,
+    x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=1,
         kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
-    # x = layers.MaxPooling2D(pool_size=2, strides=1)(x)
+    x = layers.MaxPooling2D(pool_size=2, strides=1)(x)
     x = layers.BatchNormalization()(x)
-    # x = layers.Dropout(0.2)(x)
+    x = layers.Dropout(0.2)(x)
 
-    x = layers.Conv2D(filters=64, kernel_size=2, activation="elu", strides=1,
+    x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=1,
         kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
-    x = layers.Conv2D(filters=64, kernel_size=2, activation="elu", strides=2,
+    x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=2,
         kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
-    # x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
-
+    x = layers.MaxPooling2D(pool_size=2, strides=1)(x)
     x = layers.BatchNormalization()(x)
-    # x = layers.Dropout(0.2)(x)
+    x = layers.Dropout(0.2)(x)
 
-    x = layers.GlobalAveragePooling2D()(x)
+    # x = layers.GlobalAveragePooling2D()(x)
 
-    # x = layers.Flatten()(x)
+    x = layers.Flatten()(x)
     return x
 
 
@@ -604,16 +603,17 @@ def sommap_merged(t1, t2):
     """Processing of SOM maps using multiple tubes."""
     t1 = sommap_tube(t1)
     t2 = sommap_tube(t2)
-    x = layers.concatenate([t1, t2])
+    # x = layers.concatenate([t1, t2])
+    x = layers.average([t1, t2])
 
     x = layers.Dense(
-        units=256, activation="elu", kernel_initializer="uniform",
+        units=128, activation="relu", kernel_initializer="uniform",
         kernel_regularizer=regularizers.l2(GLOBAL_DECAY)
     )(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
     x = layers.Dense(
-        units=128, activation="elu", kernel_initializer="uniform",
+        units=64, activation="relu", kernel_initializer="uniform",
         kernel_regularizer=regularizers.l2(GLOBAL_DECAY)
     )(x)
     x = layers.BatchNormalization()(x)
