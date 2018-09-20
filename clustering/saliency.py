@@ -14,6 +14,7 @@ import matplotlib.cm as cm
 import pandas as pd
 
 import numpy as np
+import pathlib
 
 import map_class
 import consensus_cases
@@ -21,10 +22,10 @@ from map_class import reshape_dataframe
 from map_class import CountLoader
 
 
-def calculate_saliency(model, input, layer_idx, filter_indices, backprop_modifier='guided'):
+def calculate_saliency(model, input, layer_idx, filter_indices):
     '''Calculates saliency gradients'''
     grads_sal = visualize_saliency(
-        model, layer_idx, filter_indices, input_indices=[*range(len(input))], seed_input=input, backprop_modifier='guided')
+        model, layer_idx, filter_indices, input_indices=[*range(len(input))], seed_input=input)
     return grads_sal
 
 
@@ -80,7 +81,7 @@ def generate_saliency_plots(model, input, layer_idx, filter_indices, input_types
     '''
     if layer_idx == -1:
         # switch from softmax activation tif the last layer is visualized
-        model.layers[layer_idx].activation = activations.linear
+        model.layers[layer_idx].activation = keras.activations.linear
         model = utils.apply_modifications(model)
 
     #extract label from 2DMap path if both histogram and 2DMaps are used as input
@@ -142,6 +143,7 @@ def main():
     c_config = "mll-sommaps/output/smallernet_double_yesglobal_epochrand_sommap_8class/config.json"
     c_labels = "mll-sommaps/output/smallernet_double_yesglobal_epochrand_sommap_8class/test_labels.json"
     c_preds = "mll-sommaps/models/smallernet_double_yesglobal_epochrand_sommap_8class/predictions_0.csv"
+    c_saliency = "mll-sommaps/saliency"
 
     # visualize the last layer
     c_layer_idx = -1
@@ -162,34 +164,24 @@ def main():
     selected_label = dataset.labels[0]
     corr_group = preds.loc[selected_label, "correct"]
     pred_group = preds.loc[selected_label, "pred"]
-    corr_idx = dataset.groups.index(corr_group)
-    pred_idx = dataset.groups.index(pred_group)
     xdata, ydata = dataset[0]
 
-    result = model.predict(xdata)
-    print(result)
 
-    for data in xdata:
-        print(data.shape)
-    print(corr_idx)
-    grads_sal = visualize_saliency(
-        model, c_layer_idx, 2, seed_input=xdata, input_indices=[0, 1], backprop_modifier='guided')
-    for grad in grads_sal:
-        print(grad.max())
-    return
-
-    ## SAVE Saliency values for later usage
+    for group in set([corr_group,pred_group]):
+        grads_sal = visualize_saliency(model, c_layer_idx, dataset.groups.index(group), seed_input=xdata, input_indices=[0, 1])
+        with open(pathlib.Path(c_saliency,"{}_{}_{}".format(selected_label,model.layers[c_layer_idx].name,str(group))),"wb") as saliency_output:
+            pickle.dump(grads_sal,saliency_output)
 
     ## PLOT Saliency based information
 
     # histgram input
-    input1 = '/home/jakob/Documents/flowCAT/abstract_somgated_1_20180723_1217/tube1.csv'
-    input2 = '/home/jakob/Documents/flowCAT/abstract_somgated_1_20180723_1217/tube2.csv'
-    input3 = '/home/jakob/Documents/flowCAT/selected1_toroid_s32/ffff7d20c895165bbda3b7ac1a7249c483fa4f6b_t1.csv'
-    input4 = '/home/jakob/Documents/flowCAT/selected1_toroid_s32/ffff7d20c895165bbda3b7ac1a7249c483fa4f6b_t2.csv'
-    # compute gradients
-    grads = generate_saliency_plots(model, [input1, input2, input3, input4], layer_idx=-1, filter_indices=2, input_types=[
-                                    'h', 'h', 'm', 'm'], plot_path="../../saliency_plots/histomap/")
+    # input1 = '/home/jakob/Documents/flowCAT/abstract_somgated_1_20180723_1217/tube1.csv'
+    # input2 = '/home/jakob/Documents/flowCAT/abstract_somgated_1_20180723_1217/tube2.csv'
+    # input3 = '/home/jakob/Documents/flowCAT/selected1_toroid_s32/ffff7d20c895165bbda3b7ac1a7249c483fa4f6b_t1.csv'
+    # input4 = '/home/jakob/Documents/flowCAT/selected1_toroid_s32/ffff7d20c895165bbda3b7ac1a7249c483fa4f6b_t2.csv'
+    # # compute gradients
+    # grads = generate_saliency_plots(model, [input1, input2, input3, input4], layer_idx=-1, filter_indices=2, input_types=[
+    #                                 'h', 'h', 'm', 'm'], plot_path="../../saliency_plots/histomap/")
 
 
 if __name__ == '__main__':
