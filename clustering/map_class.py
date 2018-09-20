@@ -620,8 +620,6 @@ def sommap_merged_elu_globalavg(t1, t2):
     return x
 
 
-
-
 def sommap_tube(x):
     """Block to process a single tube."""
     x = layers.Conv2D(
@@ -641,9 +639,8 @@ def sommap_tube(x):
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
 
-    # x = layers.GlobalAveragePooling2D()(x)
-
-    x = layers.Flatten()(x)
+    x = layers.GlobalAveragePooling2D()(x)
+    # x = layers.Flatten()(x)
     return x
 
 
@@ -1136,7 +1133,7 @@ def get_model_type(modelname, dataoptions, data):
 
 def main():
     ## CONFIGURATION VARIABLES
-    c_uniq_name = "smallernet"
+    c_uniq_name = "relunet_yesglobal_200epoch_rep01"
     c_model = "sommap"
     c_groupmap = "8class"
     c_weights = None
