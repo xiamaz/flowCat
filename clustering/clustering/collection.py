@@ -103,7 +103,7 @@ class IterableMixin(object):
             return self[self._current - 1]
 
 
-class CaseIterable:
+class CaseIterable(IterableMixin):
     """Iterable collection for cases. Base class."""
 
     def __init__(self):
@@ -150,6 +150,12 @@ class CaseIterable:
         """Return dict represendation of content."""
         return [c.json for c in self]
 
+    def get_label(self, label):
+        for case in self:
+            if case.id == label:
+                return case
+        return None
+
 
 def filter_materials(data: list) -> list:
     """Filter cases to remove not allowed materials.
@@ -162,7 +168,7 @@ def filter_materials(data: list) -> list:
     return data
 
 
-class CaseCollection(IterableMixin, CaseIterable):
+class CaseCollection(CaseIterable):
     """Get case information from info file and remove errors and provide
     overview information."""
 
@@ -267,7 +273,7 @@ class CaseCollection(IterableMixin, CaseIterable):
         )
 
 
-class CaseView(IterableMixin, CaseIterable):
+class CaseView(CaseIterable):
     """Filtered view into the base data. Perform all mutable
     actions on CaseView instead of CaseCollection."""
 
@@ -319,7 +325,7 @@ class TubeView(IterableMixin):
     @property
     def materials(self):
         if self._materials is None:
-            self._materials = defaultdict(list)
+            self._materials = collections.defaultdict(list)
             for casepath in self.data:
                 self._materials[str(casepath.material)].append(casepath)
 
