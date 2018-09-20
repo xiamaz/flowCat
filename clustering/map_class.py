@@ -1124,6 +1124,8 @@ def main():
     config_dict = locals()
 
     name = f"{c_uniq_name}_{c_model}_{c_groupmap}"
+    if c_weights is not None:
+        name += f"_{c_weights}"
 
     # configure logging
     outpath = pathlib.Path(f"{c_output_results}/{name}")
@@ -1181,6 +1183,11 @@ def main():
         ## simpler group weights
         group_weights = {
             ("normal", None): (1.0, 20.0),
+        }
+        weights = create_weight_matrix(group_weights, groups, base_weight=1)
+    elif c_weights == "normalweights":
+        group_weights = {
+            ("normal", None): (10.0, 10.0),
         }
         weights = create_weight_matrix(group_weights, groups, base_weight=1)
     else:
