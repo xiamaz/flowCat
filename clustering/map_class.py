@@ -581,15 +581,15 @@ def sommap_tube(x):
         kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
     x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=1,
         kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
-    x = layers.MaxPooling2D(pool_size=2, strides=1)(x)
+    x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
 
     x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=1,
         kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
-    x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=2,
+    x = layers.Conv2D(filters=32, kernel_size=2, activation="relu", strides=1,
         kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
-    x = layers.MaxPooling2D(pool_size=2, strides=1)(x)
+    x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
 
