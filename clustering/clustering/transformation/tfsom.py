@@ -211,7 +211,7 @@ class TFSom:
             initial_radius=None, end_radius=None, radius_cooling="linear",
             initial_learning_rate=0.05, end_learning_rate=0.01, learning_cooling="linear",
             node_distance="euclidean", map_type="planar", std_coeff=0.5,
-            initialization_method="sample", reference=None, max_random=1.0,
+            initialization_method="random", reference=None, max_random=1.0,
             random_subsample=False,
             model_name="Self-Organizing-Map",
             tensorboard=False, tensorboard_dir="tensorboard"
@@ -342,7 +342,8 @@ class TFSom:
         with self._graph.as_default():
             self._prediction_variables(self._weights)
             # merge all summaries
-            self._merged = tf.summary.merge(self._summary_list + summaries)
+            if self._tensorboard:
+                self._merged = tf.summary.merge(self._summary_list + summaries)
 
     def _prediction_variables(self, weights,):
         """Create prediction ops"""
@@ -855,6 +856,14 @@ class SOMNodes(BaseEstimator, TransformerMixin):
         """Optionally train the model on the provided data."""
         self._model.train(X, num_inputs=len(X))
         return self
+
+    def get_weights(self):
+        weights = self._model.output_weights
+        weight_df = pd.DataFrame(weights, columns=self._model.channels)
+        return weight_df
+
+    def predict(self, X, *_):
+        return self._model.map_to_nodes(X)
 
     def transform(self, X, *_):
         for weights, counts, count_prev in self._model.fit_map(data_iterable=X, **self._fitmap_args):

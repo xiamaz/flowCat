@@ -109,11 +109,14 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
             gatingargs=None
     ):
         # self._pre = ClusteringTransform(10, 10, 2048)
-        somargs = {
+        self._somargs = {
             **{
                 "m": 10,
                 "n": 10,
-                "batch_size": 2048,
+                "batch_size": 1,
+                "initial_learning_rate": 0.1,
+                "end_learning_rate": 0.01,
+                "max_random": 1023.0,
             }, **({} if somargs is None else somargs)
         }
         gatingargs = {
@@ -125,7 +128,7 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
             }, **({} if gatingargs is None else gatingargs)
         }
 
-        self._pre = SOMNodes(**somargs)
+        self._pre = None
         self._clust = GatingFilter(**gatingargs)
 
         self._channels = gatingargs["channels"]
@@ -138,8 +141,9 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
 
     def predict(self, X, *_):
         # fit the SOMNodes for the individual case
-        self._pre.fit(X)
-        new_weights = self._pre.transform(X)
+        self._pre = SOMNodes(channels=X.columns, **self._somargs)
+        self._pre.fit([X])
+        new_weights = self._pre.get_weights()
         self._clust.fit(new_weights)
 
         event_to_node = self._pre.predict(X)

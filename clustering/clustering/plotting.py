@@ -30,8 +30,8 @@ ALL_GATINGS = {
         ["SS INT LIN", "FS INT LIN"],
         ["CD45-KrOr", "SS INT LIN"],
         ["CD19-APCA750", "SS INT LIN"],
-        ["CD19-APCA750", "CD10-PE"],
-        ["CD19-APCA750", "FS INT LIN"],
+        # ["CD19-APCA750", "CD10-PE"],
+        # ["CD19-APCA750", "FS INT LIN"],
     ],
     2: [
         ["CD19-APCA750", "Lambda-PE"],
