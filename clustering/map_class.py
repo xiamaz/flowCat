@@ -1134,6 +1134,16 @@ def main():
     c_sommap_data = "mll-sommaps/sample_maps/selected1_toroid_s32"
     c_histo_data = "../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"
     c_fcs_data = "s3://mll-flowdata/CLL-9F"
+    # load existing model and use different parameters for retraining
+    # c_modelpath = "mll-sommaps/models/relunet_globalavg_avgmerge_400epoch_sommap_8class/model_0.h5"
+    c_modelpath = None
+    c_model_runargs = {
+        "train_epochs": 100,
+        "initial_rate": 1e-4,
+        "drop": 0.5,
+        "epochs_drop": 50,
+        "epsilon": 1e-8,
+    }
     # split train, test using predefined split
     c_predefined_split = True
     c_train_labels = "data/train_labels.json"
@@ -1264,10 +1274,16 @@ def main():
     trainseq = SOMMapDataset(train, xoutputs, batch_size=train_batch, groups=groups, **c_trainargs)
     testseq = SOMMapDataset(test, xoutputs, batch_size=test_batch, groups=groups, **c_testargs)
     # create model using training data shape
-    model = modelfun(*trainseq.shape)
+    if c_modelpath is None:
+        model = modelfun(*trainseq.shape)
+        pred_df = run_save_model(
+            model, trainseq, testseq, weights=weights, path=modelpath, name="0", **c_runargs)
+    else:
+        model = keras.models.load_model(c_modelpath, compile=False)
+        pred_df = run_save_model(
+            model, trainseq, testseq, weights=weights, path=modelpath, name="0", **c_model_runargs)
+
     # fit the model
-    pred_df = run_save_model(
-        model, trainseq, testseq, weights=weights, path=modelpath, name="0", **c_runargs)
 
     LOGGER.info(f"Statistics results for {name}")
     for gname, groupstat in GROUP_MAPS.items():
