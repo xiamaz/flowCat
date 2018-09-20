@@ -666,7 +666,6 @@ class TFSom:
             dataset = tf.data.Dataset.from_generator(
                 marker_generator, tf.float32
             )
-            print("Batching the dataset")
 
             self._input_tensor = dataset.make_one_shot_iterator().get_next()
 
