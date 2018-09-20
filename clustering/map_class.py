@@ -938,23 +938,37 @@ def run_save_model(
     return pred_df
 
 
+def merge_predictions(prediction, group_map, groups):
+    new_predictions = prediction.copy()
+    for group in groups:
+        if group in group_map.values() and group not in new_predictions.columns:
+            assoc_groups = [k for k, v in group_map.items() if v == group and k in new_predictions.columns]
+            if not assoc_groups:
+                continue
+            new_predictions[group] = new_predictions.loc[:, assoc_groups].sum(axis=1)
+            new_predictions.drop(assoc_groups, inplace=True, axis=1)
+    new_predictions = new_predictions.loc[:, groups]
+    mapfun = np.vectorize(lambda l: group_map.get(l, l))
+    new_predictions["correct"] = mapfun(prediction["correct"])
+    return new_predictions
+
+
 def create_metrics_from_pred(pred_df, mapping=None):
     """Create metrics from pred df."""
     groups = [c for c in pred_df.columns if c != "correct"]
-    pred = inverse_binarize(pred_df.loc[:, groups].values, classes=groups)
-    corr = pred_df["correct"].values
 
     if mapping is not None:
-        map_fun = np.vectorize(lambda n: mapping.get(n, n))
-        pred = map_fun(pred)
-        corr = map_fun(corr)
-
         merged_groups = []
         for group in groups:
             mapped = mapping.get(group, group)
             if mapped not in merged_groups:
                 merged_groups.append(mapped)
         groups = merged_groups
+
+        pred_df = merge_predictions(pred_df, mapping, groups)
+
+    pred = inverse_binarize(pred_df.loc[:, groups].values, classes=groups)
+    corr = pred_df["correct"].values
 
     stats = {}
     weighted_f1 = metrics.f1_score(corr, pred, average="weighted")
