@@ -192,28 +192,32 @@ class Case(object):
         elif self.group == "MCL":
             if "mit nachweis ccnd1-igh" in sureness_desc:
                 return Sureness.HIGH
-            elif "nachweis eines igh-ccnd1" in sureness_desc:
+            elif "nachweis eines igh-ccnd1" in sureness_desc:  # synon. to first
                 return Sureness.HIGH
-            elif "nachweis einer 11;14-translokation" in sureness_desc:
+            elif "nachweis einer 11;14-translokation" in sureness_desc:  # synon. to first
                 return Sureness.HIGH
-            elif "mantelzelllymphom" in short_diag:
+            elif "mantelzelllymphom" in short_diag:  # prior known diagnosis will be used
                 return Sureness.HIGH
-            elif "ohne fish-sonde" in sureness_desc:
+            elif "ohne fish-sonde" in sureness_desc:  # diagnosis uncertain without genetic proof
                 return Sureness.LOW
             else:
                 return Sureness.NORMAL
         elif self.group == "PL":
-            if "kein nachweis eines igh-ccnd1" in sureness_desc:
+            if "kein nachweis eines igh-ccnd1" in sureness_desc:  # hallmark MCL (synon. 11;14)
                 return Sureness.HIGH
+            elif "kein nachweis einer 11;14-translokation" in sureness_desc:  # synon to first
+                return Sureness.HIGH
+            elif "nachweis einer 11;14-translokation" in sureness_desc:  # hallmark MCL
+                return Sureness.LOW
             else:
                 return Sureness.NORMAL
         elif self.group == "LPL":
-            if "lymphoplasmozytisches lymphom" in short_diag:
+            if "lymphoplasmozytisches lymphom" in short_diag:  # prior known diagnosis will be used
                 return Sureness.HIGH
             else:
                 return Sureness.NORMAL
         elif self.group == "MZL":
-            if "marginalzonenlymphom" in short_diag:
+            if "marginalzonenlymphom" in short_diag:  # prior known diagnosis will be used
                 return Sureness.HIGH
             else:
                 return Sureness.NORMAL
