@@ -73,6 +73,23 @@ GROUP_MAPS = {
             "MCL": "MP",
             "PL": "MP",
         }
+    },
+    "3class": {
+        "groups": ["CD5+", "CD5-", "normal"],
+        "map": {
+            "CLL": "CD5+",
+            "MBL": "CD5+",
+            "CM": "CD5+",
+            "MCL": "CD5+",
+            "PL": "CD5+",
+            "MP": "CD5+",
+            "MZL": "CD5-",
+            "LPL": "CD5-",
+            "FL": "CD5-",
+            "LM": "CD5-",
+            "LMF": "CD5-",
+            "HCL": "CD5-",
+        }
     }
 }
 
@@ -978,10 +995,13 @@ def create_metrics_from_pred(pred_df, mapping=None):
 
     stats = {}
     weighted_f1 = metrics.f1_score(corr, pred, average="weighted")
+    unweighted_f1 = metrics.f1_score(corr, pred, average="macro")
     mcc = metrics.matthews_corrcoef(corr, pred)
     stats["weighted_f1"] = weighted_f1
+    stats["unweighted_f1"] = unweighted_f1
     stats["mcc"] = mcc
-    LOGGER.info("F1: %f", weighted_f1)
+    LOGGER.info("weighted F1: %f", weighted_f1)
+    LOGGER.info("unweighted F1: %f", unweighted_f1)
     LOGGER.info("MCC: %f", mcc)
 
     confusion = metrics.confusion_matrix(corr, pred, groups,)
@@ -1316,7 +1336,7 @@ def main():
         conf, stats = create_metrics_from_pred(pred_df, mapping=groupstat["map"])
         plotting.plot_confusion_matrix(
             conf.values, groupstat["groups"], normalize=True,
-            title=f"Confusion matrix (f1 {stats['weighted_f1']:.2f} mcc {stats['mcc']:.2f})",
+            title=f"Confusion matrix (weighted f1 {stats['weighted_f1']:.2f} unweighted f1 {stats['unweighted_f1']:.2f})",
             filename=outpath / f"confusion_{gname}", dendroname=None)
         conf.to_csv(outpath / f"confusion_{gname}.csv")
         with open(str(outpath / f"stats_{gname}.json"), "w") as jsfile:
