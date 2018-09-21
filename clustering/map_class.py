@@ -514,11 +514,15 @@ class SOMMapDataset(LoaderMixin, keras.utils.Sequence):
 
     @property
     def labels(self):
-        return self._data.index.values
+        return self._data.index.values.tolist()
 
     @property
     def ylabels(self):
         return self._data["group"]
+
+    def get_batch_by_label(self,label):
+        '''Return batch by label'''
+        return self[self.labels.index(label)]
 
     def __len__(self):
         """Return the number of batches generated."""
