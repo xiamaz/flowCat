@@ -12,6 +12,8 @@ import collections
 
 import numpy as np
 import pandas as pd
+import pathlib
+import pickle
 
 from sklearn import preprocessing
 import keras
@@ -35,6 +37,9 @@ from map_class import inverse_binarize
 import map_class
 import saliency
 import consensus_cases
+
+import weighted_crossentropy
+import keras.losses
 
 
 if "MLLDATA" in os.environ:
@@ -100,11 +105,11 @@ def map_fcs_to_sommap(case, tube, sommap_path):
     """Map for the given case the fcs data to their respective sommap data."""
     sommap_data = get_sommap_tube(sommap_path, case.id, tube)
     counts = sommap_data["counts"]
-    sommap_data.drop(["counts", "count_prev"],
+    sommap_data.drop(["counts"],
                      inplace=True, errors="ignore", axis=1)
     gridwidth = int(np.round(np.sqrt(sommap_data.shape[0])))
 
-    tubecase = case.get_tube(1)
+    tubecase = case.get_tube(tube)
     # get scaled zscores
     fcsdata = tubecase.get_data()
 
@@ -132,17 +137,20 @@ def nodenum_to_coord(nodenum, gridwidth=32, relative=True):
 def sommap_selection(fcsdata, grads, gridwidth=32):
     #palette = Color2D()
     selection = []
-    grad_colors = cm.ScalarMappable(cmap='jet').to_rgba(grads)
+    grad_colors = cm.ScalarMappable(cmap='autumn').to_rgba(1-grads)
     for name, gdata in fcsdata.groupby("somnode"):
         #coords = nodenum_to_coord(name, gridwidth=gridwidth, relative=True)
         #color = cm.jet(round(256*grads[name]))
         color = grad_colors[name]
-        color[3] = grads[name]
+        if grads[name] < 0.1:
+            color = [0.95,0.95,0.95,0.05]
+        else:
+            color[3] = grads[name]
         selection.append((gdata.index, color, name))
     return selection
 
 
-def plot_tube(case, tube, grads, title="Scatterplots", selection=None, sommappath=""):
+def plot_tube(case, tube, grads,classes, title="Scatterplots", selection=None, sommappath="", plot_path = ""):
     tubecase = case.get_tube(tube)
     fcsdata = tubecase.data
 
@@ -171,9 +179,9 @@ def plot_tube(case, tube, grads, title="Scatterplots", selection=None, sommappat
             cp.scatterplot( fcsdata, gating, axes, selections=selection)
 
         fig.tight_layout(rect=(0, 0, 1, 0.95))
-        fig.suptitle(f"{title} Tube {tube} Class {idx}")
+        fig.suptitle(f"{title} Tube {tube} Class {classes[idx]}")
         FigureCanvas(fig)
-        fig.savefig(f"{title} Tube {tube} Class {idx}.png")
+        fig.savefig(f"{plot_path}{title} Tube {tube} Class {classes[idx]}.png")
 
 
 def calc_saliency(case, model, indata, labels, config, preds, classes=None):
@@ -204,24 +212,43 @@ def calc_saliency(case, model, indata, labels, config, preds, classes=None):
     #regroup gradients into tube1 and tube2
     gradients = [[grad[0].flatten() for grad in gradients],[grad[1].flatten() for grad in gradients]]
 
-    return gradients
-
+    return gradients, list(set(classes))
 
 def main():
-    c_indata = MLLDATA / "mll-sommaps/output/smallernet_double_yesglobal_epochrand_sommap_8class/data_paths.p"
-    c_model = MLLDATA / "mll-sommaps/models/smallernet_double_yesglobal_epochrand_sommap_8class/model_0.h5"
-    c_config = MLLDATA / "mll-sommaps/output/smallernet_double_yesglobal_epochrand_sommap_8class/config.json"
-    c_labels = MLLDATA / "mll-sommaps/output/smallernet_double_yesglobal_epochrand_sommap_8class/test_labels.json"
-    c_preds = MLLDATA / "mll-sommaps/models/smallernet_double_yesglobal_epochrand_sommap_8class/predictions_0.csv"
-    c_tube = 1
+    c_indata = MLLDATA / "mll-sommaps/output/smallernet_double_yesglobal_sommap_8class/data_paths.p"
+    c_model = MLLDATA / "mll-sommaps/models/smallernet_double_yesglobal_sommap_8class/model_0.h5"
+    c_config = MLLDATA / "mll-sommaps/output/smallernet_double_yesglobal_sommap_8class/config.json"
+    c_labels = MLLDATA / "mll-sommaps/output/smallernet_double_yesglobal_sommap_8class/test_labels.json"
+    c_preds = MLLDATA / "mll-sommaps/models/smallernet_double_yesglobal_sommap_8class/predictions_0.csv"
+    #c_weighted_loss = MLLDATA / "mll-sommaps/models/deepershift_counts_noweight_sommap_8class/weights_0.csv"
+    c_input = MLLDATA / "mll-sommaps/sample_maps/selected1_toroid_s32/"
+    c_misclass = MLLDATA / "mll-sommaps/misclassifications/"
+    c_tube = [1,2]
     sommap_dataset = MLLDATA / "mll-sommaps/sample_maps/selected1_toroid_s32"
+
+    #CATEGORICAL CROSSENTROPY
+    # weights = pd.read_csv(c_weighted_loss, index_col = 0)
+    #
+    # loss_function = weighted_crossentropy.WeightedCategoricalCrossEntropy(weights)
+    #
+    #keras.losses.custom_loss = loss_function
+    # model = keras.models.load_model(c_model,compile = False)
+    # epsilon = 1e-8
+    # model.compile(
+    #     loss='categorical_crossentropy',
+    #     # optimizer="adam",
+    #     optimizer=keras.optimizers.Adam(lr=0.0, decay=0.0, epsilon=epsilon),  # lr and decay set by callback
+    #     metrics=[
+    #         'acc',
+    #         # top2_acc,
+    #     ]
+    # )
+
 
     cases = cc.CaseCollection(MLLDATA / "mll-flowdata/CLL-9F", tubes=[1, 2])
     # model = keras.models.load_model("mll-sommaps/models/convolutional/model_0.h5")
 
-    predictions = pd.read_csv(
-        MLLDATA / "mll-sommaps/models/smallernet_double_yesglobal_epochrand_mergemult_sommap_8class/predictions_0.csv",
-        index_col=0)
+    predictions = pd.read_csv(c_preds,index_col=0)
 
     #merged_predictions = merge_predictions(predictions, map_class.GROUP_MAPS["6class"])
     #result = map_class.create_metrics_from_pred(predictions, map_class.GROUP_MAPS["6class"]["map"])
@@ -230,17 +257,25 @@ def main():
     predictions = add_correct_magnitude(predictions)
     predictions = add_infiltration(predictions, cases)
 
-    correct, wrong = split_correctness(predictions)
+    misclass_labels = ['7fbf480d1345e5e1c0c6d652bbe03d8efc0972f6','0791f5831f81d7b48334da0a119252bf271566aa','66635403b6c0eab1f7387b8763cff597a04b5dc1', '507777582649cbed8dfb3fe552a6f34f8b6c28e3','af4c29e882e5feeda2117b52d2bfedc6ffdfa39d','fb1c08e9d46497259962fed884e9ec6a2ddd4ecf']
 
-    false_negative = wrong.loc[wrong["pred"] == "normal", :]
-    # print(false_negative.loc[:, ["infiltration", "correct", "largest"]])
+    for label in misclass_labels:
+        case = cases.get_label(label)
 
-    high_infil_false = false_negative.loc[false_negative["infiltration"] > 5.0, :]
-    sel_high = high_infil_false.iloc[1, :]
-    case = cases.get_label(sel_high.name)
-    gradients = calc_saliency(case,c_model, c_indata, c_labels, c_config, predictions)
-    plot_tube(case, c_tube, gradients[c_tube-1],
-              sommappath=sommap_dataset, selection="sommap")
+        gradients, classes = calc_saliency(case,c_model, c_indata, c_labels, c_config, predictions)
+
+        class_string = "_".join(classes)
+        with open(f"{c_misclass}/{label}/{class_string}_gradients.p","wb") as gradient_output:
+            pickle.dump(gradients,gradient_output)
+
+        for tube in c_tube:
+            # plot saliency heatmap
+            saliency.plot_saliency_heatmap(gradients, classes, tube, plot_path = f"{c_misclass}/{label}/")
+            # plot RGB overlay plots
+            saliency.plot_RGB_overlay(c_input / f"{case.id}_t{tube}.csv", gradients, classes, tube, plot_path = f"{c_misclass}/{label}/")
+
+            #plot_tube(case, tube, gradients[tube-1], classes = classes,
+            #          sommappath=sommap_dataset, selection="sommap", plot_path = f"{c_misclass}/{label}/")
 
 
 if __name__ == "__main__":

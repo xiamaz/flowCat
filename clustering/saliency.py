@@ -4,6 +4,7 @@ import pickle
 
 import keras
 from keras.models import load_model
+from sklearn.preprocessing import MinMaxScaler
 
 from vis.utils import utils
 from vis.visualization import visualize_saliency, overlay
@@ -16,45 +17,46 @@ import pandas as pd
 import numpy as np
 import pathlib
 
+from clustering import collection as cc
 import map_class
 import consensus_cases
-from map_class import reshape_dataframe
-from map_class import CountLoader
+import vis_class
 
 
-def calculate_saliency(model, input, layer_idx, filter_indices):
-    '''Calculates saliency gradients'''
-    grads_sal = visualize_saliency(
-        model, layer_idx, filter_indices, input_indices=[*range(len(input))], seed_input=input)
-    return grads_sal
+if "MLLDATA" in os.environ:
+    MLLDATA = pathlib.Path(os.environ["MLLDATA"])
+else:
+    MLLDATA = pathlib.Path()
 
 
-def plot_saliency_heatmap(gradients, plot_path, input_types):
+def plot_saliency_heatmap(gradients, classes, tube, plot_path):
     '''Plots saliency heatmaps'''
-    for i, gradient in enumerate(gradients):
-        if input_types[i] == 'h':
-            gradient = np.reshape(gradient, (10, 10))
-        plt.imshow(gradient, cmap='jet')
-        plt.savefig(os.path.join(plot_path + "saliency_heatmap_{}".format(i)))
+    if len(classes) > 1:
+        for idx,group in enumerate(classes):
+            plt.imshow(gradients[idx][tube-1].reshape(34,34), cmap='jet')
+            plt.savefig(os.path.join(plot_path + f"saliency_heatmap_tube_{tube}_class_{group}"))
+    else:
+        plt.imshow(gradients[tube-1][0].reshape(34,34), cmap='jet')
+        plt.savefig(os.path.join(plot_path + f"saliency_heatmap_tube_{tube}_class_{classes[0]}"))
 
-
-def plot_RGB_overlay(inputs, gradients, plot_path, input_types):
+def plot_RGB_overlay(input, gradients, classes, tube, plot_path):
     '''Plots RGB overlay plots'''
-    for i, input in enumerate(inputs):
-        if input_types[i] == 'h':
-            continue
-        transformed_df = np.squeeze(transform_data(
-            input, columns=['SS INT LIN', 'CD45-KrOr', 'CD19-APCA750']), 0)
-        plt.imshow(gradients[i], cmap='jet')
+    transformed_df = np.squeeze(transform_map_input(input, columns=['CD45-KrOr','SS INT LIN', 'CD19-APCA750']), 0)
+    if len(classes) > 1:
+        for idx,group in enumerate(classes):
+            plt.imshow(gradients[idx][tube-1].reshape(34,34), cmap='jet')
+            plt.imshow(scale_data(transformed_df, 3), alpha=0.5)
+            plt.savefig(os.path.join(plot_path + f"RGB_overlay_{tube}_class_{group}"))
+    else:
+        plt.imshow(gradients[tube-1][0].reshape(34,34), cmap='jet')
         plt.imshow(scale_data(transformed_df, 3), alpha=0.5)
-        plt.savefig(os.path.join(plot_path + "RGB_overlay_{}".format(i)))
-
+        plt.savefig(os.path.join(plot_path + f"RGB_overlay_tube_{tube}_class_{classes[0]}"))
 
 def kappa_lambda_plot(gradients, tube2, plot_path):
     '''Calculates and plots Kappa Lambda ratio'''
     try:
-        tube2_k = np.squeeze(transform_data(tube2, columns=['Kappa-FITC']))
-        tube2_l = np.squeeze(transform_data(tube2, columns=['Lambda-PE']))
+        tube2_k = np.squeeze(transform_map_input(tube2, columns=['Kappa-FITC']))
+        tube2_l = np.squeeze(transform_map_input(tube2, columns=['Lambda-PE']))
     except KeyError as e:
         print(e)
 
@@ -62,6 +64,32 @@ def kappa_lambda_plot(gradients, tube2, plot_path):
     plt.imshow(scale_data(tube2_kl_ratio, 1), cmap='RdGy')
     plt.title("Kappa/Lambda Ratio")
     plt.savefig(os.path.join(plot_path + "Kappa_Lambda"))
+
+
+
+def transform_map_input(path, columns, gridsize = 32, pad_width = 1 ):
+    map_list = []
+    mapdata = pd.read_csv(path, index_col=0)
+    if columns:
+        mapdata = mapdata[columns]
+    data = map_class.reshape_dataframe(
+        mapdata,
+        m=gridsize,
+        n=gridsize,
+        pad_width=pad_width)
+    map_list.append(data)
+    return np.stack(map_list)
+
+
+def scale_data(data, columns: int = 3):
+    '''Transforms each channel of a numpy array to values between 0 and 1'''
+    scaler = MinMaxScaler()
+    if columns == 1:
+        return scaler.fit_transform(data)
+    else:
+        for i in range(columns):
+            data[:, :, i] = scaler.fit_transform(data[:, :, i])
+        return data
 
 
 def generate_saliency_plots(model, input, layer_idx, filter_indices, input_types, plot_path="plots", saliency_heatmap=True, rgb_plot=True, kappa_lambda=False):
@@ -90,28 +118,16 @@ def generate_saliency_plots(model, input, layer_idx, filter_indices, input_types
     else:
         label = 0
 
-    transformed_input = [transform_saliency_input(
-        path, input_types[i], i + 1, label) for i, path in enumerate(input)]
+    #transformed_input = [transform_saliency_input(
+    #    path, input_types[i], i + 1, label) for i, path in enumerate(input)]
 
     # compute saliency gradients
-    sal_grads = calculate_saliency(
-        model, transformed_input, layer_idx, filter_indices)
+    sal_grads = visualize_saliency(model, layer_idx, filter_indices, seed_input=input, input_indices=[*range(len(input))])
 
-    #plotting
-    # plot saliency heatmap
-    if saliency_heatmap:
-        plot_saliency_heatmap(sal_grads, plot_path, input_types)
-    # plot RGB overlay plots
-    if rgb_plot:
-        plot_RGB_overlay(input, sal_grads, plot_path, input_types)
-    # plot Kappa/Lambda ratio
-    if kappa_lambda:
-        # check if second tube in 2Dmap format exists
-        tube2 = [i for i, n in enumerate(input_types) if n == 'm'][1]
-        kappa_lambda_plot(input[tube2], plot_path)
+    return sal_grads
 
 
-def dataset_from_config(datapath, labelpath, configpath, batch_size):
+def dataset_from_config(datapath, labelpath, configpath, batch_size,columns=None):
     """Load dataset from config specifications."""
     config = map_class.load_json(configpath)
 
@@ -129,59 +145,72 @@ def dataset_from_config(datapath, labelpath, configpath, batch_size):
     modelfun, xoutputs, train_batch, test_batch = map_class.get_model_type(
         config["c_model"], config["c_dataoptions"], data)
 
+    if columns != None:
+        data = data[columns]
+
     dataset = map_class.SOMMapDataset(
         data, xoutputs, batch_size=1, draw_method="sequential", groups=groupinfo["groups"])
 
     return dataset
 
-
 def main():
     ## SALIENCY GENERATOR CONFIG
-    c_indata = "mll-sommaps/output/smallernet_double_yesglobal_epochrand_sommap_8class/data_paths.p"
-    c_model = "mll-sommaps/models/smallernet_double_noglobal_sommap_8class/model_0.h5"
-    # c_model = "mll-sommaps/models/smallernet_double_yesglobal_epochrand_sommap_8class/model_0.h5"
-    c_config = "mll-sommaps/output/smallernet_double_yesglobal_epochrand_sommap_8class/config.json"
-    c_labels = "mll-sommaps/output/smallernet_double_yesglobal_epochrand_sommap_8class/test_labels.json"
-    c_preds = "mll-sommaps/models/smallernet_double_yesglobal_epochrand_sommap_8class/predictions_0.csv"
-    c_saliency = "mll-sommaps/saliency"
-
-    # visualize the last layer
+    c_indata = MLLDATA / "mll-sommaps/output/smallernet_double_yesglobal_epochrand_sommap_8class/data_paths.p"
+    c_model = MLLDATA / "mll-sommaps/models/smallernet_double_yesglobal_epochrand_sommap_8class/model_0.h5"
+    c_config = MLLDATA / "mll-sommaps/output/smallernet_double_yesglobal_epochrand_sommap_8class/config.json"
+    c_labels = MLLDATA / "mll-sommaps/output/smallernet_double_yesglobal_epochrand_sommap_8class/test_labels.json"
+    c_input1 = "mll-sommaps/sample_maps/selected1_toroid_s32/1230e71ad4d2d27a5ce6e0162335976a72300505_t1.csv"
+    c_input2 = "mll-sommaps/sample_maps/selected1_toroid_s32/1230e71ad4d2d27a5ce6e0162335976a72300505_t2.csv"
+    c_saliency = "mll-sommaps/saliency/"
     c_layer_idx = -1
 
-    ## LOAD existing model, data info and correct input data configuration.
-    model = keras.models.load_model(c_model)
+    cases = cc.CaseCollection(MLLDATA / "mll-flowdata/CLL-9F", tubes=[1, 2])
+    # model = keras.models.load_model("mll-sommaps/models/convolutional/model_0.h5")
 
-    # modify model for saliency usage
-    # model.layers[c_layer_idx].activation = keras.activations.linear
-    # model = utils.apply_modifications(model)
+    predictions = pd.read_csv(
+        MLLDATA / "mll-sommaps/models/smallernet_double_yesglobal_epochrand_mergemult_sommap_8class/predictions_0.csv",
+        index_col=0)
 
-    dataset = dataset_from_config(c_indata, c_labels, c_config, batch_size=1)
-    preds = pd.read_csv(c_preds, index_col=0)
-    preds = consensus_cases.add_correct_magnitude(preds)
+    #merged_predictions = merge_predictions(predictions, map_class.GROUP_MAPS["6class"])
+    #result = map_class.create_metrics_from_pred(predictions, map_class.GROUP_MAPS["6class"]["map"])
+    #print(result)
 
-    ## GENERATE Saliency values for the input data
+    predictions = vis_class.add_correct_magnitude(predictions)
+    predictions = vis_class.add_infiltration(predictions, cases)
+
+    correct, wrong = vis_class.split_correctness(predictions)
+
+    false_negative = wrong.loc[wrong["pred"] == "normal", :]
+    # print(false_negative.loc[:, ["infiltration", "correct", "largest"]])
+
+    high_infil_false = false_negative.loc[false_negative["infiltration"] > 5.0, :]
+    sel_high = high_infil_false.iloc[1, :]
+    case = cases.get_label(sel_high.name)
+
+    dataset = dataset_from_config(
+        c_indata, c_labels, c_config, batch_size=1)
     all_labels = dataset.labels
     selected_label = dataset.labels[0]
-    corr_group = preds.loc[selected_label, "correct"]
-    pred_group = preds.loc[selected_label, "pred"]
-    xdata, ydata = dataset[0]
+    corr_group = predictions.loc[selected_label, "correct"]
+    pred_group = predictions.loc[selected_label, "pred"]
+    xdata, ydata = dataset.get_batch_by_label(case.id)
+    print(case.id)
 
+    model = keras.models.load_model(c_model)
 
-    for group in set([corr_group,pred_group]):
-        grads_sal = visualize_saliency(model, c_layer_idx, dataset.groups.index(group), seed_input=xdata, input_indices=[0, 1])
-        with open(pathlib.Path(c_saliency,"{}_{}_{}".format(selected_label,model.layers[c_layer_idx].name,str(group))),"wb") as saliency_output:
-            pickle.dump(grads_sal,saliency_output)
+    sal_grads = [generate_saliency_plots(model, xdata, c_layer_idx, dataset.groups.index(group), input_types=['m','m'],plot_path = c_saliency) for group in set([corr_group,pred_group])]
 
-    ## PLOT Saliency based information
-
-    # histgram input
-    # input1 = '/home/jakob/Documents/flowCAT/abstract_somgated_1_20180723_1217/tube1.csv'
-    # input2 = '/home/jakob/Documents/flowCAT/abstract_somgated_1_20180723_1217/tube2.csv'
-    # input3 = '/home/jakob/Documents/flowCAT/selected1_toroid_s32/ffff7d20c895165bbda3b7ac1a7249c483fa4f6b_t1.csv'
-    # input4 = '/home/jakob/Documents/flowCAT/selected1_toroid_s32/ffff7d20c895165bbda3b7ac1a7249c483fa4f6b_t2.csv'
-    # # compute gradients
-    # grads = generate_saliency_plots(model, [input1, input2, input3, input4], layer_idx=-1, filter_indices=2, input_types=[
-    #                                 'h', 'h', 'm', 'm'], plot_path="../../saliency_plots/histomap/")
+    #plotting
+    for grads in sal_grads:
+        # plot saliency heatmap
+        plot_saliency_heatmap(grads, c_saliency)
+        # plot RGB overlay plots
+        plot_RGB_overlay([c_input1,c_input2], grads, c_saliency)
+        # plot Kappa/Lambda ratio
+        # if kappa_lambda:
+        #     # check if second tube in 2Dmap format exists
+        #     tube2 = [i for i, n in enumerate(input_types) if n == 'm'[1]
+        #     kappa_lambda_plot(input[tube2], c_saliency)
 
 
 if __name__ == '__main__':
