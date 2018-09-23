@@ -24,6 +24,7 @@ def plot_confusion_matrix(
         cmap=cm.Blues,
         filename: str = 'confusion.png',
         dendroname: str = "dendro.png",
+        sizes=None,
 ):
     """
     This function prints and plots the confusion matrix.
@@ -38,14 +39,32 @@ def plot_confusion_matrix(
         print('Confusion matrix, without normalization')
         confusion_matrix = confusion_matrix.astype('int')
 
+    orig_confusion = confusion_matrix.copy()
+
+    # replicate groups with higher sizes
+    if sizes:
+        hreplicated = []
+        for i, size in enumerate(sizes):
+            hreplicated.append(np.tile(confusion_matrix[[i], :], (size, 1)))
+        confusion_matrix = np.concatenate(hreplicated)
+        vreplicated = []
+        for i, size in enumerate(sizes):
+            vreplicated.append(np.tile(confusion_matrix[:, [i]], (1, size)))
+        confusion_matrix = np.concatenate(vreplicated, axis=1)
+
     fig = Figure()
     axes = fig.add_subplot(111)
 
     img = axes.imshow(confusion_matrix, interpolation='nearest', cmap=cmap)
-    fig.colorbar(img)
+    # fig.colorbar(img)
 
     axes.set_title(title)
-    tick_marks = np.arange(len(classes))
+    tick_marks = np.arange(len(classes), dtype=float)
+    if sizes is not None:
+        for i, size in enumerate(sizes):
+            if size > 1:
+                tick_marks[i] = np.arange(tick_marks[i], size + tick_marks[i], dtype=float).mean()
+                tick_marks[i+1:] = tick_marks[i+1:] + size - 1
     axes.set_xticks(tick_marks)
     axes.set_xticklabels(classes)
     axes.set_yticks(tick_marks)
@@ -53,11 +72,11 @@ def plot_confusion_matrix(
 
     fmt = '.2f' if normalize else 'd'
     thresh = confusion_matrix.max() / 2.
-    for i, j in itertools.product(range(confusion_matrix.shape[0]),
-                                  range(confusion_matrix.shape[1])):
-        axes.text(j, i, format(confusion_matrix[i, j], fmt),
+    for i, j in itertools.product(range(len(tick_marks)),
+                                  range(len(tick_marks))):
+        axes.text(tick_marks[j], tick_marks[i], format(orig_confusion[i, j], fmt),
                  horizontalalignment="center",
-                 color="white" if confusion_matrix[i, j] > thresh else "black")
+                 color="white" if orig_confusion[i, j] > thresh else "black")
 
     axes.set_ylabel('True label')
     axes.set_xlabel('Predicted label')

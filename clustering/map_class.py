@@ -48,7 +48,8 @@ NAME_MAP = {
 GROUP_MAPS = {
     "8class": {
         "groups": ["CM", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
-        "map": {"CLL": "CM", "MBL": "CM"}
+        "map": {"CLL": "CM", "MBL": "CM"},
+        "sizes": [2, 1, 1, 1, 1, 1, 1, 1,],
     },
     "6class": {
         "groups": ["CM", "MP", "LM", "FL", "HCL", "normal"],
@@ -59,7 +60,8 @@ GROUP_MAPS = {
             "LPL": "LM",
             "MCL": "MP",
             "PL": "MP",
-        }
+        },
+        "sizes": [2, 2, 2, 1, 1, 1,],
     },
     "5class": {
         "groups": ["CM", "MP", "LMF", "HCL", "normal"],
@@ -72,7 +74,8 @@ GROUP_MAPS = {
             "LM": "LMF",
             "MCL": "MP",
             "PL": "MP",
-        }
+        },
+        "sizes": [2, 2, 3, 1, 1,],
     },
     "3class": {
         "groups": ["CD5+", "CD5-", "normal"],
@@ -89,7 +92,8 @@ GROUP_MAPS = {
             "LM": "CD5-",
             "LMF": "CD5-",
             "HCL": "CD5-",
-        }
+        },
+        "sizes": [4, 4, 1,],
     }
 }
 
@@ -1217,6 +1221,8 @@ def main():
             "pad_width": 1 if "toroid" in c_sommap_data else 0  # do something more elaborate later
         },
     }
+    # Output options
+    c_confusion_sizes = True
     ## END CONFIGURATION VARIABLES
 
     # save configuration variables
@@ -1334,10 +1340,14 @@ def main():
 
         LOGGER.info(f"-- {len(groupstat['groups'])} --")
         conf, stats = create_metrics_from_pred(pred_df, mapping=groupstat["map"])
+
+        # choose whether to represent merged classes larger in confusion matrix
+        sizes = groupstat["sizes"] if c_confusion_sizes else None
+
         plotting.plot_confusion_matrix(
             conf.values, groupstat["groups"], normalize=True,
             title=f"Confusion matrix (weighted f1 {stats['weighted_f1']:.2f} unweighted f1 {stats['unweighted_f1']:.2f})",
-            filename=outpath / f"confusion_{gname}", dendroname=None)
+            filename=outpath / f"confusion_{gname}", dendroname=None, sizes=sizes)
         conf.to_csv(outpath / f"confusion_{gname}.csv")
         with open(str(outpath / f"stats_{gname}.json"), "w") as jsfile:
             json.dump(stats, jsfile)
