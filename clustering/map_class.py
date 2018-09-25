@@ -263,11 +263,11 @@ def disk_cache(fun):
         hashed = args_hasher(*args, **kwargs)
         filepath = cachepath / hashed
         if filepath.exists():
-            with open(filepath, "rb") as f:
+            with open(str(filepath), "rb") as f:
                 result = pickle.load(f)
         else:
             result = fun(*args, **kwargs)
-            with open(filepath, "wb") as f:
+            with open(str(filepath), "wb") as f:
                 pickle.dump(result, f)
         return result
 
@@ -387,25 +387,34 @@ class FCSLoader(LoaderMixin):
 
     @staticmethod
     @disk_cache
-    def _load_data(pathdict, subsample, tubes, channels=None):
+    def _load_tube_data(path):
+        _, data = fcsparser.parse(path, data_set=0, encoding="latin-1")
+
+        data.drop([c for c in data.columns if "nix" in c], axis=1, inplace=True)
+
+        data = data / 1024.0
+
+        # data = pd.DataFrame(scaler.transform(data), columns=data.columns)
+
+        # data = pd.DataFrame(
+        #     preprocessing.MinMaxScaler().fit_transform(
+        #         preprocessing.StandardScaler().fit_transform(data)),
+        #     columns=data.columns)
+
+        cols = [c+s for c in data.columns for s in ["", "sig"]]
+        sig_cols = [c for c in cols if c.endswith("sig")]
+        data = pd.concat(
+            [data, pd.DataFrame(1, columns=sig_cols, index=data.index)], axis=1)
+        data = data.loc[:, cols]
+
+        return data
+
+    @classmethod
+    def _load_data(cls, pathdict, subsample, tubes, channels=None):
         datas = []
         for tube in tubes:
-            _, data = fcsparser.parse(pathdict[tube], data_set=0, encoding="latin-1")
-
-            data.drop([c for c in data.columns if "nix" in c], axis=1, inplace=True)
-
-            data = pd.DataFrame(
-                preprocessing.MinMaxScaler().fit_transform(
-                    preprocessing.StandardScaler().fit_transform(data)),
-                columns=data.columns)
-
+            data = cls._load_tube_data(pathdict[tube])
             data = data.sample(n=subsample)
-
-            cols = [c+s for c in data.columns for s in ["", "sig"]]
-            sig_cols = [c for c in cols if c.endswith("sig")]
-            data = pd.concat(
-                [data, pd.DataFrame(1, columns=sig_cols, index=data.index)], axis=1)
-            data = data.loc[:, cols]
             datas.append(data)
 
         merged = pd.concat(datas, sort=False)
@@ -728,6 +737,9 @@ def fcs_merged(x):
     xa = layers.Conv1D(
         50, 1, strides=1, activation="elu",
         kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(xa)
+    xa = layers.Conv1D(
+        50, 1, strides=1, activation="elu",
+        kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(xa)
     xa = layers.GlobalAveragePooling1D()(xa)
     x = xa
     # xa = layers.BatchNormalization()(xa)
@@ -740,9 +752,12 @@ def fcs_merged(x):
     # x = layers.concatenate([xa, xb])
 
     x = layers.Dense(
-        50, activation="elu",
+        100, activation="elu",
         kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
     # x = layers.Dropout(0.2)(x)
+    x = layers.Dense(
+        100, activation="elu",
+        kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
     x = layers.Dense(
         50, activation="elu",
         kernel_regularizer=keras.regularizers.l2(l=GLOBAL_DECAY))(x)
