@@ -97,6 +97,22 @@ GROUP_MAPS = {
     }
 }
 
+PATHOLOGIC_NORMAL = {
+    "2class": {
+        "groups": ["patho", "normal"],
+        "map": {
+            "CLL": "patho",
+            "MBL": "patho",
+            "MCL": "patho",
+            "PL": "patho",
+            "LPL": "patho",
+            "MZL": "patho",
+            "FL": "patho",
+            "HCL": "patho",
+        }
+    }
+}
+
 COLS = "grcmyk"
 
 
