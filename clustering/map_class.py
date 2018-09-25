@@ -140,6 +140,11 @@ def load_histolabels(histopath):
     return both_labels
 
 
+def rescale_sureness(data):
+    data["sureness"] = data["sureness"] / data["sureness"].mean() * 5
+    return data
+
+
 def load_dataset(mappath, histopath, fcspath):
     """Return dataframe containing columns with filename and labels."""
     mappath = pathlib.Path(mappath)
@@ -173,6 +178,9 @@ def load_dataset(mappath, histopath, fcspath):
             continue
 
     dataset = pd.DataFrame.from_dict(cdict, orient="index")
+
+    # scale sureness to mean 5 per group
+    dataset = dataset.groupby("group").apply(rescale_sureness)
     return dataset
 
 
