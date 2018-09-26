@@ -8,6 +8,7 @@ Save input config for later loading.
 """
 import logging
 import os
+import pathlib
 
 from .utils import load_json, create_stamp, get_file_path, put_file_path
 from .transformation.base import Merge
@@ -79,6 +80,7 @@ class Clustering:
         )
         hist_results, failure_msgs = trans_data.export_results()
 
+        put_file_path(modelpath, pipeline.to_csv)
         put_file_path(outpath, hist_results.to_csv)
         put_file_path(failpath, failure_msgs.to_csv)
 

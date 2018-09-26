@@ -1,7 +1,10 @@
 import os
 import logging
-from enum import Enum
+import enum
 from datetime import datetime
+
+from sklearn import preprocessing
+import pandas as pd
 
 import fcsparser
 
@@ -20,7 +23,13 @@ def all_in(smaller, larger):
     return True
 
 
-class Material(Enum):
+class Sureness(enum.IntEnum):
+    HIGH = 10
+    NORMAL = 5
+    LOW = 1
+
+
+class Material(enum.Enum):
     """Class containing material types. Abstracting the concept for
     easier consumption."""
     PERIPHERAL_BLOOD = 1
@@ -37,8 +46,24 @@ class Material(Enum):
             return Material.OTHER
 
 
-class Case:
+class Case(object):
     """Basic case object containing all metadata for a case."""
+    __slots__ = (
+        "_json",
+        "path",
+        "_filepaths",
+        "_tubepaths",
+        "_tube_markers",
+        "_histogram",
+        "date",
+        "infiltration",
+        "short_diagnosis",
+        "sureness_description",
+        "sureness",
+        "group",
+        "id",
+    )
+
     def __init__(self, data: dict, path: str = ""):
         self._json = data
 
@@ -58,6 +83,10 @@ class Case:
         self.id = data["id"]
 
         self.filepaths = data["filepaths"]
+
+        self.short_diagnosis = data["diagnosis"]
+        self.sureness_description = data["sureness"]
+        self.sureness = self._infer_sureness()
 
     @property
     def json(self):
@@ -100,11 +129,17 @@ class Case:
             }
         return self._tube_markers
 
-    def get_tube(self, tube: int) -> dict:
+    def get_tube(self, tube: int, min_count: int = 0) -> dict:
         """Get filedict for a single tube. Return the last filedict in the
         list."""
         assert self.has_tube(tube), "Case does not have specified tube."
         all_tube = self.tubepaths[tube]
+        if min_count:
+            for tcase in all_tube:
+                if tcase.event_count > min_count:
+                    return tcase
+            raise RuntimeError(
+                f"No case found fulfilling {min_count} in {tube}")
         return all_tube[-1]
 
     def has_tube(self, tube: int) -> bool:
@@ -129,8 +164,79 @@ class Case:
         )
         return material_num == 1
 
+    def has_count(self, count: int, tubes: list):
+        """Check if case has the required counts in the needed channels."""
+        return all(any(p.event_count >= count for p in v) for v in self.tubepaths.values())
 
-class CasePath:
+    def get_merged_data(self, tubes=None, channels=None, min_count=0, **kwargs):
+        """Get dataframe from selected tubes and channels.
+        """
+        tubes = sorted(list(self.tube_markers.keys())) if tubes is None else tubes
+        sel_tubes = [self.get_tube(t, min_count=min_count).get_data(**kwargs) for t in tubes]
+        joined = pd.concat(sel_tubes, sort=False)
+        if channels:
+            joined = joined[channels]
+        else:
+            joined = joined[[c for c in joined.columns if "nix" not in c]]
+        return joined
+
+    def _infer_sureness(self):
+        """Return a sureness score from existing information."""
+        sureness_desc = self.sureness_description.lower()
+        short_diag = self.short_diagnosis.lower()
+        if self.group == "FL":
+            if "nachweis eines igh-bcl2" in sureness_desc:
+                return Sureness.HIGH
+            else:
+                return Sureness.NORMAL
+        elif self.group == "MCL":
+            if "mit nachweis ccnd1-igh" in sureness_desc:
+                return Sureness.HIGH
+            elif "nachweis eines igh-ccnd1" in sureness_desc:  # synon. to first
+                return Sureness.HIGH
+            elif "nachweis einer 11;14-translokation" in sureness_desc:  # synon. to first
+                return Sureness.HIGH
+            elif "mantelzelllymphom" in short_diag:  # prior known diagnosis will be used
+                return Sureness.HIGH
+            elif "ohne fish-sonde" in sureness_desc:  # diagnosis uncertain without genetic proof
+                return Sureness.LOW
+            else:
+                return Sureness.NORMAL
+        elif self.group == "PL":
+            if "kein nachweis eines igh-ccnd1" in sureness_desc:  # hallmark MCL (synon. 11;14)
+                return Sureness.HIGH
+            elif "kein nachweis einer 11;14-translokation" in sureness_desc:  # synon to first
+                return Sureness.HIGH
+            elif "nachweis einer 11;14-translokation" in sureness_desc:  # hallmark MCL
+                return Sureness.LOW
+            else:
+                return Sureness.NORMAL
+        elif self.group == "LPL":
+            if "lymphoplasmozytisches lymphom" in short_diag:  # prior known diagnosis will be used
+                return Sureness.HIGH
+            else:
+                return Sureness.NORMAL
+        elif self.group == "MZL":
+            if "marginalzonenlymphom" in short_diag:  # prior known diagnosis will be used
+                return Sureness.HIGH
+            else:
+                return Sureness.NORMAL
+        else:
+            return Sureness.NORMAL
+
+
+class CasePath(object):
+    __slots__ = (
+        "path",
+        "markers",
+        "event_count",
+        "tube",
+        "material",
+        "parent",
+        "result",
+        "result_success",
+    )
+
     """Single path for a case."""
     def __init__(self, path, parent):
         self.path = os.path.join(parent.path, path["fcs"]["path"])
@@ -149,9 +255,26 @@ class CasePath:
     def data(self):
         """FCS data. Do not save the fcs data in the case, since
         it would be too large."""
+        return self.get_data(normalized=False, scaled=False)
+
+    def get_data(self, normalized=True, scaled=True):
+        """
+        Args:
+            normalized: Normalize data to mean and standard deviation.
+            scaled: Scale data between 0 and 1.
+        Returns:
+            Dataframe with fcs data.
+        """
         _, data = fcsparser.parse(
-            get_file_path(self.path), data_set=0, encoding="latin-1"
-        )
+            get_file_path(self.path), data_set=0, encoding="latin-1")
+
+        if normalized:
+            data = pd.DataFrame(
+                preprocessing.StandardScaler().fit_transform(data), columns=data.columns)
+        if scaled:
+            data = pd.DataFrame(
+                preprocessing.MinMaxScaler().fit_transform(data), columns=data.columns)
+
         return data
 
     @property

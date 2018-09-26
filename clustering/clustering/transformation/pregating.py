@@ -105,14 +105,33 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
 
     def __init__(
             self,
-            channels=["CD45-KrOr", "SS INT LIN"],
-            positions=["+", "-"],
+            somargs=None,
+            gatingargs=None
     ):
         # self._pre = ClusteringTransform(10, 10, 2048)
-        self._pre = SOMNodes(10, 10, 2048)
-        self._clust = GatingFilter(channels, positions, min_samples=4, eps=50)
+        self._somargs = {
+            **{
+                "m": 10,
+                "n": 10,
+                "batch_size": 1,
+                "initial_learning_rate": 0.1,
+                "end_learning_rate": 0.01,
+                "max_random": 1023.0,
+            }, **({} if somargs is None else somargs)
+        }
+        gatingargs = {
+            **{
+                "channels": ["CD45-KrOr", "SS INT LIN"],
+                "positions": ["+", "-"],
+                "min_samples": 4,
+                "eps": 50,
+            }, **({} if gatingargs is None else gatingargs)
+        }
 
-        self._channels = channels
+        self._pre = None
+        self._clust = GatingFilter(**gatingargs)
+
+        self._channels = gatingargs["channels"]
 
         self.history = []
 
@@ -122,8 +141,9 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
 
     def predict(self, X, *_):
         # fit the SOMNodes for the individual case
-        self._pre.fit(X)
-        new_weights = self._pre.transform(X)
+        self._pre = SOMNodes(channels=X.columns, **self._somargs)
+        self._pre.fit([X])
+        new_weights = self._pre.get_weights()
         self._clust.fit(new_weights)
 
         event_to_node = self._pre.predict(X)
@@ -142,5 +162,6 @@ class SOMGatingFilter(BaseEstimator, TransformerMixin):
 
     def transform(self, X, *_):
         selection = self.predict(X, *_)
-        result = X.loc[selection == 1, ~X.columns.isin(self._channels)]
+        # result = X.loc[selection == 1, ~X.columns.isin(self._channels)]
+        result = X.loc[selection == 1, :]
         return result

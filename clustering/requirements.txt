@@ -1,8 +1,11 @@
 boto3
 # tensorflow
 git+https://github.com/xiamaz/fcsparser.git
+git+https://github.com/xiamaz/Color2D.git
 matplotlib
 scikit-learn
 scipy
 graphviz
 networkx
+pydot
+git+https://github.com/jakob-he/keras-vis.git@multiinput

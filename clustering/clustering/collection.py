@@ -2,9 +2,10 @@ import os
 import random
 import logging
 from functools import reduce
-from collections import Counter, defaultdict
+import collections
 
 import pandas as pd
+from sklearn import preprocessing, model_selection
 
 from .case import Case, CasePath, Material
 from .utils import load_json, get_file_path, put_file_path
@@ -42,14 +43,14 @@ class SelectedMarkers:
 
     def fit(self, X: list, *_) -> list:
         # get a mapping between tubes and selected markers
-        tube_markers = defaultdict(list)
+        tube_markers = collections.defaultdict(list)
         for case in X:
             for tube, marker in case.tube_markers.items():
                 tube_markers[tube] += marker
 
         # absolute marker counts
         self._marker_counts = {
-            t: Counter(m) for t, m in tube_markers.items()
+            t: collections.Counter(m) for t, m in tube_markers.items()
         }
 
         # relative marker ratios across all cases
@@ -82,19 +83,35 @@ class SelectedMarkers:
         return self.fit(X).transform(X)
 
 
-class CaseIterable:
+class IterableMixin(object):
+    """Implement iterable stuff but needs to have the data attribute."""
+    def __getitem__(self, key):
+        return self.data[key]
+
+    def __len__(self):
+        return len(self.data)
+
+    def __iter__(self):
+        self._current = 0
+        return self
+
+    def __next__(self):
+        if self._current >= len(self):
+            raise StopIteration
+        else:
+            self._current += 1
+            return self[self._current - 1]
+
+
+class CaseIterable(IterableMixin):
     """Iterable collection for cases. Base class."""
 
-    def __init__(self, tubes=None):
+    def __init__(self):
         self._tubes = None
         self._groups = None
         self._current = None
         self._data = []
 
-        if tubes is not None:
-            self.selected_tubes = tubes
-        else:
-            self.selected_tubes = self.tubes
 
     @property
     def data(self) -> list:
@@ -122,7 +139,7 @@ class CaseIterable:
         """Get number of cases per group in case colleciton."""
         if self._groups is None:
 
-            self._groups = defaultdict(list)
+            self._groups = collections.defaultdict(list)
             for data in self._data:
                 self._groups[data.group].append(data)
 
@@ -133,22 +150,11 @@ class CaseIterable:
         """Return dict represendation of content."""
         return [c.json for c in self]
 
-    def __getitem__(self, key):
-        return self.data[key]
-
-    def __len__(self):
-        return len(self.data)
-
-    def __iter__(self):
-        self._current = 0
-        return self
-
-    def __next__(self):
-        if self._current >= len(self):
-            raise StopIteration
-        else:
-            self._current += 1
-            return self[self._current - 1]
+    def get_label(self, label):
+        for case in self:
+            if case.id == label:
+                return case
+        return None
 
 
 def filter_materials(data: list) -> list:
@@ -166,7 +172,7 @@ class CaseCollection(CaseIterable):
     """Get case information from info file and remove errors and provide
     overview information."""
 
-    def __init__(self, inputpath: str, *args, **kwargs):
+    def __init__(self, inputpath: str, tubes=None, *args, **kwargs):
         """
         :param inputpath: Input directory containing cohorts and a info file.
         :param tubes: List of selected tubes.
@@ -180,23 +186,46 @@ class CaseCollection(CaseIterable):
             load_json(get_file_path(os.path.join(inputpath, INFONAME)))
         ]
 
-        material_data = filter_materials(data)
+        data = filter_materials(data)
 
         markers = SelectedMarkers()
-        self._data = markers.fit_transform(material_data)
+        data = markers.fit_transform(data)
         self.markers = markers.selected_markers
 
-        self._data = [
-            d for d in self._data if d.has_tubes(self.selected_tubes)
+        if tubes is not None:
+            self.selected_tubes = tubes
+        else:
+            self.selected_tubes = self.tubes
+
+        data = [
+            d for d in data if d.has_tubes(self.selected_tubes)
         ]
 
         # ensure that data uses same material
-        self._data = [
-            d for d in self._data if d.same_material(self.selected_tubes)
+        data = [
+            d for d in data if d.same_material(self.selected_tubes)
         ]
 
+        # check the dataset for duplicates
+        label_dict = collections.defaultdict(list)
+        for single in data:
+            label_dict[single.id].append(single)
+        deduplicated = []
+        for cases in label_dict.values():
+            cases.sort(key=lambda c: c.sureness, reverse=True)
+            if len(cases) == 1 or cases[0].sureness > cases[1].sureness:
+                deduplicated.append(cases[0])
+            else:
+                LOGGER.warning(
+                    "DUP both removed: %s (%s), %s (%s)\nSureness: %s %s",
+                    cases[0].id, cases[0].group, cases[1].id, cases[1].group,
+                    cases[0].sureness_description, cases[1].sureness_description,
+                )
+
+        self._data = deduplicated
+
     def create_view(
-            self, labels=None, num=None, groups=None, infiltration=None,
+            self, labels=None, num=None, groups=None, infiltration=None, counts=None,
             **kwargs
     ):
         """Filter view to specified criteria and return a new view object."""
@@ -210,15 +239,20 @@ class CaseCollection(CaseIterable):
         else:
             data = self._data
 
+        if labels:
+            data = [
+                case for case in data if case.id in labels
+            ]
+
         if infiltration:
             data = [
                 d for d in data
                 if d.infiltration >= infiltration or d.group in NO_INFILTRATION
             ]
 
-        if labels:
+        if counts:
             data = [
-                case for case in data if case.id in labels
+                d for d in data if d.has_count(counts, self.selected_tubes)
             ]
 
         # randomly sample num cases from each group
@@ -243,10 +277,11 @@ class CaseView(CaseIterable):
     """Filtered view into the base data. Perform all mutable
     actions on CaseView instead of CaseCollection."""
 
-    def __init__(self, data, markers, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, data, markers, tubes=None):
+        super().__init__()
         self.data = data
         self.markers = markers
+        self.selected_tubes = tubes
 
     def get_tube(self, tube: int) -> "TubeView":
         return TubeView(
@@ -264,18 +299,33 @@ class CaseView(CaseIterable):
                 # touch the data to load it
                 print("Loaded df with shape: ", case.get_tube(tube).data.shape)
 
+    def create_split(self, num, stratify=True):
+        """Split the data into two groups."""
+        if stratify:
+            labels = [d.group for d in self.data]
+        else:
+            labels = None
+        train, test = model_selection.train_test_split(
+            self.data, test_size=num, stratify=labels)
+        return (
+            CaseView(train, self.markers, tubes=self.selected_tubes),
+            CaseView(test, self.markers, tubes=self.selected_tubes),
+        )
 
-class TubeView:
+
+class TubeView(IterableMixin):
     """List containing CasePath."""
     def __init__(self, data: [CasePath], markers: list):
         self.data = data
         self.markers = markers
         self._materials = None
+        self._current = None
+
 
     @property
     def materials(self):
         if self._materials is None:
-            self._materials = defaultdict(list)
+            self._materials = collections.defaultdict(list)
             for casepath in self.data:
                 self._materials[str(casepath.material)].append(casepath)
 
@@ -290,6 +340,3 @@ class TubeView:
             pd.DataFrame.from_records(hists),
             pd.DataFrame.from_records(failures)
         )
-
-    def __len__(self):
-        return len(self.data)

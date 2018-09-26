@@ -17,6 +17,82 @@ PLOTWIDTH = 6
 PLOTHEIGHT = 4
 
 
+ALL_GATINGS = {
+    1: [
+        ["CD19-APCA750", "CD79b-PC5.5"],
+        ["CD19-APCA750", "CD5-PacBlue"],
+        ["CD20-PC7", "CD23-APC"],
+        ["CD19-APCA750", "CD10-PE"],
+        ["CD19-APCA750", "FMC7-FITC"],
+        ["CD20-PC7", "CD5-PacBlue"],
+        ["CD19-APCA750", "IgM-ECD"],
+        ["CD10-PE", "FMC7-FITC"],
+        ["SS INT LIN", "FS INT LIN"],
+        ["CD45-KrOr", "SS INT LIN"],
+        ["CD19-APCA750", "SS INT LIN"],
+        # ["CD19-APCA750", "CD10-PE"],
+        # ["CD19-APCA750", "FS INT LIN"],
+    ],
+    2: [
+        ["CD19-APCA750", "Lambda-PE"],
+        ["CD19-APCA750", "Kappa-FITC"],
+        ["Lambda-PE", "Kappa-FITC"],
+        ["CD19-APCA750", "CD22-PacBlue"],
+        ["CD19-APCA750", "CD103-APC"],
+        ["CD19-APCA750", "CD11c-PC7"],
+        ["CD25-PC5.5", "CD11c-PC7"],
+        ["Lambda-PE", "Kappa-FITC"],
+        ["SS INT LIN", "FS INT LIN"],
+        ["CD45-KrOr", "SS INT LIN"],
+        ["CD19-APCA750", "SS INT LIN"],
+    ],
+    3: [
+        ["CD3-ECD", "CD4-PE"],
+        ["CD3-ECD", "CD8-FITC"],
+        ["CD4-PE", "CD8-FITC"],
+        ["CD56-APC", "CD3-ECD"],
+        ["CD4-PE", "HLA-DR-PacBlue"],
+        ["CD8-FITC", "HLA-DR-PacBlue"],
+        ["CD19-APCA750", "CD3-ECD"],
+        ["SS INT LIN", "FS INT LIN"],
+        ["CD45-KrOr", "SS INT LIN"],
+        ["CD3-ECD", "SS INT LIN"]
+    ]
+}
+
+
+def scatterplot(data, channels, axes, selections=None, rangex=None, rangey=None):
+    """Draw a scatterplot on the given axes.
+    Args:
+        data: Pandas dataframe containing channels.
+        channels: X and Y channels for plotting.
+        axes: Matplotlib axes for plotting.
+        selections: List of tuples of selection and color for coloured plotting.
+    Returns:
+        Plotted axes.
+    """
+    xchannel, ychannel = channels
+    x = data[xchannel]
+    y = data[ychannel]
+
+    if selections is None:
+        axes.scatter(x, y, s=1, marker=".")
+    else:
+        for sel, color, label in selections:
+            axes.scatter(
+                data.loc[sel, xchannel], data.loc[sel, ychannel],
+                s=1, marker=".", c=color, label=label)
+
+    axes.set_xlabel(xchannel)
+    axes.set_ylabel(ychannel)
+
+    rangex = (0, 1023) if rangex is None else rangex
+    rangey = (0, 1023) if rangey is None else rangey
+    axes.set_xlim(*rangex)
+    axes.set_ylim(*rangey)
+    return axes
+
+
 # Basic plotting helpers
 def create_plot(path, plotfunc):
     fig = Figure()
