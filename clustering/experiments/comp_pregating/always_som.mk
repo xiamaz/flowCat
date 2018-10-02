@@ -1,4 +1,0 @@
-METHOD=normal
-PREMETHOD = som
-TRANSMETHOD = som
-UPSAMPLING_NUM = "-1"
