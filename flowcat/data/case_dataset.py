@@ -10,8 +10,8 @@ import collections
 import pandas as pd
 from sklearn import model_selection
 
-from .case import Case, CasePath, Material
-from ..utils import load_json, get_file_path
+from .case import Case, TubeSample, Material
+from ..utils import load_json, URLPath
 
 
 # Threshold for channel markers to be used in SOM
@@ -33,66 +33,23 @@ LOGGER = logging.getLogger(__name__)
 INFONAME = "case_info.json"
 
 
-class SelectedMarkers:
-
-    def __init__(self, remove_empty_channels=False, threshold=0.9):
-        self._threshold = threshold
-        self._marker_counts = None
-        self._marker_ratios = None
-        self._selected_markers = None
-        self._remove_empty_channels = remove_empty_channels
-
-    @property
-    def selected_markers(self):
-        return self._selected_markers
-
-    def fit(self, X: list, *_) -> list:
-        # get a mapping between tubes and selected markers
-        tube_markers = collections.defaultdict(list)
-        for case in X:
-            for tube, marker in case.tube_markers.items():
-                tube_markers[tube] += marker
-
-        # absolute marker counts
-        self._marker_counts = {
-            t: collections.Counter(m) for t, m in tube_markers.items()
-        }
-
-        # remove empty channels
-        if self._remove_empty_channels:
-            for tube in self._marker_counts:
-                for key in list(self._marker_counts[tube].keys()):
-                    if EMPTY_TAG in key:
-                        del self._marker_counts[tube][key]
-
-        # relative marker ratios across all cases
-        self._marker_ratios = {
-            t: {k: c[k] / len(X) for k in c}
-            for t, c in self._marker_counts.items()
-        }
-
-        # select markers based on relative ratio above given threshold
-        self._selected_markers = {
-            t: [v for v, r in c.items() if r >= self._threshold]
-            for t, c in self._marker_ratios.items()
-        }
-        return self
-
-    def _predict(self, path: "CasePath") -> bool:
-        """Check that all selected markers are contained in the given path
-        information dict."""
-        return path.has_markers(self._selected_markers[path.tube])
-
-    def transform(self, X, *_):
-        """Filter out all filepaths that do not contain required markers."""
-        for single in X:
-            single.filepaths = [
-                path for path in single.filepaths if self._predict(path)
-            ]
-        return X
-
-    def fit_transform(self, X, *_):
-        return self.fit(X).transform(X)
+def deduplicate_cases_by_sureness(data):
+    """Remove duplicates by taking the one with the higher sureness score."""
+    label_dict = collections.defaultdict(list)
+    for single in data:
+        label_dict[single.id].append(single)
+    deduplicated = []
+    for cases in label_dict.values():
+        cases.sort(key=lambda c: c.sureness, reverse=True)
+        if len(cases) == 1 or cases[0].sureness > cases[1].sureness:
+            deduplicated.append(cases[0])
+        else:
+            LOGGER.warning(
+                "DUP both removed: %s (%s), %s (%s)\nSureness: %s %s",
+                cases[0].id, cases[0].group, cases[1].id, cases[1].group,
+                cases[0].sureness_description, cases[1].sureness_description,
+            )
+    return deduplicated
 
 
 class IterableMixin(object):
@@ -118,11 +75,30 @@ class IterableMixin(object):
 class CaseIterable(IterableMixin):
     """Iterable collection for cases. Base class."""
 
-    def __init__(self):
+    def __init__(self, data, selected_markers=None, selected_tubes=None):
+        """
+        Args:
+            data: List of cases.
+            selected_markers: Dictionary of tubes to list of marker channels.
+            selected_tubes: List of tube numbers.
+        """
         self._tubes = None
         self._groups = None
         self._current = None
         self._data = []
+
+        if isinstance(data, CaseIterable):
+            self.data = data.data
+            # use metainformation if they are given
+            if selected_markers is None:
+                selected_markers = data.selected_markers
+            if selected_tubes is None:
+                selected_tubes = data.selected_tubes
+        else:
+            self.data = data
+
+        self.selected_markers = selected_markers
+        self.selected_tubes = selected_tubes
 
     @property
     def data(self) -> list:
@@ -175,106 +151,73 @@ class CaseIterable(IterableMixin):
                 return case
         return None
 
-
-def filter_materials(data: list) -> list:
-    """Filter cases to remove not allowed materials.
-    """
-    for single_case in data:
-        single_case.filepaths = [
-            p for p in single_case.filepaths
-            if p.material in ALLOWED_MATERIALS
-        ]
-    return data
-
-
-class CaseCollection(CaseIterable):
-    """Get case information from info file and remove errors and provide
-    overview information."""
-
-    def __init__(self, inputpath: str, tubes=None, remove_empty_channels=True, *args, **kwargs):
-        """
+    def get_groups(self, groups, data=None):
+        """Get a selection of groups.
         Args:
-            inputpath: Input directory containing cohorts and a info file.
-            tubes: List of selected tubes.
-            remove_empty_channels: Remove channels without antibodies.
+            groups: List of groups to get.
+        Returns:
+            List of cases.
         """
-        super().__init__(*args, **kwargs)
+        data = [case for group in groups for case in self.groups[group]]
+        return data
 
-        self._path = inputpath
-
-        data = [
-            Case(d, path=inputpath) for d in
-            load_json(get_file_path(os.path.join(inputpath, INFONAME)))
-        ]
-
-        data = filter_materials(data)
-
-        markers = SelectedMarkers(remove_empty_channels=remove_empty_channels)
-        data = markers.fit_transform(data)
-        self.markers = markers.selected_markers
-
-        if tubes is not None:
-            self.selected_tubes = tubes
-        else:
-            self.selected_tubes = self.tubes
-
-        data = [
-            d for d in data if d.has_tubes(self.selected_tubes)
-        ]
-
-        # ensure that data uses same material
-        data = [
-            d for d in data if d.same_material(self.selected_tubes)
-        ]
-
-        # check the dataset for duplicates
-        label_dict = collections.defaultdict(list)
-        for single in data:
-            label_dict[single.id].append(single)
-        deduplicated = []
-        for cases in label_dict.values():
-            cases.sort(key=lambda c: c.sureness, reverse=True)
-            if len(cases) == 1 or cases[0].sureness > cases[1].sureness:
-                deduplicated.append(cases[0])
-            else:
-                LOGGER.warning(
-                    "DUP both removed: %s (%s), %s (%s)\nSureness: %s %s",
-                    cases[0].id, cases[0].group, cases[1].id, cases[1].group,
-                    cases[0].sureness_description, cases[1].sureness_description,
-                )
-
-        self._data = deduplicated
-
-    def create_view(
-            self, labels=None, num=None, groups=None, infiltration=None, counts=None,
-            **kwargs
+    def filter(
+            self,
+            tubes=None,
+            labels=None,
+            num=None,
+            groups=None,
+            infiltration=None,
+            counts=None,
+            materials=None,
+            selected_markers=None,
     ):
-        """Filter view to specified criteria and return a new view object."""
+        """Get filtered version of the data."""
+
+        # set defaults
+        if materials is None:
+            materials = ALLOWED_MATERIALS
+        if tubes is None:
+            tubes = self.tubes
+
         # choose the basis for further filtering from either all cases
         # or a preselection of cases
         if groups:
-            data = reduce(
-                lambda x, y: x + y,
-                [self.groups[g] for g in groups]
-            )
+            self.get_groups(groups)
         else:
             data = self._data
 
         if labels:
-            data = [
-                case for case in data if case.id in labels
-            ]
+            data = [case for case in data if case.id in labels]
 
         if infiltration:
-            data = [
-                d for d in data
-                if d.infiltration >= infiltration or d.group in NO_INFILTRATION
-            ]
+            data = [d for d in data if d.infiltration >= infiltration or d.group in NO_INFILTRATION]
 
-        if counts:
-            data = [
-                d for d in data if d.has_count(counts, self.selected_tubes)
-            ]
+        # create copy since we will start mutating the objects
+        data = [d.copy() for d in data]
+
+        ndata = []
+        # filter cases by allowed materials and counts in fcs files
+        for case in data:
+            ccase = case.copy()
+            ccase.used_material = ccase.get_possible_material(tubes, materials)
+
+            has_count = all(ccase.get_tube(t, min_count=counts) for t in tubes)
+            if ccase.used_material and has_count:
+                if counts:
+                    ccase.filepaths = [fp for fp in ccase.filepaths if fp.count >= counts]
+                ndata.append(ccase)
+        data = ndata
+
+        if selected_markers is None:
+            tubemarkers = {
+                t: collections.Counter(m for c in data for m in c.get_tube(t).markers)
+                for t in tubes
+            }
+            selected_markers = {
+                t: [m for m, n in v.items() if n / len(data) > MARKER_THRESHOLD and "nix" not in m]
+                for t, v in tubemarkers.items()
+            }
 
         # randomly sample num cases from each group
         if num:
@@ -288,28 +231,58 @@ class CaseCollection(CaseIterable):
                     ]
                 ]
             ))
+        return self.__class__(data, selected_markers=selected_markers, selected_tubes=tubes)
 
-        return CaseView(
-            data, self.markers, tubes=self.selected_tubes, **kwargs
-        )
+
+class CaseCollection(CaseIterable):
+    """Get case information from info file and remove errors and provide
+    overview information."""
+
+    def __init__(self, data, path="", *args, **kwargs):
+        super().__init__(data, *args, **kwargs)
+        self.path = path
+
+    @classmethod
+    def from_dir(cls, inputpath: str):
+        """
+        Initialize on datadir with info json.
+        Args:
+            inputpath: Input directory containing cohorts and a info file.
+            tubes: List of selected tubes.
+            remove_empty_channels: Remove channels without antibodies.
+        """
+        metapath = URLPath(inputpath, INFONAME)
+        data = [
+            Case(d, path=inputpath) for d in load_json(metapath.get())
+        ]
+
+        # check the dataset for duplicates
+        data = deduplicate_cases_by_sureness(data)
+
+        return cls(data, inputpath)
+
+    def filter(self, *args, **kwargs):
+        """Adding more metadata to the filtered result."""
+        result = super().filter(*args, **kwargs)
+        view = CaseView(result)
+        return view
 
 
 class CaseView(CaseIterable):
     """Filtered view into the base data. Perform all mutable
     actions on CaseView instead of CaseCollection."""
 
-    def __init__(self, data, markers, tubes=None):
-        super().__init__()
-        self.data = data
-        self.markers = markers
-        self.selected_tubes = tubes
+    def __init__(self, data, *args, **kwargs):
+        super().__init__(data, *args, **kwargs)
+        assert self.selected_markers is not None
+        assert self.selected_tubes is not None
 
     def get_tube(self, tube: int) -> "TubeView":
         return TubeView(
             [
                 d.get_tube(tube) for d in self.data
             ],
-            self.markers[tube]
+            self.selected_markers[tube]
         )
 
     def download_all(self):
@@ -329,20 +302,30 @@ class CaseView(CaseIterable):
         train, test = model_selection.train_test_split(
             self.data, test_size=num, stratify=labels)
         return (
-            CaseView(train, self.markers, tubes=self.selected_tubes),
-            CaseView(test, self.markers, tubes=self.selected_tubes),
+            CaseView(
+                train,
+                selected_markers=self.selected_markers,
+                selected_tubes=self.selected_tubes),
+            CaseView(
+                test,
+                selected_markers=self.selected_markers,
+                selected_tubes=self.selected_tubes),
         )
 
 
 class TubeView(IterableMixin):
     """List containing CasePath."""
-    def __init__(self, data: [CasePath], markers: list):
-        self.data = data
+    def __init__(self, data, markers):
         self.markers = markers
+        self._data = data
         self._materials = None
         self._current = None
         self._labels = None
         self._groups = None
+
+    @property
+    def data(self):
+        return self._data
 
     @property
     def materials(self):

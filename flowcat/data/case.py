@@ -1,14 +1,17 @@
 import os
 import logging
 import enum
+import functools
 from datetime import datetime
 
-from sklearn import preprocessing
+import numpy as np
 import pandas as pd
+from sklearn import preprocessing
+from sklearn.base import BaseEstimator, TransformerMixin
 
 import fcsparser
 
-from ..utils import get_file_path
+from ..utils import URLPath
 
 
 LOGGER = logging.getLogger(__name__)
@@ -52,9 +55,7 @@ class Case(object):
         "_json",
         "path",
         "_filepaths",
-        "_tubepaths",
-        "_tube_markers",
-        "_histogram",
+        "used_material",
         "date",
         "infiltration",
         "short_diagnosis",
@@ -64,29 +65,34 @@ class Case(object):
         "id",
     )
 
-    def __init__(self, data: dict, path: str = ""):
-        self._json = data
-
-        self.path = path
-
+    def __init__(self, data, path=""):
         self._filepaths = None
-        self._tubepaths = None
-        self._tube_markers = None
+        self.used_material = None
 
-        # place to store result
-        self._histogram = {}
+        if isinstance(data, self.__class__):
+            self._json = data._json.copy()
+            self.path = data.path
+            self.date = data.date
+            self.infiltration = data.infiltration
+            self.group = data.group
+            self.id = data.id
+            self.short_diagnosis = data.short_diagnosis
+            self.sureness_description = data.sureness_description
+            self.sureness = data.sureness
+            self.filepaths = data.filepaths
+        else:
+            self._json = data
+            self.path = path
 
-        self.date = datetime.strptime(data["date"], "%Y-%m-%d").date()
+            self.date = datetime.strptime(data["date"], "%Y-%m-%d").date()
+            self.infiltration = data["infiltration"]
+            self.group = data["cohort"]
+            self.id = data["id"]
+            self.short_diagnosis = data["diagnosis"]
+            self.sureness_description = data["sureness"]
+            self.sureness = self._infer_sureness()
 
-        self.infiltration = data["infiltration"]
-        self.group = data["cohort"]
-        self.id = data["id"]
-
-        self.filepaths = data["filepaths"]
-
-        self.short_diagnosis = data["diagnosis"]
-        self.sureness_description = data["sureness"]
-        self.sureness = self._infer_sureness()
+            self.filepaths = data["filepaths"]
 
     @property
     def json(self):
@@ -99,79 +105,80 @@ class Case(object):
 
     @filepaths.setter
     def filepaths(self, value: list):
-        """Set filepaths and clear all generated dicts on data."""
-        self._filepaths = [
-            CasePath(v, self) if not isinstance(v, CasePath) else v
-            for v in value
+        """Set filepaths and clear all generated dicts on data.
+        Args:
+            value: List of dictionaries with information to create case paths or case paths.
+        """
+        self._filepaths = [TubeSample(v, self) for v in value]
+
+    def get_tube(self, tube, min_count=0, material=None):
+        """Get the TubePath fulfilling the given requirements, return the
+        last on the list if multiple are available.
+        Args:
+            tube: Int tube number to be selected.
+            min_count: Minimum number of events in the FCS file.
+            material: Type of material used for the tube.
+        Returns:
+            TubePath or None.
+        """
+        if self.used_material and not material:
+            material = self.used_material
+
+        tubecases = [
+            p for p in self.filepaths
+            if p.tube == tube and (
+                material is None or material == p.material
+            ) and (
+                not min_count or min_count == p.count)
         ]
-        self._tubepaths = None
-        self._tube_markers = None
+        return tubecases[-1] if tubecases else None
 
-    @property
-    def tubepaths(self) -> dict:
-        """Dict of tubepath ids to list of filedicts."""
-        if self._tubepaths is None:
-            self._tubepaths = {
-                t: [fp for fp in self.filepaths if t == int(fp.tube)]
-                for t in set([int(fp.tube) for fp in self.filepaths])
-            }
-        return self._tubepaths
-
-    @property
-    def tube_markers(self) -> dict:
-        """Dict of tube to selected marker lists."""
-        if self._tube_markers is None:
-            self._tube_markers = {
-                k: v.markers
-                for k, v in
-                {k: self.get_tube(k) for k in self.tubepaths}.items()
-                if v
-            }
-        return self._tube_markers
-
-    def get_tube(self, tube: int, min_count: int = 0) -> dict:
-        """Get filedict for a single tube. Return the last filedict in the
-        list."""
-        assert self.has_tube(tube), "Case does not have specified tube."
-        all_tube = self.tubepaths[tube]
-        if min_count:
-            for tcase in all_tube:
-                if tcase.event_count > min_count:
-                    return tcase
-            raise RuntimeError(
-                f"No case found fulfilling {min_count} in {tube}")
-        return all_tube[-1]
-
-    def has_tube(self, tube: int) -> bool:
-        """Check whether case has a specified tube.
+    def get_same_materials(self, tubes):
+        """Check whether the given tubes can have the same material.
+        Args:
+            tubes: List of ints of needed tubes.
+        Returns:
+            List of possible materials.
         """
-        return bool(self.tubepaths.get(tube, []))
+        materials = [
+            set(f.material for f in self.filepaths
+                if f.tube == t) for t in tubes
+        ]
 
-    def get_tube_markers(self, tube: int) -> list:
-        """Get markers for the given tube."""
-        return self.tube_markers.get(tube, [])
+        found_all = functools.reduce(lambda x, y: x & y, materials)
+        return found_all
 
-    def has_tubes(self, tubes: list):
-        """Check that a Case has all given tubes.
+    def get_possible_material(self, tubes, allowed_materials=None):
+        available_materials = self.get_same_materials(tubes)
+        if allowed_materials:
+            filtered = [m for m in available_materials if m in allowed_materials]
+        else:
+            filtered = available_materials
+        return filtered[0] or None
+
+    def has_same_material(self, tubes, allowed_materials=None):
+        if allowed_materials is None:
+            return bool(self.get_same_materials(tubes))
+        else:
+            return bool(self.get_possible_material(tubes, allowed_materials))
+
+    def has_tubes(self, tubes):
+        """Check whether case has the specified tube or tubes.
+        Args:
+            tubes: Int or list of ints for the required tubes.
+            same_material: Check whether the possible subselection has the same
+                material.
+        Returns:
+            True if the required tubes are available.
         """
-        return all([self.has_tube(t) for t in tubes])
+        wanted_tubes = set(tubes)
+        available_tubes = set(f.tube for f in self.filepaths)
+        # check if all wanted tubes are inside available tubes using set ops
+        return wanted_tubes <= available_tubes
 
-    def same_material(self, tubes: list):
-        """Check that the materials returned for the
-        list of given tubes are of the same material"""
-        material_num = len(
-            {self.get_tube(t).material for t in tubes}
-        )
-        return material_num == 1
-
-    def has_count(self, count: int, tubes: list):
-        """Check if case has the required counts in the needed channels."""
-        return all(any(p.event_count >= count for p in v) for v in self.tubepaths.values())
-
-    def get_merged_data(self, tubes=None, channels=None, min_count=0, **kwargs):
+    def get_merged_data(self, tubes, channels=None, min_count=0, **kwargs):
         """Get dataframe from selected tubes and channels.
         """
-        tubes = sorted(list(self.tube_markers.keys())) if tubes is None else tubes
         sel_tubes = [self.get_tube(t, min_count=min_count).get_data(**kwargs) for t in tubes]
         joined = pd.concat(sel_tubes, sort=False)
         if channels:
@@ -224,12 +231,15 @@ class Case(object):
         else:
             return Sureness.NORMAL
 
+    def copy(self):
+        return self.__class__(self)
 
-class CasePath(object):
+
+class TubeSample(object):
     __slots__ = (
         "path",
         "markers",
-        "event_count",
+        "count",
         "tube",
         "material",
         "parent",
@@ -237,19 +247,23 @@ class CasePath(object):
         "result_success",
     )
 
-    """Single path for a case."""
+    """Single sample from a certain tube."""
     def __init__(self, path, parent):
-        self.path = os.path.join(parent.path, path["fcs"]["path"])
-        self.markers = path["fcs"]["markers"]
-        self.event_count = path["fcs"]["event_count"]
+        if isinstance(path, self.__class__):
+            self.path = path.path
+            self.markers = path.markers.copy()
+            self.count = path.count
+            self.tube = path.tube
+            self.material = path.material
+        else:
+            self.path = URLPath(parent.path) / path["fcs"]["path"]
+            self.markers = path["fcs"]["markers"]
+            self.count = path["fcs"]["event_count"]
 
-        self.tube = int(path["tube"])
-        self.material = Material.from_str(path["material"])
+            self.tube = int(path["tube"])
+            self.material = Material.from_str(path["material"])
 
         self.parent = parent
-
-        self.result = None
-        self.result_success = False
 
     @property
     def data(self):
@@ -265,48 +279,210 @@ class CasePath(object):
         Returns:
             Dataframe with fcs data.
         """
-        _, data = fcsparser.parse(
-            get_file_path(self.path), data_set=0, encoding="latin-1")
+        data = FCSData(self.path.get())
 
         if normalized:
-            data = pd.DataFrame(
-                preprocessing.StandardScaler().fit_transform(data), columns=data.columns)
+            data = FCSStandardScaler().fit_transform(data)
         if scaled:
-            data = pd.DataFrame(
-                preprocessing.MinMaxScaler().fit_transform(data), columns=data.columns)
+            data = FCSMinMaxScaler().fit_transform(data)
 
         return data
-
-    @property
-    def metainfo_dict(self):
-        """Return case metainformation."""
-        return {
-            "label": self.parent.id,
-            "group": self.parent.group,
-            "infiltration": self.parent.infiltration,
-        }
-
-    @property
-    def dict(self) -> dict:
-        """Dict representation."""
-        if self.result is None:
-            raise RuntimeError("Result not generated for case path.")
-        return {
-            **dict(zip(range(len(self.result)), self.result)),
-            **self.metainfo_dict,
-        }
-
-    @property
-    def fail_dict(self) -> dict:
-        """Dict representation of failure messages."""
-        return {
-            **{
-                "status": self.result_success,
-                "reason": self.result if isinstance(self.result, str) else "",
-            },
-            **self.metainfo_dict,
-        }
 
     def has_markers(self, markers: list) -> bool:
         """Return whether given list of markers are fulfilled."""
         return all_in(markers, self.markers)
+
+
+class FCSData(object):
+    __slots__ = (
+        "_meta", "data", "ranges"
+    )
+
+    default_encoding = "latin-1"
+    default_dataset = 0
+
+    def __init__(self, initdata):
+        """Create a new FCS object.
+
+        Args:
+            initdata: Either tuple of meta and data from fcsparser, string filepath or another FCSData object.
+        Returns:
+            FCSData object.
+        """
+        if isinstance(initdata, self.__class__):
+            self._meta = initdata.meta.copy()
+            self.ranges = initdata.ranges.copy()
+            self.data = initdata.data.copy()
+        else:
+            # unpack metadata, data tuple
+            if isinstance(initdata, tuple):
+                meta, data = initdata
+            # load using filepath
+            else:
+                meta, data = fcsparser.parse(
+                    str(initdata),
+                    data_set=self.default_dataset,
+                    encoding=self.default_encoding)
+            self._meta = meta
+            self.data = data
+            self.ranges = self._get_ranges_from_pnr(self._meta)
+
+    @property
+    def meta(self):
+        return self._meta
+
+    def copy(self):
+        return self.__class__(self)
+
+    def drop_columns(self, channels):
+        """Drop the given columns from the data.
+        Args:
+            channels: List of channels or channel name to drop. Will not throw an error if the name is not found.
+        Returns:
+            self. This operation is done in place, so the original object will be modified!
+        """
+        self.data.drop(channels, axis=1, inplace=True, errors="ignore")
+        self.ranges.drop(channels, axis=1, inplace=True, errors="ignore")
+        return self
+
+    def _get_ranges_from_pnr(self, metadata):
+        """Get ranges from metainformation."""
+        pnr = {
+            c: {
+                "min": 0,
+                "max": int(metadata[f"$P{i + 1}R"])
+            } for i, c in enumerate(self.data.columns)
+        }
+        pnr = pd.DataFrame.from_dict(pnr, orient="columns", dtype="float32")
+        return pnr
+
+    def __repr__(self):
+        """Print string representation of the input file."""
+        nevents, nchannels = self.data.shape
+        return f"<FCS :: {nevents} events :: {nchannels} channels>"
+
+
+class FCSPipeline:
+    def __init__(self, steps):
+        self.steps = steps
+
+    def fit(self, X, *_):
+        for _, model in self.steps:
+            model.fit(X)
+        return self
+
+    def transform(self, X, *_):
+        for _, model in self.steps:
+            X = model.transform(X)
+        return X
+
+    def fit_transform(self, X, *_):
+        return self.fit(X).transform(X)
+
+
+class FCSMarkersTransform(TransformerMixin, BaseEstimator):
+    def __init__(self, markers):
+        self._markers = markers
+
+    def fit(self, *_):
+        return self
+
+    def transform(self, X, *_):
+        if isinstance(X, FCSData):
+            X.data = X.data.loc[:, self._markers]
+        else:
+            X = X.loc[:, self._markers]
+        return X
+
+
+class FCSLogTransform(BaseEstimator, TransformerMixin):
+    """Transform FCS files logarithmically.  Currently this does not work
+    correctly, since FCS files are not $PnE transformed on import"""
+
+    def transform(self, X, *_):
+        names = [n for n in X.columns if "LIN" not in n]
+        X[names] = np.log1p(X[names])
+        return X
+
+    def fit(self, *_):
+        return self
+
+
+class FCSScatterFilter(BaseEstimator, TransformerMixin):
+    """Remove events with values below threshold in specified channels."""
+
+    def __init__(
+            self,
+            filters=[("SS INT LIN", 0), ("FS INT LIN", 0)],
+    ):
+        self._filters = filters
+
+    def transform(self, X, *_):
+        if isinstance(X, FCSData):
+            selected = functools.reduce(
+                lambda x, y: x & y, [X.data[c] > t for c, t in self._filters])
+            X.data = X.data.loc[selected, :]
+        else:
+            selected = functools.reduce(
+                lambda x, y: x & y, [X[c] > t for c, t in self._filters])
+            X = X.loc[selected, :]
+        return X
+
+    def fit(self, *_):
+        return self
+
+
+class FCSMinMaxScaler(TransformerMixin, BaseEstimator):
+    """MinMaxScaling with adaptations for FCSData."""
+
+    def __init__(self):
+        self._model = preprocessing.MinMaxScaler()
+
+    def fit(self, X, *_):
+        if isinstance(X, FCSData):
+            data = X.ranges
+        else:
+            data = X.data
+        self._model.fit(data)
+        return self
+
+    def transform(self, X, *_):
+        if isinstance(X, FCSData):
+            data = self._model.transform(X.data)
+            X.data = pd.DataFrame(data, columns=X.data.columns, index=X.data.index)
+            ranges = self._model.transform(X.ranges)
+            X.ranges = pd.DataFrame(ranges, columns=X.ranges.columns, index=X.ranges.index)
+        elif isinstance(X, pd.DataFrame):
+            X = pd.DataFrame(
+                self._model.transform(X),
+                columns=X.columns, index=X.index)
+        else:
+            X = self._model.transform(X)
+        return X
+
+
+class FCSStandardScaler(TransformerMixin, BaseEstimator):
+    """Standard deviation scaling adapted for FCSData objects."""
+    def __init__(self):
+        self._model = preprocessing.StandardScaler()
+
+    def fit(self, X, *_):
+        if isinstance(X, FCSData):
+            data = X.data
+        else:
+            data = X
+        self._model.fit(data)
+        return self
+
+    def transform(self, X, *_):
+        if isinstance(X, FCSData):
+            data = self._model.transform(X.data)
+            ranges = self._model.transform(X.ranges)
+            X.data = pd.DataFrame(data, columns=X.data.columns, index=X.data.index)
+            X.ranges = pd.DataFrame(ranges, columns=X.ranges.columns, index=X.ranges.index)
+        elif isinstance(X, pd.DataFrame):
+            data = self._model.transform(X)
+            X = pd.DataFrame(data, columns=X.columns, index=X.index)
+        else:
+            X = self._model.transform(X)
+        return X

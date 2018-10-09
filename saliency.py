@@ -17,7 +17,7 @@ import pandas as pd
 import numpy as np
 import pathlib
 
-from clustering import collection as cc
+from clustering import case_dataset as cc
 import map_class
 import consensus_cases
 import vis_class

@@ -30,7 +30,7 @@ import seaborn as sns
 #from color2D import Color2D
 import colorsys
 
-from clustering import collection as cc
+from clustering import case_dataset as cc
 from clustering import plotting as cp
 from clustering.transformation import pregating, tfsom
 from map_class import inverse_binarize

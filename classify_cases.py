@@ -22,7 +22,7 @@ from matplotlib.figure import Figure
 from matplotlib import cm
 
 from flowcat.visual import plotting
-from flowcat.data import collection as cc
+from flowcat.data import case_dataset as cc
 from flowcat.data import loaders
 
 from flowcat.models import weighted_crossentropy
@@ -98,12 +98,14 @@ def load_dataset(mappath, histopath, fcspath):
     cases = cc.CaseCollection(fcspath, tubes=[1, 2])
     caseview = cases.create_view(counts=10000)
     for case in caseview:
+        material = case.has_same_material([1, 2])
+        fcspaths = {t: str(case.get_tube(t, material=material, min_count=10000).path.local) for t in [1, 2]}
         try:
             assert both_count.loc[(case.id, case.group), "count"] == 3, "Not all data available."
             cdict[case.id] = {
                 "group": case.group,
                 "sommappath": str(mappath / f"{case.id}_t{{tube}}.csv"),
-                "fcspath": {k: utils.get_file_path(v[-1].path) for k, v in case.tubepaths.items()},
+                "fcspath": fcspaths,
                 "histopath": f"{histopath}/tube{{tube}}.csv",
                 "sureness": case.sureness,
             }

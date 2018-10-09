@@ -4,7 +4,6 @@ visualization and classification.
 """
 import os
 import time
-import pathlib
 import contextlib
 import collections
 import argparse
@@ -14,11 +13,12 @@ import logging
 import numpy as np
 import pandas as pd
 
-from sklearn.pipeline import Pipeline
 from sklearn import preprocessing
 
 from flowcat.models import tfsom
-from flowcat.data.collection import CaseCollection
+from flowcat.data import case as ccase
+from flowcat.data.case_dataset import CaseCollection
+from flowcat.configuration import Configuration, compare_configurations
 from flowcat import utils
 
 
@@ -66,11 +66,10 @@ def create_generator(data, transforms=None, fit_transformer=False):
     def generator_fun():
         for case in data:
             fcsdata = case.data
-            fcsdata.drop("nix-APCA700", axis=1, inplace=True, errors="ignore")
+            # fcsdata = fcsdata.drop_columns("nix-APCA700")
             if transforms is not None:
-                trans = transforms.fit_transform(fcsdata) if fit_transformer else transforms.transform(fcsdata)
-                fcsdata = pd.DataFrame(trans, columns=fcsdata.columns)
-            yield fcsdata
+                fcsdata = transforms.fit_transform(fcsdata) if fit_transformer else transforms.transform(fcsdata)
+            yield fcsdata.data
 
     return generator_fun, len(data)
 
@@ -83,9 +82,9 @@ def create_z_score_generator(tubecases):
         Generator function and length of tubecases.
     """
 
-    transforms = Pipeline(steps=[
-        ("zscores", preprocessing.StandardScaler()),
-        ("scale", preprocessing.MinMaxScaler()),
+    transforms = ccase.FCSPipeline(steps=[
+        ("zscores", ccase.FCSStandardScaler()),
+        ("scale", ccase.FCSMinMaxScaler()),
     ])
 
     return create_generator(tubecases, transforms, fit_transformer=True)
@@ -99,66 +98,44 @@ def load_labels(path):
     if not path:
         return path
 
-    path = pathlib.Path(path)
-    if path.suffix == ".json":
-        labels = utils.load_json(path)
-    elif path.suffix == ".p":
-        labels = utils.load_pickle(path)
-    else:
+    path = utils.URLPath(path)
+    try:
+        labels = utils.load_file(path)
+    except TypeError:
         with open(str(path), "r") as f:
             labels = [l.strip() for l in f]
     return labels
 
 
-def load_view(config, section, cases):
-    caseview = cases.create_view(
-        labels=load_labels(config[f"c_{section}_data_labels"]),
-        num=config[f"c_{section}_data_num"],
-        groups=config[f"c_{section}_data_groups"],
-        infiltration=config[f"c_{section}_data_infiltration"],
-        counts=config[f"c_{section}_data_counts"],
-    )
-    return caseview
-
-
-def load_cases(config):
-    """Load a case collection object using the given config object."""
-    cases = CaseCollection(inputpath=config["c_cases_path"], tubes=config["c_tubes"])
-    return cases
-
-
-def generate_reference(config):
+def generate_reference(all_config):
     """Generate a reference SOMmap using the given configuration."""
-    cases = load_cases(config)
-    data = load_view(config, "reference", cases)  # select the required subselection
+    config = all_config["reference"]
 
-    output_dir = pathlib.Path(config["c_reference_path"])
-    output_dir.mkdir(parents=True, exist_ok=True)
+    reference_path = utils.URLPath(config["path"])
+    reference_config = reference_path / "config.toml"
 
+    # load existing if it already exists
+    if reference_config.exists():
+        old_config = Configuration.from_toml(reference_config)
+        assert compare_configurations(config, old_config["reference"], section=None, method="left")
+        reference_data = {
+            t: utils.load_csv(reference_path / f"t{t}.csv") for t in config["view"]["tubes"]
+        }
+        return reference_data
+
+    cases = CaseCollection.from_dir(config["cases"])
+    labels = load_labels(config["labels"])
+    data = cases.filter(labels=labels, **config["view"])
+
+    config["selected_markers"] = {f"tube{k}": v for k, v in data.selected_markers.items()}
+
+    output_dir = utils.URLPath(config["path"])
     reference_maps = {}
-    for tube in config["c_tubes"]:
+    for tube in data.selected_tubes:
         tubedata = data.get_tube(tube)
         marker_list = tubedata.markers
 
-        model = tfsom.TFSom(
-            m=config["c_general_gridsize"],
-            n=config["c_general_gridsize"],
-            channels=marker_list,
-            map_type=config["c_general_maptype"],
-            subsample_size=config["c_reference_subsample_size"],
-            batch_size=config["c_reference_batch_size"],
-            initial_learning_rate=config["c_reference_initial_learning_rate"],
-            end_learning_rate=config["c_reference_end_learning_rate"],
-            initial_radius=config["c_reference_initial_radius"],
-            end_radius=config["c_reference_end_radius"],
-            radius_cooling=config["c_reference_radius_cooling"],
-            learning_cooling=config["c_reference_learning_cooling"],
-            node_distance=config["c_reference_node_distance"],
-            max_epochs=config["c_reference_max_epochs"],
-            initialization_method=config["c_reference_initialization_method"],
-            model_name=config["c_reference_model_name"],
-            tensorboard_dir=config["c_reference_tensorboard_dir"],
-        )
+        model = tfsom.TFSom(channels=marker_list, **config["tfsom"])
 
         # create a data generator
         datagen, length = create_z_score_generator(tubedata.data)
@@ -170,33 +147,38 @@ def generate_reference(config):
         reference_map = pd.DataFrame(model.output_weights, columns=marker_list)
 
         # get the results and save them to files
-        reference_map.to_csv(output_dir / f"t{tube}.csv")
+        utils.save_csv(reference_map, output_dir / f"t{tube}.csv")
         reference_maps[tube] = reference_map
+
+    # Save the configuration if regenerated
+    all_config.to_toml(reference_config)
 
     # return reference maps as dict of tubes
     return reference_map
 
 
-def generate_sommaps(config, references):
+def generate_soms(all_config, references):
     """Generate sommaps using the given configuration."""
-    output_dir = pathlib.Path(config["c_sommaps_path"])
-    output_dir.mkdir(parents=True, exist_ok=True)
+    config = all_config["soms"]
 
-    utils.save_json(config, output_dir / "config.json", clobber=False)
+    output_dir = utils.URLPath(config["path"])
 
-    cases = load_cases(config)
-    data = load_view(config, "sommaps", cases)  # select the required subselection
+    config.to_toml(output_dir / "config.toml")
+
+    cases = CaseCollection.from_dir(config["cases"])
+    labels = load_labels(config["labels"])
+    data = cases.filter(labels=labels, **config["view"])
     meta = {
         "label": [c.id for c in data.data],
         "group": [c.group for c in data.data],
     }
 
-    for tube in config["c_tubes"]:
+    for tube in data.selected_tubes:
         # get the correct data from cases with the correct view
         tubedata = data.get_tube(tube)
 
         # get the referece if using reference initialization or sample based
-        if config["c_sommaps_initialization_method"] == "random":
+        if config["tfsom"]["initialization_method"] == "random":
             reference = None
             used_channels = tubedata.markers
         else:
@@ -204,15 +186,9 @@ def generate_sommaps(config, references):
             used_channels = list(reference.columns)
 
         model = tfsom.SOMNodes(
-            m=config["c_general_gridsize"], n=config["c_general_gridsize"], channels=used_channels,
-            map_type=config["c_general_maptype"],
-            initialization_method=config["c_sommaps_initialization_method"], reference=reference,
-            counts=config["c_sommaps_counts"],
-            subsample_size=config["c_sommaps_subsample_size"],
-            radius_cooling=config["c_sommaps_radius_cooling"],
-            learning_cooling=config["c_sommaps_learning_cooling"],
-            node_distance=config["c_sommaps_node_distance"],
-            fitmap_args=config["c_sommaps_fitmap_args"],
+            reference=reference,
+            channels=used_channels,
+            **config["somnodes"],
         )
 
         datagen, _ = create_z_score_generator(tubedata.data)
@@ -237,127 +213,94 @@ def generate_sommaps(config, references):
     return metadata
 
 
-def check_configuration(path, keytypes, curdata):
-    """Check that old and new configuration match in the specified keytypes."""
-    # grab all keynames that are used for comparison
-    selected_keys = [k for k in curdata if any(kk in k for kk in keytypes)]
-
-    olddata = utils.load_json(path / "config.json")
-    for key in selected_keys:
-        if str(olddata[key]) != str(curdata[key]):
-            print(f"{olddata[key]} != {curdata[key]}")
-            return False
-    return True
-
-
-def load_reference(path, tubes):
-    """Load references for the given tubes into a dict of dataframes."""
-    return {
-        t: pd.read_csv(path / f"t{t}.csv", index_col=0) for t in tubes
-    }
-
-
-def create_or_load_reference(config):
-    """Create or load a reference file based on the given config."""
-    reference_path = pathlib.Path(config["c_reference_path"])
-
-    if (reference_path / "config.json").exists():
-        if not check_configuration(
-                reference_path, ["general", "reference"], config):
-            raise RuntimeError(f"{reference_path} configuration has changed.")
-        reference_data = load_reference(reference_path, config["c_tubes"])
-    else:
-        reference_data = generate_reference(config)
-        # Save the configuration if regenerated
-        utils.save_json(config, reference_path / "config.json", clobber=False)
-
-    return reference_data
-
-
 def main():
-    ## START Configuration
+    # START Configuration
     # General SOMmap
     c_general_gridsize = 32
-    c_general_maptype = "toroid"
+    c_general_map_type = "toroid"
+    # Data Configuration options
+    c_general_cases = "s3://mll-flowdata/CLL-9F"
+    c_general_tubes = [1, 2]
 
     # Reference SOMmap options
     c_reference_name = "testreference"
-    c_reference_max_epochs = 10
-
-    c_reference_data_labels = "data/selected_cases.txt"
-    c_reference_data_num = 1  # per cohort number
-    c_reference_data_groups = None  # cohorts to be included
-    c_reference_data_infiltration = None  # minimum infiltration for usage
-    c_reference_data_counts = None
-
-    c_reference_batch_size = 1
-    c_reference_subsample_size = 2048
-    c_reference_initial_learning_rate = 0.5
-    c_reference_end_learning_rate = 0.1
-    c_reference_initial_radius = int(c_general_gridsize / 2)  # defaults to half of gridsize
-    c_reference_end_radius = 1
-    c_reference_radius_cooling = "exponential"
-    c_reference_learning_cooling = "exponential"
-    c_reference_node_distance = "euclidean"
-    c_reference_max_epochs = 10
-    c_reference_initialization_method = "random"
-    c_reference_model_name = c_reference_name
-    # c_reference_tensorboard_dir = f"tensorboard/ref_{c_reference_model_name}"
-    c_reference_tensorboard_dir = None
-
     c_reference_path = f"mll-sommaps/reference_maps/{c_reference_name}"
-
-    # Individual SOMmap configuration
-    c_sommaps_name = f"testrun_s{c_general_gridsize}_t{c_general_maptype}"
-    c_sommaps_max_epochs = 10
-
-    c_sommaps_data_labels = None
-    c_sommaps_data_num = 50  # per cohort number
-    c_sommaps_data_groups = None  # cohorts to be included
-    c_sommaps_data_infiltration = None  # minimum infiltration for usage
-    c_sommaps_data_counts = None
-
-    c_sommaps_batch_size = 1
-    c_sommaps_counts = True
-    c_sommaps_subsample_size = 2048
-    c_sommaps_radius_cooling = "exponential"
-    c_sommaps_learning_cooling = "exponential"
-    c_sommaps_node_distance = "euclidean"
-    c_sommaps_initialization_method = "reference"
-
-    c_sommaps_fitmap_args = {
-        "max_epochs": 2,
-        "initial_learn": 0.1,
-        "end_learn": 0.05,
-        "initial_radius": 6,
+    c_reference_cases = c_general_cases
+    c_reference_labels = "data/selected_cases.txt"
+    c_reference_view = {
+        "tubes": c_general_tubes,
+        "num": 1,
+        "groups": None,
+        "infiltration": None,
+        "counts": None,
+    }
+    c_reference_tfsom = {
+        "model_name": c_reference_name,
+        "m": c_general_gridsize, "n": c_general_gridsize,
+        "map_type": c_general_map_type,
+        "max_epochs": 10,
+        "batch_size": 1,
+        "subsample_size": 2048,
+        "initial_learning_rate": 0.5,
+        "end_learning_rate": 0.1,
+        "learning_cooling": "exponential",
+        "initial_radius": int(c_general_gridsize / 2),
         "end_radius": 1,
+        "radius_cooling": "exponential",
+        "node_distance": "euclidean",
+        "initialization_method": "random",
+        "tensorboard_dir": None,
     }
 
-    c_sommaps_model_name = c_sommaps_name
-    c_sommaps_tensorboard = False
-    c_sommaps_tensorboard_dir = f"tensorboard/ref_{c_sommaps_model_name}"
-    c_sommaps_path = f"mll-sommaps/sample_maps/{c_sommaps_name}"
-
-    # Data Configuration options
-    c_cases_path = "s3://mll-flowdata/CLL-9F"
-    c_tubes = [1, 2]
+    # Individual SOMmap configuration
+    c_soms_name = f"testrun_s{c_general_gridsize}_t{c_general_map_type}"
+    c_soms_cases = c_general_cases
+    c_soms_path = f"mll-sommaps/sample_maps/{c_soms_name}"
+    c_soms_labels = "data/selected_cases.txt"
+    c_soms_view = {
+        "tubes": c_general_tubes,
+        "num": 50,
+        "groups": None,
+        "infiltration": None,
+        "counts": None,
+    }
+    c_soms_somnodes = {
+        "m": c_general_gridsize, "n": c_general_gridsize,
+        "map_type": c_general_map_type,
+        "max_epochs": 10,
+        "initialization_method": "reference",
+        "counts": True,
+        "subsample_size": 2048,
+        "radius_cooling": "exponential",
+        "learning_cooling": "exponential",
+        "node_distance": "euclidean",
+        "fitmap_args": {
+            "max_epochs": 2,
+            "initial_learn": 0.1,
+            "end_learn": 0.05,
+            "initial_radius": 6,
+            "end_radius": 1,
+        },
+        "model_name": c_soms_name,
+        "tensorboard_dir": None,
+    }
 
     # Output Configurations
-    ## END Configuration
+    # END Configuration
 
-    config_dict = locals()
+    config = Configuration.from_localsdict(locals())
+
     configure_print_logging()
 
     parser = argparse.ArgumentParser(usage="Generate references and individual SOMs.")
     parser.add_argument("--references", help="Generate references only.", action="store_true")
     args = parser.parse_args()
 
-    reference_dict = create_or_load_reference(config_dict)
-
+    reference_dict = generate_reference(config)
     if args.references:
         print("Only generating references. Not generating individual SOMs.")
     else:
-        generate_sommaps(config_dict, reference_dict)
+        generate_soms(config, reference_dict)
 
 
 if __name__ == "__main__":
