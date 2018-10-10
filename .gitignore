@@ -3,13 +3,7 @@
 *.LMD
 *.rds
 
-# output directory for plots and other information
-/output
-/archive/*esults
-/*/analysis
-
-# allow all files in abstract
-!/report/abstract/**
+/mll-*
 
 # python relevant files
 __pycache__
