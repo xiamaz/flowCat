@@ -32,9 +32,9 @@ Runnable scripts
 Documentation
 -------------
 
-Documentation is contained in :file:`docs` in rst/sphinx format. To read the
+Documentation is contained in ``docs`` in rst/sphinx format. To read the
 documentation in html format simply run :code:`make html` inside the docs
-folder. Built html documentation can be found in :file:`docs/_build/html`.
+folder. Built html documentation can be found in ``docs/_build/html``.
 Navigate there to read them in your browser.
 
 Contributions
