@@ -85,6 +85,27 @@ def compare_configurations(conf_a, conf_b, section="", method="left"):
         raise TypeError(f"Unknown method {method}")
 
 
+def to_int_naming(data, key, tag):
+    """Convert dict keys from strings to ints. This operation is done in-place.
+    Args:
+        data: Dict containing key values as parameters.
+        key: Key of the data to be modified.
+        tag: Tag on the string that will be replaced.
+    Returns:
+        Modified sectiondata dict.
+    """
+    if key in data:
+        data[key] = {int(k.replace(tag, "")): v for k, v in data[key].items()}
+    return data
+
+
+def to_string_naming(data, key, tag):
+    """Convert dicts with int names to strings. Adding the given tag."""
+    if key in data:
+        data[key] = {f"{tag}{k}": v for k, v in data[key].items()}
+    return data
+
+
 class Configuration:
     """Basic configuration class, allowing underline access to sectioned data."""
 
@@ -122,6 +143,9 @@ class Configuration:
     def from_toml(cls, path):
         data = utils.load_toml(path)
         section = data.pop("section")
+        # transform each section
+        for subsec in data:
+            data[subsec] = to_int_naming(data[subsec], "selected_markers", "tube")
         return cls(data, section=section)
 
     def to_json(self, path):
@@ -130,6 +154,9 @@ class Configuration:
     def to_toml(self, path):
         tomldata = self._data.copy()
         tomldata["section"] = self.section
+        # transform sections with int keys to strings to avoid TOML errors
+        for subsec in tomldata:
+            tomldata[subsec] = to_string_naming(tomldata[subsec], "selected_markers", "tube")
         utils.save_toml(tomldata, path)
 
     def __getitem__(self, index):
