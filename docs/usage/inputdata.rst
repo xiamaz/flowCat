@@ -94,6 +94,9 @@ and copy files:
    # whitelisting works by excluding everything first
    aws s3 sync --exclude "*" --include "*.jpeg" s3://mll-sommaps/output output
 
+.. _IAM roles: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-ec2.html
+.. _how to setup awscli: https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html
+
 
 Working with local data
 -----------------------
@@ -101,5 +104,21 @@ Working with local data
 When working with local datasets we just have to make sure to point to the
 correct locations.
 
-.. _IAM roles: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-ec2.html
-.. _how to setup awscli: https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html
+When working with :class:`flowcat.data.case_dataset.CaseCollection` objects, the
+input path should refer to the directory containing the :file:`case_info.json`.
+
+For example:
+
+.. code-block:: sh
+
+   example_dataset
+   ├── case_info.json
+   ├── CLL
+   └── normal
+
+:file:`example_dataset` would refer to our dataset. This can be loaded in a
+python script using the :mod:`flowcat.data.case_dataset` methods:
+::
+
+   from flowcat.data.case_dataset import CaseCollection
+   cases = CaseCollection("example_dataset")
