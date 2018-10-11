@@ -54,42 +54,6 @@ def configure_print_logging(rootname="clustering"):
     rootlogger.addHandler(handler)
 
 
-def create_generator(data, transforms=None, fit_transformer=False):
-    """Create a generator for the given data. Optionally applying additional transformations.
-    Args:
-        transforms: Optional transformation pipeline for the data.
-        fit_transformer: Fit transformation pipeline to each new sample.
-    Returns:
-        Tuple of generator function and length of the data.
-    """
-
-    def generator_fun():
-        for case in data:
-            fcsdata = case.data
-            # fcsdata = fcsdata.drop_columns("nix-APCA700")
-            if transforms is not None:
-                fcsdata = transforms.fit_transform(fcsdata) if fit_transformer else transforms.transform(fcsdata)
-            yield fcsdata.data
-
-    return generator_fun, len(data)
-
-
-def create_z_score_generator(tubecases):
-    """Normalize channel information for mean and standard deviation.
-    Args:
-        tubecases: List of tubecases.
-    Returns:
-        Generator function and length of tubecases.
-    """
-
-    transforms = ccase.FCSPipeline(steps=[
-        ("zscores", ccase.FCSStandardScaler()),
-        ("scale", ccase.FCSMinMaxScaler()),
-    ])
-
-    return create_generator(tubecases, transforms, fit_transformer=True)
-
-
 def load_labels(path):
     """Load list of labels. Either in .json, .p (pickle) or .txt format.
     Args:
@@ -191,17 +155,14 @@ def generate_soms(all_config, references):
             **config["somnodes"],
         )
 
-        datagen, _ = create_z_score_generator(tubedata.data)
-
-        tubelabels = [c.parent.id for c in tubedata]
         circ_buffer = collections.deque(maxlen=20)
         time_a = time.time()
-        for label, result in zip(tubelabels, model.transform(datagen())):
+        for result in model.transform_generator(tubedata):
             time_b = time.time()
-            print(f"Saving {label}")
-            filename = f"{label}_t{tube}.csv"
+            print(f"Saving {result.name}")
+            filename = f"{result.name}_t{tube}.csv"
             filepath = output_dir / filename
-            utils.save_csv(result,filepath)
+            utils.save_csv(result, filepath)
             time_d = time_b - time_a
             circ_buffer.append(time_d)
             print(f"Training time: {time_d}s Rolling avg: {np.mean(circ_buffer)}s")
@@ -259,7 +220,7 @@ def main():
     c_soms_labels = "data/selected_cases.txt"
     c_soms_view = {
         "tubes": c_general_tubes,
-        "num": 50,
+        "num": 1,
         "groups": None,
         "infiltration": None,
         "counts": None,

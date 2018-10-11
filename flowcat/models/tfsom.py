@@ -27,10 +27,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, TransformerMixin
 
 import tensorflow as tf
 from ..utils import create_stamp
+from ..data import case as ccase
 
 """
 Adapted from code by Chris Gorman.
@@ -607,7 +607,7 @@ class TFSom:
         return summary_image
 
     def fit_map(
-            self, data_iterable,
+            self, data_iterable, num_inputs,
             max_epochs=0,
             initial_learn=0.1, end_learn=0.01,
             initial_radius=3, end_radius=1
@@ -621,14 +621,14 @@ class TFSom:
         Yields:
             Tuple of node weights and event mapping
         """
-        marker_generator = create_marker_generator(data_iterable, self.channels, batch_size=1, loop=False)
+        marker_generator = create_marker_generator(data_iterable, self.channels, batch_size=2)
 
         graph = tf.Graph()
         session = tf.Session(graph=graph)
         with graph.as_default():
             # data input as dataset from generator
-            dataset = tf.data.Dataset.from_generator(
-                marker_generator, output_types=tf.float32, output_shapes=(None, len(self.channels)))
+            dataset = tf.data.Dataset.from_generator(marker_generator, output_types=tf.float32)
+                # marker_generator, output_types=tf.float32, output_shapes=(None, len(self.channels)))
             data_tensor = dataset.make_one_shot_iterator().get_next()
             input_tensor = tf.Variable(data_tensor, validate_shape=False)
 
@@ -649,24 +649,21 @@ class TFSom:
             if self._tensorboard:
                 writer = tf.summary.FileWriter(
                     str(self._tensorboard_dir / f"self_{create_stamp()}"), graph)
-            while True:
-                try:
-                    session.run([var_init, metric_init])
-                    (event_mapping_prev,) = session.run([mapping])
-                    for epoch in range(max_epochs):
-                        session.run([train_op])
-                    # get final mapping and weights
-                    if self._tensorboard:
-                        arr_weights, event_mapping, sum_res = session.run([weights, mapping, summary])
-                        writer.add_summary(sum_res, number)
-                    else:
-                        arr_weights, event_mapping = session.run([weights, mapping])
+            for _ in range(num_inputs):
+                session.run([var_init, metric_init])
+                (event_mapping_prev,) = session.run([mapping])
+                for epoch in range(max_epochs):
+                    session.run([train_op])
+                # get final mapping and weights
+                if self._tensorboard:
+                    arr_weights, event_mapping, sum_res = session.run([weights, mapping, summary])
+                    writer.add_summary(sum_res, number)
+                else:
+                    arr_weights, event_mapping = session.run([weights, mapping])
 
-                    # yield the result after training
-                    yield arr_weights, event_mapping, event_mapping_prev
-                    number += 1
-                except tf.errors.OutOfRangeError:
-                    break
+                # yield the result after training
+                yield arr_weights, event_mapping, event_mapping_prev
+                number += 1
 
     def train(self, data_iterable, num_inputs):
         """Train the network on the data provided by the input tensor.
@@ -814,7 +811,43 @@ class TFSom:
         return avg_distance
 
 
-class SOMNodes(BaseEstimator, TransformerMixin):
+def create_generator(data, transforms=None, fit_transformer=False):
+    """Create a generator for the given data. Optionally applying additional transformations.
+    Args:
+        transforms: Optional transformation pipeline for the data.
+        fit_transformer: Fit transformation pipeline to each new sample.
+    Returns:
+        Tuple of generator function and length of the data.
+    """
+
+    def generator_fun():
+        for case in data:
+            fcsdata = case.data
+            # fcsdata = fcsdata.drop_columns("nix-APCA700")
+            if transforms is not None:
+                fcsdata = transforms.fit_transform(fcsdata) if fit_transformer else transforms.transform(fcsdata)
+            yield fcsdata.data
+
+    return generator_fun, len(data)
+
+
+def create_z_score_generator(tubecases):
+    """Normalize channel information for mean and standard deviation.
+    Args:
+        tubecases: List of tubecases.
+    Returns:
+        Generator function and length of tubecases.
+    """
+
+    transforms = ccase.FCSPipeline(steps=[
+        ("zscores", ccase.FCSStandardScaler()),
+        ("scale", ccase.FCSMinMaxScaler()),
+    ])
+
+    return create_generator(tubecases, transforms, fit_transformer=True)
+
+
+class SOMNodes:
     """Transform FCS data into SOM nodes, optionally with number of mapped counts."""
 
     def __init__(self, counts=False, fitmap_args=None, *args, **kwargs):
@@ -838,12 +871,30 @@ class SOMNodes(BaseEstimator, TransformerMixin):
         return weight_df
 
     def predict(self, X, *_):
-        return self._model.map_to_nodes(X)
+        """Return mapping of FCS files to nodes in the model for the given
+        tubecase.
+        Args:
+            X: single tubecase.
+        Returns:
+            Numpy array of mapping from single fcs events to SOM nodes.
+        """
+        return self._model.map_to_nodes(X.data.data)
 
-    def transform(self, X, *_):
-        for weights, counts, count_prev in self._model.fit_map(data_iterable=X, **self._fitmap_args):
+    def transform_generator(self, X, *_):
+        """Create a retrained SOM for each single tubecase.
+        Args:
+            X: Iterable returning single tubecases.
+        Yields:
+            Dataframe with som node weights and optionally counts.
+        """
+        datagen, length = create_z_score_generator(X)
+        labels = [c.parent.id for c in X]
+        for i, (weights, counts, count_prev) in enumerate(
+                self._model.fit_map(data_iterable=datagen(), num_inputs=length, **self._fitmap_args)):
             df_weights = pd.DataFrame(weights, columns=self._model.channels)
             if self._counts:
                 df_weights["counts"] = counts
                 df_weights["count_prev"] = count_prev
+            df_weights.name = labels[i]
+            # df_weights.name = label
             yield df_weights
