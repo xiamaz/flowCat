@@ -29,6 +29,13 @@ Runnable scripts
 ``./test_sommaps.py``
     Test the generation of a SOM map on a single case for a selected tube.
 
+Documentation
+-------------
+
+Documentation is contained in ``docs`` in rst/sphinx format. To read the
+documentation in html format simply run :code:`make html` inside the docs
+folder. Built html documentation can be found in ``docs/_build/html``.
+Navigate there to read them in your browser.
 
 Contributions
 -------------

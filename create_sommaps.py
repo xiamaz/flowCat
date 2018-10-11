@@ -127,7 +127,7 @@ def generate_reference(all_config):
     labels = load_labels(config["labels"])
     data = cases.filter(labels=labels, **config["view"])
 
-    config["selected_markers"] = {f"tube{k}": v for k, v in data.selected_markers.items()}
+    config["selected_markers"] = data.selected_markers
 
     output_dir = utils.URLPath(config["path"])
     reference_maps = {}

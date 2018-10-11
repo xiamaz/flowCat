@@ -12,3 +12,6 @@ env
 
 # generated tags
 tags*
+
+# ignore sphinx build folder
+/docs/_build
