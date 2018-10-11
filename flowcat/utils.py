@@ -127,7 +127,7 @@ class URLPath(object):
     def local(self):
         if self._local is None:
             if self.scheme:
-                self._local = pathlib.Path(TMP_PATH, *self.path.parts[1:])
+                self._local = pathlib.Path(TMP_PATH, *self.path.parts)
             else:
                 self._local = pathlib.Path(self.path)
         return self._local

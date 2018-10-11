@@ -94,7 +94,7 @@ def generate_reference(all_config):
     config["selected_markers"] = data.selected_markers
 
     output_dir = utils.URLPath(config["path"])
-    reference_maps = {}
+    reference_data = {}
     for tube in data.selected_tubes:
         tubedata = data.get_tube(tube)
         marker_list = tubedata.markers
@@ -102,7 +102,7 @@ def generate_reference(all_config):
         model = tfsom.TFSom(channels=marker_list, **config["tfsom"])
 
         # create a data generator
-        datagen, length = create_z_score_generator(tubedata.data)
+        datagen, length = tfsom.create_z_score_generator(tubedata.data)
 
         # train the network
         with timer("Training time"):
@@ -112,13 +112,13 @@ def generate_reference(all_config):
 
         # get the results and save them to files
         utils.save_csv(reference_map, output_dir / f"t{tube}.csv")
-        reference_maps[tube] = reference_map
+        reference_data[tube] = reference_map
 
     # Save the configuration if regenerated
     all_config.to_toml(reference_config)
 
     # return reference maps as dict of tubes
-    return reference_map
+    return reference_data
 
 
 def generate_soms(all_config, references):
@@ -146,6 +146,7 @@ def generate_soms(all_config, references):
             reference = None
             used_channels = tubedata.markers
         else:
+            print(references.keys())
             reference = references[tube]
             used_channels = list(reference.columns)
 
