@@ -163,7 +163,7 @@ def generate_soms(all_config, references):
 
     output_dir = utils.URLPath(config["path"])
 
-    config.to_toml(output_dir / "config.toml")
+    all_config.to_toml(output_dir / "config.toml")
 
     cases = CaseCollection.from_dir(config["cases"])
     labels = load_labels(config["labels"])
@@ -178,7 +178,7 @@ def generate_soms(all_config, references):
         tubedata = data.get_tube(tube)
 
         # get the referece if using reference initialization or sample based
-        if config["tfsom"]["initialization_method"] == "random":
+        if config["somnodes"]["initialization_method"] == "random":
             reference = None
             used_channels = tubedata.markers
         else:
@@ -201,7 +201,7 @@ def generate_soms(all_config, references):
             print(f"Saving {label}")
             filename = f"{label}_t{tube}.csv"
             filepath = output_dir / filename
-            result.to_csv(filepath)
+            utils.save_csv(result,filepath)
             time_d = time_b - time_a
             circ_buffer.append(time_d)
             print(f"Training time: {time_d}s Rolling avg: {np.mean(circ_buffer)}s")
