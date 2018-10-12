@@ -49,7 +49,7 @@ class Material(enum.Enum):
             return Material.OTHER
 
 
-class Case(object):
+class Case:
     """Basic case object containing all metadata for a case."""
     __slots__ = (
         "_json",
@@ -235,7 +235,7 @@ class Case(object):
         return self.__class__(self)
 
 
-class TubeSample(object):
+class TubeSample:
     __slots__ = (
         "path",
         "markers",
@@ -293,7 +293,7 @@ class TubeSample(object):
         return all_in(markers, self.markers)
 
 
-class FCSData(object):
+class FCSData:
     __slots__ = (
         "_meta", "data", "ranges"
     )
@@ -334,7 +334,14 @@ class FCSData(object):
     def copy(self):
         return self.__class__(self)
 
-    def drop_columns(self, channels):
+    def drop_empty(self):
+        """Drop all channels containing nix in the channel name.
+        """
+        nix_cols = [c for c in self.data.columns if "nix" in c]
+        self.drop_channels(nix_cols)
+        return self
+
+    def drop_channels(self, channels):
         """Drop the given columns from the data.
         Args:
             channels: List of channels or channel name to drop. Will not throw an error if the name is not found.

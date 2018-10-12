@@ -1,19 +1,72 @@
 """
 Data loaders for Sequence.
 """
+import pathlib
+import hashlib
+import functools
+import pickle
 import logging
 
 import numpy as np
 import pandas as pd
-import fcsparser
 from sklearn import preprocessing
 from keras.utils import Sequence
 
 from ..mappings import NAME_MAP
-from ..caching import disk_cache
+from . import case as ccase
 
 
 LOGGER = logging.getLogger(__name__)
+CACHEDIR = "cache"
+
+
+def args_hasher(*args, **kwargs):
+    """Use at own discretion. Will simply concatenate all input args as
+    strings to generate keys."""
+    hasher = hashlib.blake2b()
+    hashstr = "".join(str(a) for a in args) + "".join(str(k) + str(v) for k, v in kwargs.items())
+    hasher.update(hashstr.encode())
+    return hasher.hexdigest()
+
+
+def disk_cache(fun):
+    """Cache function results depending on arguments on disk in a cache directory."""
+
+    cachepath = pathlib.Path(CACHEDIR) / fun.__name__
+    cachepath.mkdir(parents=True, exist_ok=True)
+
+    @functools.wraps(fun)
+    def wrapper(*args, **kwargs):
+        hashed = args_hasher(*args, **kwargs)
+        filepath = cachepath / hashed
+        if filepath.exists():
+            with open(str(filepath), "rb") as f:
+                result = pickle.load(f)
+        else:
+            result = fun(*args, **kwargs)
+            with open(str(filepath), "wb") as f:
+                pickle.dump(result, f)
+        return result
+
+    return wrapper
+
+
+def mem_cache(fun):
+    """Cache function output inside the calling object."""
+
+    cache = {}
+
+    @functools.wraps(fun)
+    def wrapper(*args, **kwargs):
+        hashed = args_hasher(*args, **kwargs)
+        if hashed in cache:
+            result = cache[hashed]
+        else:
+            result = fun(*args, **kwargs)
+            cache[hashed] = result
+        return result
+
+    return wrapper
 
 
 def normalize_data(data):
@@ -60,71 +113,136 @@ def select_drop_counts(data, sel_count=None):
     return data
 
 
+def loader_builder(constructor, *args, **kwargs):
+    """Partial function to delay data loading in Loader building."""
+    def build(data, **nargs):
+        return constructor(data=data, *args, **{**kwargs, **nargs})  # later unpacking overrides earlier
+    return build
+
+
 class LoaderMixin:
-    datacol = "sommappath"
+    somcol = "sommappath"
     histocol = "histopath"
     fcscol = "fcspath"
 
     @staticmethod
-    def load_data(path, tube):
+    @disk_cache
+    def read_som(path, tube, sel_count=None, gridsize=None, pad_width=None):
         """Load the data associated with the given tube."""
-        return pd.read_csv(str(path).format(tube=tube), index_col=0)
+        mapdata = pd.read_csv(str(path).format(tube=tube), index_col=0)
+        mapdata = select_drop_counts(mapdata, sel_count)
+        if gridsize is not None:
+            mapdata = reshape_dataframe(mapdata, m=gridsize, n=gridsize, pad_width=pad_width)
+        return mapdata
+
+    @staticmethod
+    @mem_cache
+    def read_histo_df(path):
+        """Read count data histogram."""
+        dfdata = pd.read_csv(path, index_col=0)
+        # translate legacy naming scheme with mixed german names to
+        # standardized english names
+        dfdata["group"] = dfdata["group"].apply(lambda g: NAME_MAP.get(g, g))
+        # set index on label and group
+        dfdata.set_index(["label", "group"], inplace=True)
+        # remove columns not denoting count numbers
+        non_number_cols = [c for c in dfdata.columns if not c.isdigit()]
+        dfdata.drop(non_number_cols, inplace=True, axis=1)
+
+        return dfdata
+
+    @staticmethod
+    @mem_cache
+    def read_histo_som(path, tube, count_col):
+        """Get the count column from a specific SOM map."""
+        assert count_col is not None, "Count col has to be specified."
+        return LoaderMixin.read_som(path, tube, sel_count=count_col)[count_col]
+
+    @staticmethod
+    @disk_cache
+    def read_fcs(path, transform="rescale"):
+        """
+        Read a FCS file from the given path and applyt the given transformation.
+        Args:
+            path: path to FCS file.
+            transform: Apply specific transformation to the input data.
+        """
+        data = ccase.FCSData(path).drop_empty().data
+        if transform == "none":
+            data = data
+        elif transform == "rescale":
+            data = data / 1024.0
+        elif transform == "zscores_scaled":
+            data = ccase.FCSMinMaxScaler().fit_transform(
+                ccase.FCSStandardScaler().fit_transform(data))
+        elif transform == "zscores":
+            data = ccase.FCSStandardScaler().fit_transform(data)
+        else:
+            raise TypeError(f"Unknown transform type {transform}")
+
+        cols = [c + s for c in data.columns for s in ["", "sig"]]
+        sig_cols = [c for c in cols if c.endswith("sig")]
+        data = pd.concat(
+            [data, pd.DataFrame(1, columns=sig_cols, index=data.index)], axis=1)
+        data = data.loc[:, cols]
+        return data
 
 
 class CountLoader(LoaderMixin):
 
     """Load count information from 1d histogram analysis."""
-    def __init__(self, tube, width, version="mapcount", data=None):
-        self.tube = tube
-        self.version = version
-        self.data = data
-        self.width = width
+    def __init__(self, tube, width, datatype="mapcount", datacol=None):
+        """
+        Args:
+            tube: Tube associated with the input data.
+            width: Number of bins in the histogram.
+            datatype: Source of the data.
+                'dataframe' - Histogram dataframe as generated by the old pipeline.
+                'mapcount' - Use the count field from SOM maps.
+            datacol: Needed for mapcount to specify the column containing the counts.
+        """
+        assert datatype != "mapcount" or datacol is not None, "mapcount type needs specified data colomn."
 
-    @staticmethod
-    def read_dataframe(path, tube):
-        dfdata = pd.read_csv(path.format(tube=tube), index_col=0)
-        dfdata["group"] = dfdata["group"].apply(lambda g: NAME_MAP.get(g, g))
-        dfdata.set_index(["label", "group"], inplace=True)
-        non_number_cols = [c for c in dfdata.columns if not c.isdigit()]
-        dfdata.drop(non_number_cols, inplace=True, axis=1)
-        return dfdata
+        self.tube = tube
+        self.datatype = datatype
+        self.width = width
+        self.datacol = datacol
 
     @classmethod
-    def create_inferred(cls, data, tube, version="mapcount"):
-        dfdata = None
-        if version == "dataframe":
-            dfdata = cls.read_dataframe(data[cls.histocol].iloc[0], tube=tube)
-            width = dfdata.shape[1]
-        elif version == "mapcount":
-            mapdata = cls.load_data(data[cls.datacol].iloc[0], tube)
-            width = mapdata.shape[0]
-        return cls(tube=tube, width=width, version=version, data=dfdata)
+    def create_inferred(cls, data, tube, datatype="mapcount", datacol=None):
+        dfdata = cls.load_histos(data.iloc[[0], :], tube=tube, datatype=datatype, datacol=datacol)
+        width = dfdata.shape[1]
+        return cls(tube=tube, width=width, datatype=datatype)
 
     @property
     def shape(self):
         return (self.width, )
 
-    def __call__(self, data):
-        if self.version == "mapcount":
-            count_list = []
-            for path in data[self.datacol]:
-                mapdata = self.load_data(path, self.tube)
-                countdata = select_drop_counts(
-                    mapdata, sel_count="count_prev")["count_prev"]
-                count_list.append(countdata.values)
-            counts = np.stack(count_list)
-        elif self.version == "dataframe":
-            if self.data is None:
-                self.data = self.read_dataframe(
-                    data[self.datacol].iloc[0], self.tube)
+    @classmethod
+    def load_histos(cls, data, tube, datatype, datacol):
+        """Load list of paths into a np array containing counts.
+        Args:
+            data: Selected rows from paths dataframe. Should always be a dataframe, not a list.
+        """
+        if datatype == "dataframe":
+            # get label group tuples usable for indexing the count dataframe
+            dfpath = data[cls.histocol].iloc[0].format(tube)
             label_group = [x for x in zip(data.index, data["orig_group"])]
-            sel_rows = self.data.loc[label_group, :]
-            missing = sel_rows.loc[sel_rows["1"].isna(), :]
-            if not missing.empty:
-                LOGGER.error(missing)
-                raise RuntimeError()
-            counts = sel_rows.values
+            # get the selected counts
+            counts = cls.read_histo_df(dfpath)[label_group, :].values
+        elif datatype == "mapcount":
+            assert datacol is not None, "mapcount needs datacol"
+            count_list = []
+            for path in data[cls.somcol]:
+                mapdata = cls.read_histo_som(path, tube, datacol)
+                count_list.append(mapdata.values)
+            counts = np.stack(count_list)
+        else:
+            raise TypeError(f"Unknown type {datatype}")
         return counts
+
+    def __call__(self, data):
+        return self.load_histos(data, self.tube, self.datatype, self.datacol)
 
 
 class FCSLoader(LoaderMixin):
@@ -136,7 +254,7 @@ class FCSLoader(LoaderMixin):
 
     @classmethod
     def create_inferred(cls, data, tubes, subsample=200, channels=None, *args, **kwargs):
-        testdata = cls._load_data(
+        testdata = cls.load_fcs(
             data[cls.fcscol].iloc[0], subsample, tubes=tubes, channels=channels
         )
         channels = list(testdata.columns)
@@ -146,35 +264,11 @@ class FCSLoader(LoaderMixin):
     def shape(self):
         return (self.subsample * len(self.tubes), len(self.channels))
 
-    @staticmethod
-    @disk_cache
-    def _load_tube_data(path):
-        _, data = fcsparser.parse(path, data_set=0, encoding="latin-1")
-
-        data.drop([c for c in data.columns if "nix" in c], axis=1, inplace=True)
-
-        data = data / 1024.0
-
-        # data = pd.DataFrame(scaler.transform(data), columns=data.columns)
-
-        # data = pd.DataFrame(
-        #     preprocessing.MinMaxScaler().fit_transform(
-        #         preprocessing.StandardScaler().fit_transform(data)),
-        #     columns=data.columns)
-
-        cols = [c + s for c in data.columns for s in ["", "sig"]]
-        sig_cols = [c for c in cols if c.endswith("sig")]
-        data = pd.concat(
-            [data, pd.DataFrame(1, columns=sig_cols, index=data.index)], axis=1)
-        data = data.loc[:, cols]
-
-        return data
-
     @classmethod
-    def _load_data(cls, pathdict, subsample, tubes, channels=None):
+    def load_fcs(cls, pathdict, subsample, tubes, channels=None):
         datas = []
         for tube in tubes:
-            data = cls._load_tube_data(pathdict[tube])
+            data = cls.read_fcs(pathdict[tube])
             data = data.sample(n=subsample)
             datas.append(data)
 
@@ -188,7 +282,7 @@ class FCSLoader(LoaderMixin):
     def __call__(self, data):
         mapped_fcs = []
         for path in data[self.fcscol]:
-            mapped_fcs.append(self._load_data(path, self.subsample, self.tubes, self.channels))
+            mapped_fcs.append(self.load_fcs(path, self.subsample, self.tubes, self.channels))
         return np.stack(mapped_fcs)
 
 
@@ -211,8 +305,8 @@ class Map2DLoader(LoaderMixin):
     @classmethod
     def infer_size(cls, data, tube=1):
         """Infer size of input from data."""
-        refdata = cls.load_data(data[cls.datacol].iloc[0], tube)
-        nodes, channels = refdata.shape
+        refdata = cls.read_som(data[cls.somcol].iloc[0], tube)
+        nodes, _ = refdata.shape
         gridsize = int(np.ceil(np.sqrt(nodes)))
         non_count_channels = [c for c in refdata.columns if "count" not in c]
         return {"gridsize": gridsize, "channels": non_count_channels}
@@ -225,41 +319,35 @@ class Map2DLoader(LoaderMixin):
             len(self.channels) + bool(self.sel_count)
         )
 
-    @staticmethod
-    @disk_cache
-    def _load_sommap(path, tube, sel_count, pad_width, gridsize):
-        mapdata = Map2DLoader.load_data(path, tube)
-        mapdata = select_drop_counts(mapdata, sel_count)
-        mapdata = reshape_dataframe(mapdata, m=gridsize, n=gridsize, pad_width=pad_width)
-        return mapdata
-
-    def _get_mapdata(self, pathlist):
-        map_list = []
-        for path in pathlist:
-            data = self._load_sommap(path, self.tube, self.sel_count, self.pad_width, self.gridsize)
-            map_list.append(data)
-        return np.stack(map_list)
+    def load_som(self, path):
+        return self.read_som(path, self.tube, self.sel_count, self.gridsize, self.pad_width)
 
     def __call__(self, data):
         """Output specified format."""
-        return self._get_mapdata(list(data[self.datacol]))
+        pathlist = list(data[self.somcol])
+        map_list = []
+        for path in pathlist:
+            data = self.load_som(path)
+            map_list.append(data)
+        mapdata = np.stack(map_list)
+        return mapdata
 
 
-class SOMMapDataset(LoaderMixin, Sequence):
-    """Dataset for creating and yielding batches of data for keras model.
+class DatasetSequence(LoaderMixin, Sequence):
+    """Dataset usable as sequence input for keras.
 
     Data can be generated by random draw or alternatively in sequence.
     """
 
     def __init__(
-            self, data, xoutputs,
+            self, data, output_spec,
             batch_size=32, draw_method="shuffle", epoch_size=None,
-            groups=None, group_nums=None, sample_weights=False,
+            groups=None, number_per_group=None, sample_weights=False,
     ):
         """
         Args:
             data: DataFrame containing labels and paths to data.
-            xoutputs: List of output generator objects taking batches of the filepath dataframe.
+            output_spec: List of output generator objects taking batches of the filepath dataframe.
             batch_size: Number of cases in a single batch.
             draw_method: Method to select cases in a single batch.
                 valid: [
@@ -268,52 +356,76 @@ class SOMMapDataset(LoaderMixin, Sequence):
                     'balanced'  # present balanced representation of data in one epoch
                     'groupnums'  # specified number of samples per group
                 ]
-            epoch_size: Number of samples in a single epoch. Is data length if None or 0.
+            epoch_size: Number of samples in a single epoch. If not specified will be the length of the input data.
             groups: List of groups to transform the labels into binary matrix.
-            group_nums: Number of samples per group for balanced sampling. If
+            number_per_group: Number of samples per group for balanced sampling. If
                 not given, will evenly distribute the epoch size among all groups.
             sample_weights: Use sample weights in training.
         Returns:
             SOMMapDataset object.
         """
+        self._all_data = data
+        self._output_spec = [x(data) for x in output_spec]
+
         self.batch_size = batch_size
         self.draw_method = draw_method
         self.sample_weights = sample_weights
+        self.number_per_group = number_per_group
 
-        self._all_data = data
         if groups is None:
             groups = list(self._all_data["group"].unique())
         self.groups = groups
-        self.group_nums = group_nums
 
         self._data = self._sample_data(data, epoch_size)
         self.epoch_size = self._data.shape[0]
 
-        self._xoutputs = xoutputs
+    def _sample_data(self, data, epoch_size=None, number_per_group=None):
+        """
+        Get version of the dataset to be used for one epoch. This can be whole
+        dataset if we just want to process everything sequentially.
 
-    def _sample_data(self, data, epoch_size=None):
-        if self.draw_method == "shuffle":
-            selection = data.sample(frac=1)
-        elif self.draw_method == "sequential":
+        This is a view of our dataset to be used for one epoch. Batches are
+        always generated by index number in the keras sequence way to enable
+        parallel processing.
+
+        Args:
+            data: Dataframe with the data to be worked on.
+            epoch_size: Number of sample in one epoch, only needed for some draw_methods. Only used by 'balanced'.
+            number_per_group: Number of samples to be used per group. Only used by 'groupnum'.
+        Returns:
+            Slice of the data to be selected.
+        """
+        # changing nothing will always return the same slices of data in each
+        # epoch given the same batch numbers
+        if self.draw_method == "sequential":
             selection = data
+        # randomize the batches in subsequent epochs by reshuffling in each new
+        # epoch
+        elif self.draw_method == "shuffle":
+            selection = data.sample(frac=1)
+        # always choose a similar number from all cohorts, smaller cohorts can
+        # be duplicated to match the numbers in the larger cohorts
+        # if epoch_size is provided the number per group is split evenly
         elif self.draw_method == "balanced":
             sample_num = int((epoch_size or len(data)) / len(self.groups))
             selection = data.groupby("group").apply(lambda x: x.sample(
                 n=sample_num, replace=True)).reset_index(0, drop=True).sample(frac=1)
+        # directly provide number needed per group
         elif self.draw_method == "groupnum":
+            assert number_per_group is not None, "groupnum needs number_per_group"
             selection = data.groupby("orig_group").apply(lambda x: x.sample(
-                n=self.group_nums[x.name], replace=True)).reset_index(0, drop=True).sample(frac=1)
+                n=number_per_group[x.name], replace=True)).reset_index(0, drop=True).sample(frac=1)
         else:
             raise RuntimeError(
                 f"Unknown draw method: {self.draw_method}. "
-                "Valid options are: ['shuffle', 'sequential', 'balanced']")
+                "Valid options are: ['shuffle', 'sequential', 'balanced', 'groupnum']")
         return selection
 
     @property
     def xshape(self):
         """Return shape of xvalues. Should be a list of shapes describing each input.
         """
-        return [x.shape for x in self._xoutputs]
+        return [x.shape for x in self._output_spec]
 
     @property
     def yshape(self):
@@ -347,7 +459,8 @@ class SOMMapDataset(LoaderMixin, Sequence):
         """Get a single batch by id."""
         batch_data = self._data.iloc[idx * self.batch_size: (idx + 1) * self.batch_size, :]
 
-        xdata = [x(batch_data) for x in self._xoutputs]
+        # load data using output specs
+        xdata = [x(batch_data) for x in self._output_spec]
 
         ydata = batch_data["group"]
         ybinary = preprocessing.label_binarize(ydata, classes=self.groups)
@@ -357,5 +470,5 @@ class SOMMapDataset(LoaderMixin, Sequence):
         return xdata, ybinary
 
     def on_epoch_end(self):
-        """Randomly reshuffle data after end of epoch."""
-        self._data = self._sample_data(self._all_data, self.epoch_size)
+        """Resample data after end of epoch."""
+        self._data = self._sample_data(self._all_data, self.epoch_size, self.number_per_group)

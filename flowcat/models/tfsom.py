@@ -823,7 +823,6 @@ def create_generator(data, transforms=None, fit_transformer=False):
     def generator_fun():
         for case in data:
             fcsdata = case.data
-            # fcsdata = fcsdata.drop_columns("nix-APCA700")
             if transforms is not None:
                 fcsdata = transforms.fit_transform(fcsdata) if fit_transformer else transforms.transform(fcsdata)
             yield fcsdata.data

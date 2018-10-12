@@ -29,6 +29,7 @@ from flowcat.models import weighted_crossentropy
 from flowcat.models import fcs_cnn, histo_nn, som_cnn, merged_classifiers
 
 from flowcat import utils
+from flowcat.configuration import Configuration
 from flowcat.mappings import NAME_MAP, GROUP_MAPS, PATHOLOGIC_NORMAL
 
 # choose another directory to save downloaded data
@@ -82,21 +83,20 @@ def rescale_sureness(data):
     return data
 
 
-def load_dataset(mappath, histopath, fcspath):
-    """Return dataframe containing columns with filename and labels."""
-    mappath = pathlib.Path(mappath)
-
+def create_dataset(som=None, histo=None, fcs=None):
+    """Creata a new dataset table."""
+    mappath = pathlib.Path(som)
     sommap_labels = pd.read_csv(f"{mappath}.csv", index_col=0).set_index(["label", "group"])
     sommap_count = pd.DataFrame(1, index=sommap_labels.index, columns=["count"])
-    histo_count = load_histolabels(histopath)
+    histo_count = load_histolabels(histo)
     both_count = sommap_count.add(histo_count, fill_value=0)
     # both_count = both_count.loc[both_count["count"] == 3, :]
 
     assert not both_count.empty, "No data having both histo and sommap info."
 
     cdict = {}
-    cases = cc.CaseCollection(fcspath, tubes=[1, 2])
-    caseview = cases.create_view(counts=10000)
+    cases = cc.CaseCollection(fcs, tubes=[1, 2])
+    caseview = cases.filter(counts=10000)
     for case in caseview:
         material = case.has_same_material([1, 2])
         fcspaths = {t: str(case.get_tube(t, material=material, min_count=10000).path.local) for t in [1, 2]}
@@ -106,7 +106,7 @@ def load_dataset(mappath, histopath, fcspath):
                 "group": case.group,
                 "sommappath": str(mappath / f"{case.id}_t{{tube}}.csv"),
                 "fcspath": fcspaths,
-                "histopath": f"{histopath}/tube{{tube}}.csv",
+                "histopath": f"{histo}/tube{{tube}}.csv",
                 "sureness": case.sureness,
             }
         except KeyError as e:
@@ -121,6 +121,59 @@ def load_dataset(mappath, histopath, fcspath):
     # scale sureness to mean 5 per group
     dataset = dataset.groupby("group").apply(rescale_sureness)
     return dataset
+
+
+def load_dataset(index=None, paths=None, mapping=None):
+    """Return dataframe containing columns with filename and labels.
+    Args:
+    """
+    if index is None:
+        dataset = create_dataset(**paths)
+    else:
+        dataset = utils.load_pickle(utils.URLPath(index))
+
+    mapdict = GROUP_MAPS[mapping]
+    dataset = dataset_apply_mapping(dataset, mapdict)
+    return dataset, mapdict
+
+
+def dataset_apply_mapping(dataset, mapping):
+    """Apply a specific mapping to the given dataset."""
+    # copy group into another column
+    dataset["orig_group"] = dataset["group"]
+    if mapping is not None:
+        dataset = modify_groups(dataset, mapping=mapping["map"])
+        dataset = dataset.loc[dataset["group"].isin(mapping["groups"]), :]
+    return dataset
+
+
+def get_weights_by_name(name, groups):
+    if name == "weighted":
+        # Group weights are a dict mapping tuples to tuples. Weights are for
+        # false classifications in the given direction.
+        # (a, b) --> (a>b, b>a)
+        group_weights = {
+            ("normal", None): (5.0, 10.0),
+            ("MZL", "LPL"): (2, 2),
+            ("MCL", "PL"): (2, 2),
+            ("FL", "LPL"): (3, 5),
+            ("FL", "MZL"): (3, 5),
+        }
+        weights = create_weight_matrix(group_weights, groups, base_weight=5)
+    elif name == "simpleweights":
+        # simpler group weights
+        group_weights = {
+            ("normal", None): (1.0, 20.0),
+        }
+        weights = create_weight_matrix(group_weights, groups, base_weight=1)
+    elif name == "normalweights":
+        group_weights = {
+            ("normal", None): (10.0, 10.0),
+        }
+        weights = create_weight_matrix(group_weights, groups, base_weight=1)
+    else:
+        weights = None
+    return weights
 
 
 def plot_transformed(path, tf1, tf2, y):
@@ -356,11 +409,11 @@ def split_data(data, test_num=None, test_labels=None, train_labels=None):
     """
     if test_labels is not None:
         if not isinstance(test_labels, list):
-            test_labels = load_json(test_labels)
+            test_labels = utils.load_json(test_labels)
         test = data.loc[test_labels, :]
     if train_labels is not None:
         if not isinstance(train_labels, list):
-            train_labels = load_json(train_labels)
+            train_labels = utils.load_json(train_labels)
         train = data.loc[train_labels, :]
     if test_num is not None:
         assert test_labels is None and train_labels is None, "Cannot use num with specified labels"
@@ -378,166 +431,108 @@ def split_data(data, test_num=None, test_labels=None, train_labels=None):
     return train, test
 
 
-def load_json(jspath):
-    with open(str(jspath), "r") as jsfile:
-        data = json.load(jsfile)
-
-    return data
-
-
-def save_json(data, outpath):
-    """Save a json file to the specified path."""
-    with open(str(outpath), "w") as jsfile:
-        json.dump(data, jsfile)
-
-
-def save_pickle(data, outpath):
-    with open(str(outpath), "wb") as pfile:
-        pickle.dump(data, pfile)
-
-
-def load_pickle(path):
-    with open(str(path), "rb") as pfile:
-        data = pickle.load(pfile)
-    return data
-
-
-def get_model_type(modelname, dataoptions, data):
+def create_output_spec(modelname, dataoptions):
     if modelname == "histogram":
-        xoutputs = [
-            loaders.CountLoader.create_inferred(data, tube=1, **dataoptions[loaders.CountLoader.__name__]),
-            loaders.CountLoader.create_inferred(data, tube=2, **dataoptions[loaders.CountLoader.__name__]),
+        partial_spec = [
+            (loaders.CountLoader.create_inferred, {"tube": 1}),
+            (loaders.CountLoader.create_inferred, {"tube": 2}),
         ]
-        train_batch = 64
-        test_batch = 128
-        modelfun = histo_nn.create_model_histo
     elif modelname == "sommap":
-        xoutputs = [
-            loaders.Map2DLoader.create_inferred(data, tube=1, **dataoptions[loaders.Map2DLoader.__name__]),
-            loaders.Map2DLoader.create_inferred(data, tube=2, **dataoptions[loaders.Map2DLoader.__name__]),
+        partial_spec = [
+            (loaders.Map2DLoader.create_inferred, {"tube": 1}),
+            (loaders.Map2DLoader.create_inferred, {"tube": 2}),
         ]
-        train_batch = 16
-        test_batch = 32
-        modelfun = som_cnn.create_model_cnn
     elif modelname == "maphisto":
-        xoutputs = [
-            loaders.Map2DLoader.create_inferred(data, tube=1, **dataoptions[loaders.Map2DLoader.__name__]),
-            loaders.Map2DLoader.create_inferred(data, tube=2, **dataoptions[loaders.Map2DLoader.__name__]),
-            loaders.CountLoader.create_inferred(data, tube=1, **dataoptions[loaders.CountLoader.__name__]),
-            loaders.CountLoader.create_inferred(data, tube=2, **dataoptions[loaders.CountLoader.__name__]),
+        partial_spec = [
+            (loaders.Map2DLoader.create_inferred, {"tube": 1}),
+            (loaders.Map2DLoader.create_inferred, {"tube": 2}),
+            (loaders.CountLoader.create_inferred, {"tube": 1}),
+            (loaders.CountLoader.create_inferred, {"tube": 2}),
         ]
-        train_batch = 32
-        test_batch = 32
-        modelfun = merged_classifiers.create_model_maphisto
     elif modelname == "etefcs":
-        xoutputs = [
-            loaders.FCSLoader.create_inferred(data, tubes=[1, 2], **dataoptions[loaders.FCSLoader.__name__]),
+        partial_spec = [
+            (loaders.FCSLoader.create_inferred, {"tubes": [1, 2]}),
         ]
-        train_batch = 16
-        test_batch = 16
-        modelfun = fcs_cnn.create_model_fcs
     elif modelname == "mapfcs":
-        xoutputs = [
-            loaders.FCSLoader.create_inferred(data, tubes=[1, 2], **dataoptions[loaders.FCSLoader.__name__]),
-            loaders.Map2DLoader.create_inferred(data, tube=1, **dataoptions[loaders.Map2DLoader.__name__]),
-            loaders.Map2DLoader.create_inferred(data, tube=2, **dataoptions[loaders.Map2DLoader.__name__]),
+        partial_spec = [
+            (loaders.FCSLoader.create_inferred, {"tubes": [1, 2]}),
+            (loaders.Map2DLoader.create_inferred, {"tube": 1}),
+            (loaders.Map2DLoader.create_inferred, {"tube": 2}),
         ]
-        train_batch = 32
-        test_batch = 32
-        modelfun = merged_classifiers.create_model_mapfcs
     elif modelname == "maphistofcs":
-        xoutputs = [
-            loaders.FCSLoader.create_inferred(data, tubes=[1, 2], **dataoptions[loaders.FCSLoader.__name__]),
-            loaders.Map2DLoader.create_inferred(data, tube=1, **dataoptions[loaders.Map2DLoader.__name__]),
-            loaders.Map2DLoader.create_inferred(data, tube=2, **dataoptions[loaders.Map2DLoader.__name__]),
-            loaders.CountLoader.create_inferred(data, tube=1, **dataoptions[loaders.CountLoader.__name__]),
-            loaders.CountLoader.create_inferred(data, tube=2, **dataoptions[loaders.CountLoader.__name__]),
+        partial_spec = [
+            (loaders.FCSLoader.create_inferred, {"tubes": [1, 2]}),
+            (loaders.Map2DLoader.create_inferred, {"tube": 1}),
+            (loaders.Map2DLoader.create_inferred, {"tube": 2}),
+            (loaders.CountLoader.create_inferred, {"tube": 1}),
+            (loaders.CountLoader.create_inferred, {"tube": 2}),
         ]
-        train_batch = 32
-        test_batch = 32
-        modelfun = merged_classifiers.create_model_all
     else:
         raise RuntimeError(f"Unknown model {modelname}")
 
-    return modelfun, xoutputs, train_batch, test_batch
+    # create partial loader functions
+    output_spec = [loaders.loader_builder(f, **{**v, **dataoptions[f.__self__.__name__]}) for f, v in partial_spec]
+
+    return output_spec
 
 
-def main():
-    ## CONFIGURATION VARIABLES
-    c_uniq_name = "relunet_yesglobal_200epoch_sample_weighted1510"
-    c_model = "sommap"
-    c_groupmap = "8class"
-    c_weights = None
-    # output locations
-    c_output_results = "mll-sommaps/output"
-    c_output_model = "mll-sommaps/models"
-    # file locations
-    c_dataindex = None  # use pregenerated dataindex instead
-    c_sommap_data = "mll-sommaps/sample_maps/selected1_toroid_s32"
-    c_histo_data = "../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"
-    c_fcs_data = "s3://mll-flowdata/CLL-9F"
-    # load existing model and use different parameters for retraining
-    # c_modelpath = "mll-sommaps/models/relunet_globalavg_avgmerge_400epoch_sommap_8class/model_0.h5"
-    c_modelpath = None
-    c_model_runargs = {
-        "train_epochs": 100,
-        "initial_rate": 1e-4,
-        "drop": 0.5,
-        "epochs_drop": 50,
-        "epsilon": 1e-8,
+MODEL_CONSTRUCTORS = {
+    "histogram": histo_nn.create_model_histo,
+    "sommap": som_cnn.create_model_cnn,
+    "maphisto": merged_classifiers.create_model_maphisto,
+    "etefcs": fcs_cnn.create_model_fcs,
+    "mapfcs": merged_classifiers.create_model_mapfcs,
+    "maphistofcs": merged_classifiers.create_model_all,
+}
+
+
+MODEL_BATCH_SIZES = {
+    "train": {
+        "histogram": 64,
+        "sommap": 16,
+        "maphisto": 32,
+        "etefcs": 16,
+        "mapfcs": 16,
+        "maphistofcs": 32,
+    },
+    "test": {
+        "histogram": 128,
+        "sommap": 32,
+        "maphisto": 32,
+        "etefcs": 16,
+        "mapfcs": 32,
+        "maphistofcs": 32,
     }
-    # split train, test using predefined split
-    c_predefined_split = True
-    c_train_labels = "data/train_labels.json"
-    c_test_labels = "data/test_labels.json"
-    c_trainargs = {
-        "draw_method": "balanced",
-        "epoch_size": 16000,
-        "sample_weights": True,
-    }
-    c_testargs = {
-        "draw_method": "sequential",
-        "epoch_size": None,
-    }
-    c_runargs = {
-        "train_epochs": 200,
-        "initial_rate": 1e-3,
-        "drop": 0.5,
-        "epochs_drop": 50,
-        "epsilon": 1e-8,
-    }
-    # Data modifications
-    c_dataoptions = {
-        loaders.FCSLoader.__name__: {
-            "subsample": 100,
-        },
-        loaders.CountLoader.__name__: {
-            "version": "dataframe",
-        },
-        loaders.Map2DLoader.__name__: {
-            "sel_count": "counts",  # use count in SOM map as just another channel
-            "pad_width": 1 if "toroid" in c_sommap_data else 0  # do something more elaborate later
-        },
-    }
-    # Output options
-    c_confusion_sizes = True
-    ## END CONFIGURATION VARIABLES
+}
 
-    # save configuration variables
-    config_dict = locals()
 
-    name = f"{c_uniq_name}_{c_model}_{c_groupmap}"
-    if c_weights is not None:
-        name += f"_{c_weights}"
+def generate_model_inputs(
+        train_data, test_data, name, loader_options, traindata_args, testdata_args, path=None):
+    """Create model and associated inputs.
+    Args:
+        train_data, test_data: Dataset used to infer sizes.
+        name: String name of model.
+        loader_options: Options for specific file loader types.
+        traindata_args: Options for training dataset.
+        testdata_args: Options for test dataset.
+        path: Optional path to load previous model from.
+    Returns:
+        Tuple of model and partial dataset constructor functions.
+    """
+    output_spec = create_output_spec(name, loader_options)
+    train = loaders.DatasetSequence(train_data, output_spec, **traindata_args)
+    test = loaders.DatasetSequence(test_data, output_spec, **testdata_args)
+    if path is not None:
+        model = keras.models.load_model(path, compile=False)
+    else:
+        model = MODEL_CONSTRUCTORS[name](*train.shape)
 
-    # configure logging
-    outpath = pathlib.Path(f"{c_output_results}/{name}")
-    outpath.mkdir(parents=True, exist_ok=True)
+    return model, train, test
 
-    # save the currently used configuration
-    save_json(config_dict, outpath / "config.json")
 
-    filelog = logging.FileHandler(outpath / f"{name}.log")
+def setup_logging(logpath):
+    # setup logging
+    filelog = logging.FileHandler(str(logpath))
     filelog.setLevel(logging.DEBUG)
     printlog = logging.StreamHandler()
     printlog.setLevel(logging.INFO)
@@ -554,86 +549,100 @@ def main():
     modulelog.setLevel(logging.INFO)
     modulelog.addHandler(filelog)
 
-    if c_dataindex is None:
-        indata = load_dataset(mappath=c_sommap_data, histopath=c_histo_data, fcspath=c_fcs_data)
-        # save the datainfo into the output folder
-        with open(str(outpath / "data_paths.p"), "wb") as f:
-            pickle.dump(indata, f)
-    else:
-        # load the data again
-        with open(c_dataindex, "rb") as f:
-            indata = pickle.load(f)
-    groups = GROUP_MAPS[c_groupmap]["groups"]
-    group_map = GROUP_MAPS[c_groupmap]["map"]
 
-    indata["orig_group"] = indata["group"]
-    indata = modify_groups(indata, mapping=group_map)
-    indata = indata.loc[indata["group"].isin(groups), :]
+def main():
+    # CONFIGURATION VARIABLES
+    c_general_name = "newconfig"
 
-    if c_weights == "weighted":
-        # Group weights are a dict mapping tuples to tuples. Weights are for
-        # false classifications in the given direction.
-        # (a, b) --> (a>b, b>a)
-        group_weights = {
-            ("normal", None): (5.0, 10.0),
-            ("MZL", "LPL"): (2, 2),
-            ("MCL", "PL"): (2, 2),
-            ("FL", "LPL"): (3, 5),
-            ("FL", "MZL"): (3, 5),
-        }
-        weights = create_weight_matrix(group_weights, groups, base_weight=5)
-    elif c_weights == "simpleweights":
-        # simpler group weights
-        group_weights = {
-            ("normal", None): (1.0, 20.0),
-        }
-        weights = create_weight_matrix(group_weights, groups, base_weight=1)
-    elif c_weights == "normalweights":
-        group_weights = {
-            ("normal", None): (10.0, 10.0),
-        }
-        weights = create_weight_matrix(group_weights, groups, base_weight=1)
-    else:
-        weights = None
+    # Output options
+    c_output_results = "mll-sommaps/output"
+    c_output_model = "mll-sommaps/models"
+    c_output_confusion_sizes = True
 
-    if c_predefined_split:
-        train, test = split_data(
-            indata, train_labels=c_train_labels, test_labels=c_test_labels)
-    else:
-        train, test = split_data(indata, test_num=0.1)
+    # file locations
+    c_dataset_index = None  # use pregenerated dataindex instead
+    c_dataset_paths = {
+        "som": "mll-sommaps/sample_maps/selected1_toroid_s32",
+        "histo": "../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217",
+        "fcs": "s3://mll-flowdata/CLL-9F",
+    }
+    c_dataset_mapping = "8class"
 
-    # always save the labels used for training and testing
-    save_json(list(train.index), outpath / "train_labels.json")
-    save_json(list(test.index), outpath / "test_labels.json")
+    # specific train test splitting
+    c_split_test_num = None
+    c_split_train_labels = "data/train_labels.json"
+    c_split_test_labels = "data/test_labels.json"
 
-    if "toroidal" in c_sommap_data:
-        toroidal = True
-    else:
-        toroidal = False
+    # load existing model and use different parameters for retraining
+    c_model_name = "sommap"
+    c_model_loader_options = {
+        loaders.FCSLoader.__name__: {
+            "subsample": 100,
+        },
+        loaders.CountLoader.__name__: {
+            "version": "dataframe",
+        },
+        loaders.Map2DLoader.__name__: {
+            "sel_count": "counts",  # use count in SOM map as just another channel
+            "pad_width": 1 if "toroid" in c_dataset_paths["som"] else 0  # do something more elaborate later
+        },
+    }
+    c_model_traindata_args = {
+        "batch_size": MODEL_BATCH_SIZES["train"][c_model_type],
+        "draw_method": "balanced",
+        "epoch_size": 16000,
+        "sample_weights": True,
+    }
+    c_model_testdata_args = {
+        "batch_size": MODEL_BATCH_SIZES["test"][c_model_type],
+        "draw_method": "sequential",
+        "epoch_size": None,
+    }
+    c_model_path = None
 
-    modelpath = pathlib.Path(f"{c_output_model}/{name}")
+    # Run options
+    c_run_weights = None
+    c_run_train_epochs = 100
+    c_run_initial_rate = 1e-4
+    c_run_drop = 0.5
+    c_run_epochs_drop = 50
+    c_run_epsilon = 1e-8
+    # END CONFIGURATION VARIABLES
 
-    # get model input and settings depending on model type
-    modelfun, xoutputs, train_batch, test_batch = get_model_type(c_model, c_dataoptions, train)
-    # create datasets
-    trainseq = loaders.SOMMapDataset(train, xoutputs, batch_size=train_batch, groups=groups, **c_trainargs)
-    testseq = loaders.SOMMapDataset(test, xoutputs, batch_size=test_batch, groups=groups, **c_testargs)
-    # create model using training data shape
-    if c_modelpath is None:
-        model = modelfun(*trainseq.shape)
-        pred_df = run_save_model(
-            model, trainseq, testseq, weights=weights, path=modelpath, name="0", **c_runargs)
-    else:
-        model = keras.models.load_model(c_modelpath, compile=False)
-        pred_df = run_save_model(
-            model, trainseq, testseq, weights=weights, path=modelpath, name="0", **c_model_runargs)
+    # save configuration variables
+    config = Configuration.from_localsdict(locals())
 
-    # fit the model
+    outpath = utils.URLPath(f"{c_output_results}/{config['general']['name']}")
+    modelpath = utils.URLPath(f"{c_output_model}/{config['general']['name']}")
+
+    # Create logfiles
+    logpath = outpath / f"classification.log"
+    setup_logging(logpath)
+
+    # save configuration
+    config.to_toml(outpath / "config.toml")
+
+    dataset, mapping = load_dataset(**config["dataset"])
+    # save it if newly generated
+    if config["dataset"]["index"] is None:
+        utils.save_pickle(dataset, outpath / "dataset.p")
+
+    # split into train and test set
+    # TODO: enable more complicated designs with kfold etc
+    train, test = split_data(**config["split"])
+    utils.save_json(list(train.index), outpath / "train_labels.json")
+    utils.save_json(list(test.index), outpath / "test_labels.json")
+
+    # TODO: save inputspec with saved model for easier loading
+    model, trainseq, testseq = generate_model_inputs(train, **config["model"])
+
+    pred_df = run_save_model(
+        model, trainseq, testseq, path=modelpath, name="0", **config["run"])
 
     LOGGER.info("Statistics results for %s", name)
     for gname, groupstat in GROUP_MAPS.items():
         # skip if our cohorts are larger
-        if len(groups) < len(groupstat["groups"]):
+        if len(mapping["groups"]) < len(groupstat["groups"]):
             continue
 
         LOGGER.info(f"-- {len(groupstat['groups'])} --")
