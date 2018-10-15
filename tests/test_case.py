@@ -9,11 +9,13 @@ from flowcat.data import case_dataset
 
 
 TESTPATH = pathlib.Path(__file__).parent
+DATAPATH = TESTPATH / "data"
+
 
 
 class TestBasicCase(unittest.TestCase):
 
-    small_dataset = TESTPATH / "data/small_dataset"
+    small_dataset = DATAPATH / "small_dataset"
 
     @classmethod
     def setUpClass(cls):

@@ -1,8 +1,11 @@
 import unittest
+import pathlib
 
 from flowcat import utils
 
 
+TESTPATH = pathlib.Path(__file__).parent
+DATAPATH = TESTPATH / "data"
 utils.TMP_PATH = "tmp_test"
 
 
@@ -41,7 +44,14 @@ class TestRemotePath(TestURLPathBase):
     exists = True
 
     def test_ls(self):
-        self.assertEqual(self.url.ls(), ["case_info.json", "CLL-9F/", "meta/", "origdata/"])
+        self.assertEqual(
+            [str(l) for l in self.url.ls()],
+            [
+                f"{self.name}/case_info.json",
+                f"{self.name}/CLL-9F/",
+                f"{self.name}/meta/",
+                f"{self.name}/origdata/"]
+        )
 
 
 class TestRemoteObject(TestURLPathBase):
@@ -65,6 +75,22 @@ class TestRemoteObjectNonExist(TestURLPathBase):
 
 
 class TestLocalPath(TestURLPathBase):
+    name = str(DATAPATH)
+    netloc = ""
+    scheme = ""
+    path = str(DATAPATH)
+    local = str(DATAPATH)
+    remote = False
+    exists = True
+
+    def test_ls(self):
+        self.assertListEqual(
+            [str(l) for l in self.url.ls()],
+            [str(l) for l in DATAPATH.glob("*")],
+        )
+
+
+class TestLocalPathNonExist(TestURLPathBase):
     name = "/tmp/flowcat_nothing"
     netloc = ""
     scheme = ""

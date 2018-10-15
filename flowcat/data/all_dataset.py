@@ -2,6 +2,7 @@
 Dataset combining information from FCS and other transformed sources.
 """
 from . import case_dataset, loaders
+from .. import utils
 
 
 class HistoDataset:
@@ -16,6 +17,9 @@ class HistoDataset:
     def read_path(path):
         """Read the given path and return a label mapped to either the actual
         data or a path."""
+        tube_files = histopath.ls()
+        df = LoaderMixin.read_histo_df(
+            histopath / f"tube{tube}.csv")
 
 
 class SOMDataset:
@@ -24,7 +28,15 @@ class SOMDataset:
     def __init__(self, path):
         """Path to SOM dataset. Should have another csv file with metainfo
         and individual SOM data inside the directory."""
-        pass
+        self._data = self.read_path(path)
+
+    @staticmethod
+    def read_path(path):
+        """Read the SOM dataset at the given path."""
+        mappath = utils.URLPath(path)
+        sommap_labels = utils.load_csv(mappath + ".csv")
+        sommap_labels.set_index(["label", "group"], inplace=True)
+        return sommap_labels
 
 
 class CombinedDataset:

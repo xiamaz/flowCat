@@ -3,7 +3,6 @@ import json
 import os
 import pickle
 import pathlib
-import functools
 import logging
 
 import numpy as np

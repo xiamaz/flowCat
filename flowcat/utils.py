@@ -140,8 +140,8 @@ class LocalBackend(FileBackend):
         """Directly check whether the path exists on the local system."""
         return pathlib.Path(path).exists()
 
-    def ls(self, netloc, path, files_only=True):
-        files = [f for f in path.glob("*")]
+    def ls(self, netloc, path, files_only=False):
+        files = [f for f in pathlib.Path(path).glob("*")]
         if files_only:
             files = [f for f in files if f.is_file()]
         return files
@@ -213,7 +213,7 @@ class URLPath(object):
             self._local.unlink()
 
     def ls(self):
-        return self._backend.ls(self.netloc, self.path)
+        return [self.__class__(self, p) for p in self._backend.ls(self.netloc, self.path)]
 
     def __truediv__(self, other):
         """Append to the path as another level."""
