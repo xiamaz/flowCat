@@ -66,6 +66,14 @@ class Case:
     )
 
     def __init__(self, data, path=""):
+        """
+        Args:
+            data: Contains all metainformation, either a dictionary or
+                a case object
+            path: Path prefix used for loading any data.
+        Returns:
+            New case object.
+        """
         self._filepaths = None
         self.used_material = None
 
@@ -96,7 +104,16 @@ class Case:
 
     @property
     def json(self):
-        return self._json
+        cdict = {
+            "id": self.id,
+            "date": self.date.isoformat(),
+            "filepaths": [p.json for p in self.filepaths],
+            "cohort": self.group,
+            "infiltration": self.infiltration,
+            "diagnosis": self.short_diagnosis,
+            "sureness": self.sureness_description,
+        }
+        return cdict
 
     @property
     def filepaths(self):
@@ -237,33 +254,57 @@ class Case:
 
 class TubeSample:
     __slots__ = (
+        "count",
+        "date",
         "path",
         "markers",
-        "count",
-        "tube",
         "material",
+        "material_desc",
         "parent",
+        "panel",
         "result",
         "result_success",
+        "tube",
     )
 
     """Single sample from a certain tube."""
     def __init__(self, path, parent):
         if isinstance(path, self.__class__):
+            self.tube = path.tube
+            self.material_desc = path.material_desc
+            self.material = path.material
             self.path = path.path
+            self.panel = path.panel
             self.markers = path.markers.copy()
             self.count = path.count
-            self.tube = path.tube
-            self.material = path.material
+            self.date = path.date
         else:
-            self.path = URLPath(parent.path) / path["fcs"]["path"]
+            self.tube = int(path["tube"])
+            self.material_desc = path["material"]
+            self.material = Material.from_str(path["material"])
+            self.panel = path["panel"]
+            self.date = datetime.strptime(path["date"], "%Y-%m-%d").date()
+
+            self.path = path["fcs"]["path"]
             self.markers = path["fcs"]["markers"]
             self.count = path["fcs"]["event_count"]
 
-            self.tube = int(path["tube"])
-            self.material = Material.from_str(path["material"])
-
         self.parent = parent
+
+    @property
+    def json(self):
+        return {
+            "id": self.parent.id,
+            "panel": self.panel,
+            "tube": self.tube,
+            "date": self.date.isoformat(),
+            "material": self.material_desc,
+            "fcs": {
+                "path": self.path,
+                "markers": self.markers,
+                "event_count": self.count,
+            }
+        }
 
     @property
     def data(self):
@@ -279,7 +320,8 @@ class TubeSample:
         Returns:
             Dataframe with fcs data.
         """
-        data = FCSData(self.path.get())
+        url_path = URLPath(self.parent.path) / path["fcs"]["path"]
+        data = FCSData(url_path.get())
 
         if normalized:
             data = FCSStandardScaler().fit_transform(data)

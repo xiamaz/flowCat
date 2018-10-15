@@ -54,99 +54,6 @@ def inverse_binarize(y, classes):
     raise RuntimeError("Inverse binary not implemented yet.")
 
 
-def get_tubepaths(label, cases):
-    matched = None
-    for case in cases:
-        if case.id == label:
-            matched = case
-            break
-    tubepaths = {k: v[-1].path for k, v in matched.tubepaths.items()}
-    return tubepaths
-
-
-def load_histolabels(histopath):
-    counts = []
-    for tube in [1, 2]:
-        df = pd.read_csv(
-            f"{histopath}/tube{tube}.csv", index_col=0
-        )
-        df["group"] = df["group"].apply(lambda g: NAME_MAP.get(g, g))
-        df.set_index(["label", "group"], inplace=True)
-        count = pd.DataFrame(1, index=df.index, columns=["count"])
-        counts.append(count)
-    both_labels = functools.reduce(lambda x, y: x.add(y, fill_value=0), counts)
-    return both_labels
-
-
-def rescale_sureness(data):
-    data["sureness"] = data["sureness"] / data["sureness"].mean() * 5
-    return data
-
-
-def create_dataset(som=None, histo=None, fcs=None):
-    """Creata a new dataset table."""
-    mappath = pathlib.Path(som)
-    sommap_labels = pd.read_csv(f"{mappath}.csv", index_col=0).set_index(["label", "group"])
-    sommap_count = pd.DataFrame(1, index=sommap_labels.index, columns=["count"])
-    histo_count = load_histolabels(histo)
-    both_count = sommap_count.add(histo_count, fill_value=0)
-    # both_count = both_count.loc[both_count["count"] == 3, :]
-
-    assert not both_count.empty, "No data having both histo and sommap info."
-
-    cdict = {}
-    cases = cc.CaseCollection(fcs, tubes=[1, 2])
-    caseview = cases.filter(counts=10000)
-    for case in caseview:
-        material = case.has_same_material([1, 2])
-        fcspaths = {t: str(case.get_tube(t, material=material, min_count=10000).path.local) for t in [1, 2]}
-        try:
-            assert both_count.loc[(case.id, case.group), "count"] == 3, "Not all data available."
-            cdict[case.id] = {
-                "group": case.group,
-                "sommappath": str(mappath / f"{case.id}_t{{tube}}.csv"),
-                "fcspath": fcspaths,
-                "histopath": f"{histo}/tube{{tube}}.csv",
-                "sureness": case.sureness,
-            }
-        except KeyError as e:
-            LOGGER.debug(f"{e} - Not found in histo or sommap")
-            continue
-        except AssertionError as e:
-            LOGGER.debug(f"{case.id}|{case.group} - {e}")
-            continue
-
-    dataset = pd.DataFrame.from_dict(cdict, orient="index")
-
-    # scale sureness to mean 5 per group
-    dataset = dataset.groupby("group").apply(rescale_sureness)
-    return dataset
-
-
-def load_dataset(index=None, paths=None, mapping=None):
-    """Return dataframe containing columns with filename and labels.
-    Args:
-    """
-    if index is None:
-        dataset = create_dataset(**paths)
-    else:
-        dataset = utils.load_pickle(utils.URLPath(index))
-
-    mapdict = GROUP_MAPS[mapping]
-    dataset = dataset_apply_mapping(dataset, mapdict)
-    return dataset, mapdict
-
-
-def dataset_apply_mapping(dataset, mapping):
-    """Apply a specific mapping to the given dataset."""
-    # copy group into another column
-    dataset["orig_group"] = dataset["group"]
-    if mapping is not None:
-        dataset = modify_groups(dataset, mapping=mapping["map"])
-        dataset = dataset.loc[dataset["group"].isin(mapping["groups"]), :]
-    return dataset
-
-
 def get_weights_by_name(name, groups):
     if name == "weighted":
         # Group weights are a dict mapping tuples to tuples. Weights are for
@@ -366,13 +273,6 @@ def create_metrics_from_pred(pred_df, mapping=None):
     return confusion, stats
 
 
-def modify_groups(data, mapping):
-    """Change the cohort composition according to the given
-    cohort composition."""
-    data["group"] = data["group"].apply(lambda g: mapping.get(g, g))
-    return data
-
-
 def create_weight_matrix(group_map, groups, base_weight=5):
     """Generate weight matrix from given group mapping."""
     # expand mapping to all other groups if None is given
@@ -397,38 +297,6 @@ def create_weight_matrix(group_map, groups, base_weight=5):
         weights[groups.index(group_b), groups.index(group_a)] = ba_err
     weights = pd.DataFrame(weights, columns=groups, index=groups)
     return weights
-
-
-def split_data(data, test_num=None, test_labels=None, train_labels=None):
-    """Split data in stratified fashion by group.
-    Args:
-        data: Dataset to be split. Label should be contained in 'group' column.
-        test_num: Ratio of samples in test per group or absolute number of samples in each group for test.
-    Returns:
-        (train, test) with same columns as input data.
-    """
-    if test_labels is not None:
-        if not isinstance(test_labels, list):
-            test_labels = utils.load_json(test_labels)
-        test = data.loc[test_labels, :]
-    if train_labels is not None:
-        if not isinstance(train_labels, list):
-            train_labels = utils.load_json(train_labels)
-        train = data.loc[train_labels, :]
-    if test_num is not None:
-        assert test_labels is None and train_labels is None, "Cannot use num with specified labels"
-        grouped = data.groupby("group")
-        if test_num < 1:
-            test = grouped.apply(lambda d: d.sample(frac=test_num)).reset_index(level=0, drop=True)
-        else:
-            group_sizes = grouped.size()
-            if any(group_sizes <= test_num):
-                insuff = group_sizes[group_sizes <= test_num]
-                LOGGER.warning("Insufficient sizes: %s", insuff)
-                raise RuntimeError("Some cohorts are too small.")
-            test = grouped.apply(lambda d: d.sample(n=test_num)).reset_index(level=0, drop=True)
-        train = data.drop(test.index, axis=0)
-    return train, test
 
 
 def create_output_spec(modelname, dataoptions):
@@ -565,6 +433,8 @@ def main():
         "som": "mll-sommaps/sample_maps/selected1_toroid_s32",
         "histo": "../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217",
         "fcs": "s3://mll-flowdata/CLL-9F",
+        "tubes": [1, 2],
+        "min_fcs_count": 10000,
     }
     c_dataset_mapping = "8class"
 
@@ -588,13 +458,13 @@ def main():
         },
     }
     c_model_traindata_args = {
-        "batch_size": MODEL_BATCH_SIZES["train"][c_model_type],
+        "batch_size": MODEL_BATCH_SIZES["train"][c_model_name],
         "draw_method": "balanced",
         "epoch_size": 16000,
         "sample_weights": True,
     }
     c_model_testdata_args = {
-        "batch_size": MODEL_BATCH_SIZES["test"][c_model_type],
+        "batch_size": MODEL_BATCH_SIZES["test"][c_model_name],
         "draw_method": "sequential",
         "epoch_size": None,
     }

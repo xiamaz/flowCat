@@ -82,8 +82,6 @@ class CaseIterable(IterableMixin):
             selected_markers: Dictionary of tubes to list of marker channels.
             selected_tubes: List of tube numbers.
         """
-        self._tubes = None
-        self._groups = None
         self._current = None
         self._data = []
 
@@ -108,29 +106,21 @@ class CaseIterable(IterableMixin):
     def data(self, value: list):
         self._data = value
         # reset all cached computed objects
-        self._tubes = None
-        self._groups = None
         self._current = None
 
     @property
     def tubes(self):
-        """Get list of unique tubes in dataset."""
-        if self._tubes is None:
-            self._tubes = list(set(
-                [int(f.tube) for d in self.data for f in d.filepaths]
-            ))
-        return self._tubes
+        """Get list of unique tubes in dataset.
+        Returns:
+            A sorted list of tubes as int values.
+        """
+        return sorted(list(set(
+            [int(f.tube) for d in self.data for f in d.filepaths])))
 
     @property
     def groups(self):
         """Get number of cases per group in case colleciton."""
-        if self._groups is None:
-
-            self._groups = collections.defaultdict(list)
-            for data in self._data:
-                self._groups[data.group].append(data)
-
-        return self._groups
+        return collections.Counter(c.group for c in self)
 
     @property
     def json(self):
@@ -141,8 +131,8 @@ class CaseIterable(IterableMixin):
         """Get a list of markers and their presence ratio in the current
         dataset."""
         marker_counts = collections.Counter(
-            [m for c in self.data for m in c.get_tube(tube).markers])
-        ratios = pd.Series({m: k / len(self) for m, k in marker_counts})
+            [m for c in self for m in c.get_tube(tube).markers])
+        ratios = pd.Series({m: k / len(self) for m, k in marker_counts.items()})
         return ratios
 
     def get_label(self, label):
@@ -150,16 +140,6 @@ class CaseIterable(IterableMixin):
             if case.id == label:
                 return case
         return None
-
-    def get_groups(self, groups, data=None):
-        """Get a selection of groups.
-        Args:
-            groups: List of groups to get.
-        Returns:
-            List of cases.
-        """
-        data = [case for group in groups for case in self.groups[group]]
-        return data
 
     def filter(
             self,
@@ -182,10 +162,10 @@ class CaseIterable(IterableMixin):
 
         # choose the basis for further filtering from either all cases
         # or a preselection of cases
+        data = self._data
+
         if groups:
-            self.get_groups(groups)
-        else:
-            data = self._data
+            data = [case for case in data if case.group in groups]
 
         if labels:
             data = [case for case in data if case.id in labels]
@@ -233,6 +213,9 @@ class CaseIterable(IterableMixin):
             ))
         return self.__class__(data, selected_markers=selected_markers, selected_tubes=tubes)
 
+    def __repr__(self):
+        return f"<{self.__class__.__name__} {len(self)} cases>"
+
 
 class CaseCollection(CaseIterable):
     """Get case information from info file and remove errors and provide
@@ -243,13 +226,11 @@ class CaseCollection(CaseIterable):
         self.path = path
 
     @classmethod
-    def from_dir(cls, inputpath: str):
+    def from_dir(cls, inputpath):
         """
         Initialize on datadir with info json.
         Args:
             inputpath: Input directory containing cohorts and a info file.
-            tubes: List of selected tubes.
-            remove_empty_channels: Remove channels without antibodies.
         """
         metapath = URLPath(inputpath, INFONAME)
         data = [
@@ -280,7 +261,7 @@ class CaseView(CaseIterable):
     def get_tube(self, tube: int) -> "TubeView":
         return TubeView(
             [
-                d.get_tube(tube) for d in self.data
+                d.get_tube(tube) for d in self
             ],
             self.selected_markers[tube]
         )
@@ -330,9 +311,7 @@ class TubeView(IterableMixin):
     @property
     def materials(self):
         if self._materials is None:
-            self._materials = collections.defaultdict(list)
-            for casepath in self.data:
-                self._materials[str(casepath.material)].append(casepath)
+            self._materials = [d.material for d in self]
 
         return self._materials
 
@@ -354,7 +333,7 @@ class TubeView(IterableMixin):
         dataset."""
         marker_counts = collections.Counter(
             [m for c in self.data for m in c.markers])
-        ratios = pd.Series({m: k / len(self) for m, k in marker_counts})
+        ratios = pd.Series({m: k / len(self) for m, k in marker_counts.items()})
         return ratios
 
     def export_results(self):

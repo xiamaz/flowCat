@@ -1,9 +1,5 @@
-*.csv
-*.json
-*.LMD
-*.rds
-
 /mll-*
+/tmp
 
 # python relevant files
 __pycache__

@@ -12,8 +12,10 @@ import pandas as pd
 from sklearn import preprocessing
 from keras.utils import Sequence
 
-from ..mappings import NAME_MAP
+from ..mappings import NAME_MAP, GROUP_MAPS
 from . import case as ccase
+from . import case_dataset as cc
+from .. import utils
 
 
 LOGGER = logging.getLogger(__name__)
@@ -129,7 +131,7 @@ class LoaderMixin:
     @disk_cache
     def read_som(path, tube, sel_count=None, gridsize=None, pad_width=None):
         """Load the data associated with the given tube."""
-        mapdata = pd.read_csv(str(path).format(tube=tube), index_col=0)
+        mapdata = utils.load_csv(str(path).format(tube=tube))
         mapdata = select_drop_counts(mapdata, sel_count)
         if gridsize is not None:
             mapdata = reshape_dataframe(mapdata, m=gridsize, n=gridsize, pad_width=pad_width)
@@ -139,7 +141,7 @@ class LoaderMixin:
     @mem_cache
     def read_histo_df(path):
         """Read count data histogram."""
-        dfdata = pd.read_csv(path, index_col=0)
+        dfdata = utils.load_csv(path)
         # translate legacy naming scheme with mixed german names to
         # standardized english names
         dfdata["group"] = dfdata["group"].apply(lambda g: NAME_MAP.get(g, g))

@@ -33,32 +33,46 @@ class Singleton(abc.ABCMeta):
 
 class FileBackend(metaclass=Singleton):
 
-    @abc.abstractclassmethod
+    @abc.abstractmethod
     def get(self, localpath, netloc, path):
         """Get data from remote location."""
         pass
 
-    @abc.abstractclassmethod
+    @abc.abstractmethod
     def put(self, localpath, netloc, path):
         """Put data into remote location."""
         pass
 
-    @abc.abstractclassmethod
+    @abc.abstractmethod
     def exists(self, netloc, path):
         """Check whether the given path exists."""
+        pass
+
+    @abc.abstractmethod
+    def ls(self, netloc, path, files_only=False):
         pass
 
 
 class S3Backend(FileBackend):
 
+    continuation_token = "list_even_more"
+
     def __init__(self):
         self.client = boto3.client("s3")
 
+    def extend(self, path, *args):
+        """Concatenate given elements and return a string representation."""
+        if not path.endswith("/"):
+            path += "/"
+        return path + "/".join(str(a) for a in args)
+
     def get(self, localpath, netloc, path):
+        path = str(path).lstrip("/")
+
         if not localpath.exists():
             LOGGER.debug("%s download", path)
             localpath.parent.mkdir(parents=True, exist_ok=True)
-            self.client.download_file(netloc, str(path), str(localpath))
+            self.client.download_file(netloc, path, str(localpath))
         return localpath
 
     def put(self, localpath, netloc, path, clobber=False):
@@ -69,6 +83,8 @@ class S3Backend(FileBackend):
             path: path on remote resource
             clobber: If true will overwrite remote existing data
         """
+        path = str(path).lstrip("/")
+
         if not clobber:
             assert not self.exists(netloc, path)
         localpath.parent.mkdir(parents=True, exist_ok=True)
@@ -76,16 +92,39 @@ class S3Backend(FileBackend):
 
     def exists(self, netloc, path):
         """Check existence in S3 by head-request for an object."""
-        try:
-            self.client.head_object(Bucket=netloc, key=str(path))
-        except ClientError as error:
-            if int(error.response["Error"]["Code"]) != 404:
-                raise error
-            return False
-        return True
+        path = str(path).lstrip("/")
+
+        return bool(self.ls(netloc, path, files_only=False))
+
+    def ls(self, netloc, path, files_only=False):
+        path = str(path).lstrip("/")
+
+        files = []
+        prefixes = []
+        rargs = {
+            "Bucket": netloc,
+            "Prefix": path,
+            "Delimiter": "/",
+        }
+        while True:
+            resp = self.client.list_objects_v2(**rargs)
+            if "Contents" in resp:
+                files += [c["Key"] for c in resp["Contents"]]
+            if "CommonPrefixes" in resp:
+                prefixes += [c["Prefix"] for c in resp["CommonPrefixes"]]
+            if resp["IsTruncated"]:
+                rargs["ContinuationToken"] = resp["NextContinuationToken"]
+            else:
+                break
+
+        return files + prefixes
 
 
 class LocalBackend(FileBackend):
+
+    def extend(self, path, *args):
+        """Concatenate given elements and return a string representation."""
+        return str(pathlib.PurePath(path, *args))
 
     def get(self, localpath, netloc, path):
         if localpath.exists():
@@ -101,25 +140,36 @@ class LocalBackend(FileBackend):
         """Directly check whether the path exists on the local system."""
         return pathlib.Path(path).exists()
 
+    def ls(self, netloc, path, files_only=True):
+        files = [f for f in path.glob("*")]
+        if files_only:
+            files = [f for f in files if f.is_file()]
+        return files
+
 
 class URLPath(object):
-    """Combines url and pathlib."""
+    """Combines url and pathlib.
+    Manages two representations, one remote and one local. If the given
+    path is local, both will be equivalent.
+    """
     __slots__ = ("scheme", "netloc", "path", "_local", "_backend")
 
     def __init__(self, path, *args):
-        path = str(path) + "/" + "/".join(args)
-        urlpath = urlparse(path)
+        urlpath = urlparse(str(path))
         self.scheme = urlpath.scheme
         self.netloc = urlpath.netloc
+        self.path = urlpath.path
 
         if not self.scheme:
             self._backend = LocalBackend()
-            self.path = pathlib.PurePath(urlpath.path)
         elif self.scheme == "s3":
             self._backend = S3Backend()
-            self.path = pathlib.PurePosixPath(urlpath.path.lstrip("/"))
         else:
             raise TypeError(f"Unknown scheme {self.scheme}")
+
+        # add args
+        if args:
+            self.path = self._backend.extend(self.path, *args)
 
         self._local = None
 
@@ -127,10 +177,14 @@ class URLPath(object):
     def local(self):
         if self._local is None:
             if self.scheme:
-                self._local = pathlib.Path(TMP_PATH, *self.path.parts)
+                self._local = pathlib.Path(TMP_PATH, self.netloc + self.path)
             else:
                 self._local = pathlib.Path(self.path)
         return self._local
+
+    @property
+    def remote(self):
+        return bool(self.scheme)
 
     def exists(self):
         """Get if the given resource already exists."""
@@ -158,13 +212,25 @@ class URLPath(object):
             LOGGER.debug("%s removed", self._local)
             self._local.unlink()
 
+    def ls(self):
+        return self._backend.ls(self.netloc, self.path)
+
     def __truediv__(self, other):
-        """Append to the path."""
+        """Append to the path as another level."""
         return self.__class__(self, other)
+
+    def __add__(self, other):
+        """Addition will simply concatenate the fragment to the current
+        string representation."""
+        return self.__class__(str(self) + str(other))
+
+    def __radd__(self, other):
+        """Implement concatenation also if self is in second place."""
+        return self.__class__(str(other) + str(self))
 
     def __repr__(self):
         if self.scheme:
-            return f"{self.scheme}://{self.netloc}/{self.path}"
+            return f"{self.scheme}://{self.netloc}{self.path}"
         return f"{self.path}"
 
 
