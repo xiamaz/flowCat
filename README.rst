@@ -9,6 +9,7 @@ Module structure
 ----------------
 
 .. code::
+
     flowcat/
 
 
@@ -22,12 +23,13 @@ Runnable scripts
     Classify single cases to diagnoses using either direct FCS data, histogram
     data or individual SOM data.
 
-``./test_pregating.py``
-    Pregate a single fcs file and plot the result in 2D scatterplots with visual
-    highlighting of the selected cell-population.
 
-``./test_sommaps.py``
-    Test the generation of a SOM map on a single case for a selected tube.
+Run availble unittests with:
+
+.. code-block:: sh
+
+   ./test.py
+
 
 Documentation
 -------------
