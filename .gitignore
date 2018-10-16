@@ -1,6 +1,7 @@
 /mll-*
 /tmp
 /cache
+/output
 
 # TODO: integrate test data into git repo itself
 /tests/data

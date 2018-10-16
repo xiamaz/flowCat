@@ -187,7 +187,7 @@ def main():
 
     # Reference SOMmap options
     c_reference_name = "testreference"
-    c_reference_path = f"mll-sommaps/reference_maps/{c_reference_name}"
+    c_reference_path = f"output/mll-sommaps/reference_maps/{c_reference_name}"
     c_reference_cases = c_general_cases
     c_reference_labels = "data/selected_cases.txt"
     c_reference_view = {
@@ -219,8 +219,8 @@ def main():
     c_soms_name = f"testrun_s{c_general_gridsize}_t{c_general_map_type}"
     c_soms_cases = c_general_cases
     # c_soms_path = f"mll-sommaps/sample_maps/{c_soms_name}"
-    c_soms_path = f"tests/data/som/{c_soms_name}"
-    c_soms_labels = "tests/data/test_cases.json"
+    c_soms_path = f"output/mll-sommaps/sample_maps/{c_soms_name}"
+    c_soms_labels = None
     c_soms_view = {
         "tubes": c_general_tubes,
         "num": None,

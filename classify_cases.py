@@ -451,8 +451,8 @@ def main():
     c_general_name = "newconfig"
 
     # Output options
-    c_output_results = "mll-sommaps/output"
-    c_output_model = "mll-sommaps/models"
+    c_output_results = "output/mll-sommaps/output"
+    c_output_model = "output/mll-sommaps/models"
 
     # file locations
     c_dataset_cases = "s3://mll-flowdata/CLL-9F"
