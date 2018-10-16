@@ -1,3 +1,4 @@
+import re
 import unittest
 import json
 import pathlib
@@ -10,7 +11,6 @@ from flowcat.data import case_dataset
 
 TESTPATH = pathlib.Path(__file__).parent
 DATAPATH = TESTPATH / "data"
-
 
 
 class TestBasicCase(unittest.TestCase):
@@ -33,7 +33,7 @@ class TestBasicCase(unittest.TestCase):
 
     def test_group_num(self):
         """Test that the count function is working correctly."""
-        self.assertDictEqual(self.cases.groups, {"normal": 6, "CLL": 2, "LPL": 1, "PL": 1})
+        self.assertDictEqual(self.cases.group_count, {"normal": 6, "CLL": 2, "LPL": 1, "PL": 1})
 
     def test_tubes(self):
         """Infer tubes from availability in input data."""
@@ -91,11 +91,11 @@ class TestBasicCase(unittest.TestCase):
 
         with self.subTest(i="group filtering"):
             single_group = self.cases.filter(groups=["normal"])
-            self.assertEqual(len(single_group), self.cases.groups["normal"])
+            self.assertEqual(len(single_group), sum(g == "normal" for g in self.cases.groups))
 
         with self.subTest(i="num filtering"):
             one_each = self.cases.filter(num=1)
-            self.assertEqual(len(one_each), len(self.cases.groups))
+            self.assertEqual(len(one_each), len(set(self.cases.groups)))
 
         with self.subTest(i="infiltration filtering"):
             high_infil = self.cases.filter(infiltration=57)

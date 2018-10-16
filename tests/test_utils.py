@@ -53,6 +53,11 @@ class TestRemotePath(TestURLPathBase):
                 f"{self.name}/origdata/"]
         )
 
+    def test_glob(self):
+        url = self.url / "CLL-9F/AML"
+        results = url.glob("*gestern*")
+        self.assertTrue(all("gestern" in str(r) for r in results))
+
 
 class TestRemoteObject(TestURLPathBase):
     name = "s3://mll-flowdata/CLL-9F/case_info.json"

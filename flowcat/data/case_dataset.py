@@ -92,8 +92,10 @@ class CaseIterable(IterableMixin):
                 selected_markers = data.selected_markers
             if selected_tubes is None:
                 selected_tubes = data.selected_tubes
-        else:
+        elif isinstance(data, list):
             self.data = data
+        else:
+            raise TypeError(f"Cannot initialize from {type(data)}")
 
         self.selected_markers = selected_markers
         self.selected_tubes = selected_tubes
@@ -118,14 +120,50 @@ class CaseIterable(IterableMixin):
             [int(f.tube) for d in self.data for f in d.filepaths])))
 
     @property
-    def groups(self):
+    def group_count(self):
         """Get number of cases per group in case colleciton."""
         return collections.Counter(c.group for c in self)
+
+    @property
+    def groups(self):
+        return [c.group for c in self]
+
+    @property
+    def labels(self):
+        return [c.id for c in self]
 
     @property
     def json(self):
         """Return dict represendation of content."""
         return [c.json for c in self]
+
+    @property
+    def counts(self):
+        """Return a pandas dataframe with label group indexing a list of 1.
+        This is used for combination with other datasets to filter for available data.
+        """
+        index = pd.MultiIndex.from_tuples(list(zip(self.labels, self.groups)), names=["label", "group"])
+        return pd.DataFrame(1, index=index, columns=["count"])
+
+    def copy(self):
+        data = [d.copy() for d in self.data]
+        return self.__class__(
+            data, selected_tubes=self.selected_tubes,
+            selected_markers=self.selected_markers)
+
+    def set_counts(self, tubes):
+        tcopy = tubes.copy()
+        # tubes have been set
+        if self.selected_tubes is None:
+            raise AssertionError
+        # test for list equality
+        for tube in self.selected_tubes:
+            try:
+                tcopy.remove(tube)
+            except ValueError:
+                raise AssertionError
+        if tcopy:
+            raise AssertionError
 
     def get_markers(self, tube):
         """Get a list of markers and their presence ratio in the current
@@ -140,6 +178,17 @@ class CaseIterable(IterableMixin):
             if case.id == label:
                 return case
         return None
+
+    def get_paths(self, label):
+        case = self.get_label(label)
+        tubes = self.selected_tubes or self.tubes
+        # enforce same material
+        material = case.get_possible_material(
+            tubes, allowed_materials=ALLOWED_MATERIALS)
+        paths = {
+            t: str(case.get_tube(t, material=material).localpath) for t in tubes
+        }
+        return paths
 
     def filter(
             self,
@@ -184,6 +233,7 @@ class CaseIterable(IterableMixin):
 
             has_count = all(ccase.get_tube(t, min_count=counts) for t in tubes)
             if ccase.used_material and has_count:
+                # remove filepaths with fewer than count
                 if counts:
                     ccase.filepaths = [fp for fp in ccase.filepaths if fp.count >= counts]
                 ndata.append(ccase)
@@ -201,16 +251,15 @@ class CaseIterable(IterableMixin):
 
         # randomly sample num cases from each group
         if num:
-            data = list(reduce(
-                lambda x, y: x + y,
-                [
+            data = [
+                d for glist in [
                     random.sample(v, min(num, len(v)))
                     for v in [
                         [d for d in data if d.group == g]
-                        for g in (groups or self.groups)
+                        for g in (groups or set(self.groups))
                     ]
-                ]
-            ))
+                ] for d in glist
+            ]
         return self.__class__(data, selected_markers=selected_markers, selected_tubes=tubes)
 
     def __repr__(self):

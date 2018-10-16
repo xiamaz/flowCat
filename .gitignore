@@ -1,5 +1,9 @@
 /mll-*
 /tmp
+/cache
+
+# TODO: integrate test data into git repo itself
+/tests/data
 
 # python relevant files
 __pycache__

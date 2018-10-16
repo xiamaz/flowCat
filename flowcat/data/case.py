@@ -312,6 +312,16 @@ class TubeSample:
         it would be too large."""
         return self.get_data(normalized=False, scaled=False)
 
+    @property
+    def urlpath(self):
+        url_path = URLPath(self.parent.path) / self.path
+        return url_path
+
+    @property
+    def localpath(self):
+        local_path = self.urlpath.get()
+        return local_path
+
     def get_data(self, normalized=True, scaled=True):
         """
         Args:
@@ -320,7 +330,7 @@ class TubeSample:
         Returns:
             Dataframe with fcs data.
         """
-        url_path = URLPath(self.parent.path) / path["fcs"]["path"]
+        url_path = URLPath(self.parent.path) / self.path
         data = FCSData(url_path.get())
 
         if normalized:

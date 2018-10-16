@@ -66,6 +66,7 @@ def load_labels(path):
     try:
         labels = utils.load_file(path)
     except TypeError:
+        # try loading as simple txt file instead
         with open(str(path), "r") as f:
             labels = [l.strip() for l in f]
     return labels
@@ -127,7 +128,7 @@ def generate_soms(all_config, references):
 
     output_dir = utils.URLPath(config["path"])
 
-    all_config.to_toml(output_dir / "config.toml")
+    all_config.to_toml(output_dir + "_config.toml")
 
     cases = CaseCollection.from_dir(config["cases"])
     labels = load_labels(config["labels"])
@@ -217,11 +218,12 @@ def main():
     # Individual SOMmap configuration
     c_soms_name = f"testrun_s{c_general_gridsize}_t{c_general_map_type}"
     c_soms_cases = c_general_cases
-    c_soms_path = f"mll-sommaps/sample_maps/{c_soms_name}"
-    c_soms_labels = "data/selected_cases.txt"
+    # c_soms_path = f"mll-sommaps/sample_maps/{c_soms_name}"
+    c_soms_path = f"tests/data/som/{c_soms_name}"
+    c_soms_labels = "tests/data/test_cases.json"
     c_soms_view = {
         "tubes": c_general_tubes,
-        "num": 1,
+        "num": None,
         "groups": None,
         "infiltration": None,
         "counts": None,

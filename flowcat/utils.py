@@ -7,6 +7,7 @@ import pickle
 from urllib.parse import urlparse
 import logging
 import datetime
+import fnmatch
 from functools import wraps
 
 import toml
@@ -96,7 +97,7 @@ class S3Backend(FileBackend):
 
         return bool(self.ls(netloc, path, files_only=False))
 
-    def ls(self, netloc, path, files_only=False):
+    def ls(self, netloc, path, files_only=False, delimiter="/"):
         path = str(path).lstrip("/")
 
         files = []
@@ -104,8 +105,9 @@ class S3Backend(FileBackend):
         rargs = {
             "Bucket": netloc,
             "Prefix": path,
-            "Delimiter": "/",
         }
+        if delimiter:
+            rargs["Delimiter"] = delimiter
         while True:
             resp = self.client.list_objects_v2(**rargs)
             if "Contents" in resp:
@@ -118,6 +120,11 @@ class S3Backend(FileBackend):
                 break
 
         return files + prefixes
+
+    def glob(self, netloc, path, pattern):
+        all_files = self.ls(netloc, path, delimiter=None)
+        matched = [f for f in all_files if fnmatch.fnmatch(f, pattern)]
+        return matched
 
 
 class LocalBackend(FileBackend):
@@ -145,6 +152,9 @@ class LocalBackend(FileBackend):
         if files_only:
             files = [f for f in files if f.is_file()]
         return files
+
+    def glob(self, netloc, path, pattern):
+        return pathlib.Path(path).glob(pattern)
 
 
 class URLPath(object):
@@ -214,6 +224,9 @@ class URLPath(object):
 
     def ls(self):
         return [self.__class__(self, p) for p in self._backend.ls(self.netloc, self.path)]
+
+    def glob(self, pattern):
+        return [self.__class__(self, p) for p in self._backend.glob(self.netloc, self.path, pattern)]
 
     def __truediv__(self, other):
         """Append to the path as another level."""

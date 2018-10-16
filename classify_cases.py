@@ -22,7 +22,7 @@ from matplotlib import cm
 
 from flowcat.visual import plotting
 from flowcat.data import case_dataset as cc
-from flowcat.data import loaders
+from flowcat.data import loaders, all_dataset
 
 from flowcat.models import weighted_crossentropy
 from flowcat.models import fcs_cnn, histo_nn, som_cnn, merged_classifiers
@@ -397,6 +397,35 @@ def generate_model_inputs(
     return model, train, test
 
 
+def load_dataset(cases, paths, filters, mapping):
+    dataset = all_dataset.CombinedDataset.from_paths(cases, paths)
+    dataset.filter(**filters)
+    dataset.set_mapping(GROUP_MAPS[mapping])
+    return dataset
+
+
+def create_stats(outpath, dataset, pred_df, confusion_sizes):
+    LOGGER.info("=== Statistics results ===")
+    for gname, groupstat in GROUP_MAPS.items():
+        # skip if our cohorts are larger
+        if len(dataset.mapping["groups"]) < len(groupstat["groups"]):
+            continue
+
+        LOGGER.info(f"-- {len(groupstat['groups'])} --")
+        conf, stats = create_metrics_from_pred(pred_df, mapping=groupstat["map"])
+
+        # choose whether to represent merged classes larger in confusion matrix
+        sizes = groupstat["sizes"] if confusion_sizes else None
+
+        title = f"Confusion matrix (weighted f1 {stats['weighted_f1']:.2f} unweighted f1 {stats['unweighted_f1']:.2f})"
+        plotting.plot_confusion_matrix(
+            conf.values, groupstat["groups"], normalize=True,
+            title=title, filename=outpath / f"confusion_{gname}", dendroname=None, sizes=sizes)
+        conf.to_csv(outpath / f"confusion_{gname}.csv")
+        with open(str(outpath / f"stats_{gname}.json"), "w") as jsfile:
+            json.dump(stats, jsfile)
+
+
 def setup_logging(logpath):
     # setup logging
     filelog = logging.FileHandler(str(logpath))
@@ -424,16 +453,16 @@ def main():
     # Output options
     c_output_results = "mll-sommaps/output"
     c_output_model = "mll-sommaps/models"
-    c_output_confusion_sizes = True
 
     # file locations
-    c_dataset_index = None  # use pregenerated dataindex instead
-    c_dataset_paths = {
-        "som": "mll-sommaps/sample_maps/selected1_toroid_s32",
-        "histo": "../mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217",
-        "fcs": "s3://mll-flowdata/CLL-9F",
+    c_dataset_cases = "s3://mll-flowdata/CLL-9F"
+    c_dataset_paths = [
+        ("SOM", "s3://mll-sommaps/sample_maps/selected1_toroid_s32"),
+        ("HISTO", "s3://mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"),
+    ]
+    c_dataset_filters = {
         "tubes": [1, 2],
-        "min_fcs_count": 10000,
+        "min_count": 10000,
     }
     c_dataset_mapping = "8class"
 
@@ -453,7 +482,7 @@ def main():
         },
         loaders.Map2DLoader.__name__: {
             "sel_count": "counts",  # use count in SOM map as just another channel
-            "pad_width": 1 if "toroid" in c_dataset_paths["som"] else 0  # do something more elaborate later
+            "pad_width": 1,  # TODO: infer from dataset paths
         },
     }
     c_model_traindata_args = {
@@ -467,7 +496,7 @@ def main():
         "draw_method": "sequential",
         "epoch_size": None,
     }
-    c_model_path = None
+    c_model_path = None  # load model weights from the given path
 
     # Run options
     c_run_weights = None
@@ -476,13 +505,16 @@ def main():
     c_run_drop = 0.5
     c_run_epochs_drop = 50
     c_run_epsilon = 1e-8
+    c_run_path = f"{c_output_model}/{c_general_name}"
+
+    # Stat output
+    c_stat_confusion_sizes = True
     # END CONFIGURATION VARIABLES
 
     # save configuration variables
     config = Configuration.from_localsdict(locals())
 
-    outpath = utils.URLPath(f"{c_output_results}/{config['general']['name']}")
-    modelpath = utils.URLPath(f"{c_output_model}/{config['general']['name']}")
+    outpath = utils.URLPath(f"{config['output']['path']}/{config['general']['name']}")
 
     # Create logfiles
     logpath = outpath / f"classification.log"
@@ -491,14 +523,11 @@ def main():
     # save configuration
     config.to_toml(outpath / "config.toml")
 
-    dataset, mapping = load_dataset(**config["dataset"])
-    # save it if newly generated
-    if config["dataset"]["index"] is None:
-        utils.save_pickle(dataset, outpath / "dataset.p")
+    dataset = load_dataset(**config["dataset"])
 
     # split into train and test set
     # TODO: enable more complicated designs with kfold etc
-    train, test = split_data(**config["split"])
+    train, test = all_dataset.split_dataset(dataset, **config["split"])
     utils.save_json(list(train.index), outpath / "train_labels.json")
     utils.save_json(list(test.index), outpath / "test_labels.json")
 
@@ -506,27 +535,10 @@ def main():
     model, trainseq, testseq = generate_model_inputs(train, **config["model"])
 
     pred_df = run_save_model(
-        model, trainseq, testseq, path=modelpath, name="0", **config["run"])
+        model, trainseq, testseq, name="0", **config["run"])
 
-    LOGGER.info("Statistics results for %s", name)
-    for gname, groupstat in GROUP_MAPS.items():
-        # skip if our cohorts are larger
-        if len(mapping["groups"]) < len(groupstat["groups"]):
-            continue
-
-        LOGGER.info(f"-- {len(groupstat['groups'])} --")
-        conf, stats = create_metrics_from_pred(pred_df, mapping=groupstat["map"])
-
-        # choose whether to represent merged classes larger in confusion matrix
-        sizes = groupstat["sizes"] if c_confusion_sizes else None
-
-        title = f"Confusion matrix (weighted f1 {stats['weighted_f1']:.2f} unweighted f1 {stats['unweighted_f1']:.2f})"
-        plotting.plot_confusion_matrix(
-            conf.values, groupstat["groups"], normalize=True,
-            title=title, filename=outpath / f"confusion_{gname}", dendroname=None, sizes=sizes)
-        conf.to_csv(outpath / f"confusion_{gname}.csv")
-        with open(str(outpath / f"stats_{gname}.json"), "w") as jsfile:
-            json.dump(stats, jsfile)
+    create_stats(
+        outpath=outpath, dataset=dataset, pred_df=pred_df, **config["stats"])
 
 
 if __name__ == "__main__":
