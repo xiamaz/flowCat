@@ -50,7 +50,7 @@ def df_get_count(data, tubes):
             counts = count
         else:
             counts = counts.add(count, fill_value=0)
-    counts = counts / len(data)
+    counts = counts / len(tubes)
     return counts
 
 
@@ -154,7 +154,7 @@ class SOMDataset:
 
     @classmethod
     def infer_tubes(cls, path, label):
-        paths = path.glob(f"{label}*.csv")
+        paths = path.glob(f"*{label}*.csv")
         tubes = sorted([int(m[1]) for m in [cls.re_tube.match(str(p)) for p in paths] if m])
         return tubes
 
@@ -214,7 +214,7 @@ class CombinedDataset:
         return self.fcs.groups
 
     def copy(self):
-        datasets = {k: v.copy() for k, v in self.datasets}
+        datasets = {k: v.copy() for k, v in self.datasets.items()}
         return self.__class__(self.cases.copy(), datasets)
 
     def get(self, label, dtype):
@@ -243,10 +243,13 @@ class CombinedDataset:
         self.fcs = self.fcs.filter(**kwargs)
         return self
 
-
-def rescale_sureness(data):
-    data["sureness"] = data["sureness"] / data["sureness"].mean() * 5
-    return data
+    def get_sample_weights(self, indices):
+        labels = [l for l, _ in indices]
+        sample_weights = {}
+        for case in self.fcs:
+            if case.id in labels:
+                sample_weights[case.id] = case.sureness
+        return [sample_weights[i] for i, _ in indices]
 
 
 def split_dataset(data, test_num=None, test_labels=None, train_labels=None):

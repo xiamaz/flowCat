@@ -129,7 +129,7 @@ class LoaderMixin:
     @disk_cache
     def read_som(path, tube, sel_count=None, gridsize=None, pad_width=None):
         """Load the data associated with the given tube."""
-        mapdata = utils.load_csv(str(path).format(tube=tube))
+        mapdata = utils.load_csv(utils.URLPath(str(path).format(tube=tube)))
         mapdata = select_drop_counts(mapdata, sel_count)
         if gridsize is not None:
             mapdata = reshape_dataframe(mapdata, m=gridsize, n=gridsize, pad_width=pad_width)
@@ -389,7 +389,11 @@ class DatasetSequence(LoaderMixin, Sequence):
 
         self.batch_size = batch_size
         self.draw_method = draw_method
+
         self.sample_weights = sample_weights
+        self.avg_sample_weight = np.mean(
+            self._data.get_sample_weights(self._data.label_groups))
+
         self.number_per_group = number_per_group
 
         if groups is None:
@@ -430,16 +434,21 @@ class DatasetSequence(LoaderMixin, Sequence):
         elif self.draw_method == "balanced":
             label_groups = collections.defaultdict(list)
             for label, group in data.label_groups:
-                label_groups[group].append(label)
+                label_groups[group].append((label, group))
 
             sample_num = int((epoch_size or len(data.label_groups)) / len(label_groups))
+
             selection = []
             for labels in label_groups.values():
                 selection += random.choices(labels, k=sample_num)
         # directly provide number needed per group
         elif self.draw_method == "groupnum":
             label_groups = collections.defaultdict(list)
+            for label, group in data.label_groups:
+                label_groups[group].append((label, group))
+
             assert number_per_group is not None, "groupnum needs number_per_group"
+
             selection = []
             for group, labels in label_groups.items():
                 selection += random.choices(labels, k=number_per_group[group])
@@ -493,7 +502,7 @@ class DatasetSequence(LoaderMixin, Sequence):
         ydata = [g for _, g in batch_data]
         ybinary = preprocessing.label_binarize(ydata, classes=self.groups)
         if self.sample_weights:
-            sample_weights = batch_data["sureness"].values
+            sample_weights = np.array(self._data.get_sample_weights(batch_data)) / self.avg_sample_weight * 5
             return xdata, ybinary, sample_weights
         return xdata, ybinary
 

@@ -50,7 +50,7 @@ class FileBackend(metaclass=Singleton):
         pass
 
     @abc.abstractmethod
-    def ls(self, netloc, path, files_only=False):
+    def ls(self, netloc, path, files_only=False, delimiter="/"):
         pass
 
 
@@ -119,7 +119,10 @@ class S3Backend(FileBackend):
             else:
                 break
 
-        return files + prefixes
+        if len(prefixes) == 1 and not files:
+            return self.ls(
+                netloc, path + "/", files_only=files_only, delimiter=delimiter)
+        return [p.replace(path, "") for p in (files + prefixes)]
 
     def glob(self, netloc, path, pattern):
         all_files = self.ls(netloc, path, delimiter=None)
@@ -147,7 +150,7 @@ class LocalBackend(FileBackend):
         """Directly check whether the path exists on the local system."""
         return pathlib.Path(path).exists()
 
-    def ls(self, netloc, path, files_only=False):
+    def ls(self, netloc, path, files_only=False, delimiter="/"):
         files = [f for f in pathlib.Path(path).glob("*")]
         if files_only:
             files = [f for f in files if f.is_file()]
@@ -222,8 +225,8 @@ class URLPath(object):
             LOGGER.debug("%s removed", self._local)
             self._local.unlink()
 
-    def ls(self):
-        return [self.__class__(self, p) for p in self._backend.ls(self.netloc, self.path)]
+    def ls(self, **kwargs):
+        return [self.__class__(self, p) for p in self._backend.ls(self.netloc, self.path, **kwargs)]
 
     def glob(self, pattern):
         return [self.__class__(self, p) for p in self._backend.glob(self.netloc, self.path, pattern)]

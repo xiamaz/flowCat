@@ -462,7 +462,7 @@ def main():
     ]
     c_dataset_filters = {
         "tubes": [1, 2],
-        "min_count": 10000,
+        "counts": 10000,
     }
     c_dataset_mapping = "8class"
 
@@ -514,10 +514,11 @@ def main():
     # save configuration variables
     config = Configuration.from_localsdict(locals())
 
-    outpath = utils.URLPath(f"{config['output']['path']}/{config['general']['name']}")
+    outpath = utils.URLPath(f"{config['output']['results']}/{config['general']['name']}")
 
     # Create logfiles
     logpath = outpath / f"classification.log"
+    logpath.local.parent.mkdir(parents=True, exist_ok=True)
     setup_logging(logpath)
 
     # save configuration
@@ -528,11 +529,11 @@ def main():
     # split into train and test set
     # TODO: enable more complicated designs with kfold etc
     train, test = all_dataset.split_dataset(dataset, **config["split"])
-    utils.save_json(list(train.index), outpath / "train_labels.json")
-    utils.save_json(list(test.index), outpath / "test_labels.json")
+    utils.save_json(train.labels, outpath / "train_labels.json")
+    utils.save_json(test.labels, outpath / "test_labels.json")
 
     # TODO: save inputspec with saved model for easier loading
-    model, trainseq, testseq = generate_model_inputs(train, **config["model"])
+    model, trainseq, testseq = generate_model_inputs(train, test, **config["model"])
 
     pred_df = run_save_model(
         model, trainseq, testseq, name="0", **config["run"])
