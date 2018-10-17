@@ -226,7 +226,7 @@ class CountLoader(LoaderMixin):
     @classmethod
     def create_inferred(cls, data, tube, datatype="mapcount", datacol=None):
         label_group = data.label_groups[0]
-        pathdict = {label_group: data.get(label_group[0], cls.dtype)[tube]}
+        pathdict = [(label_group, data.get(label_group[0], cls.dtype)[tube])]
         dfdata = cls.load_histos(pathdict, tube=tube, datatype=datatype, datacol=datacol)
         width = dfdata.shape[1]
         return cls(tube=tube, width=width, datatype=datatype)
@@ -242,13 +242,14 @@ class CountLoader(LoaderMixin):
             data: Selected rows from paths dataframe. Should always be a dataframe, not a list.
         """
         if datatype == "dataframe":
-            path = next(iter(data.values()))
+            path = data[0][1]  # first element in tuple of (label, group), path
             # get the selected counts
-            counts = cls.read_histo_df(path).loc[list(data.keys()), :].values
+            indices = [i for i, _ in data]
+            counts = cls.read_histo_df(path).loc[indices, :].values
         elif datatype == "mapcount":
             assert datacol is not None, "mapcount needs datacol"
             count_list = []
-            for path in data.values():
+            for _, path in data:
                 mapdata = cls.read_histo_som(path, tube, datacol)
                 count_list.append(mapdata.values)
             counts = np.stack(count_list)
@@ -258,9 +259,9 @@ class CountLoader(LoaderMixin):
 
     def __call__(self, label_groups, dataset):
         """Output specified format."""
-        label_group_paths = {
-            (l, g): dataset.get(l, self.dtype)[self.tube] for l, g in label_groups
-        }
+        label_group_paths = [
+            ((l, g), dataset.get(l, self.dtype)[self.tube]) for l, g in label_groups
+        ]
         batch = self.load_histos(
             label_group_paths, self.tube, self.datatype, self.datacol)
         return batch
@@ -501,6 +502,7 @@ class DatasetSequence(LoaderMixin, Sequence):
 
         ydata = [g for _, g in batch_data]
         ybinary = preprocessing.label_binarize(ydata, classes=self.groups)
+
         if self.sample_weights:
             sample_weights = np.array(self._data.get_sample_weights(batch_data)) / self.avg_sample_weight * 5
             return xdata, ybinary, sample_weights

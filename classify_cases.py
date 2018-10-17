@@ -345,7 +345,7 @@ def create_output_spec(modelname, dataoptions):
 
 MODEL_CONSTRUCTORS = {
     "histogram": histo_nn.create_model_histo,
-    "sommap": som_cnn.create_model_cnn,
+    "som": som_cnn.create_model_cnn,
     "maphisto": merged_classifiers.create_model_maphisto,
     "etefcs": fcs_cnn.create_model_fcs,
     "mapfcs": merged_classifiers.create_model_mapfcs,
@@ -356,7 +356,7 @@ MODEL_CONSTRUCTORS = {
 MODEL_BATCH_SIZES = {
     "train": {
         "histogram": 64,
-        "sommap": 16,
+        "som": 16,
         "maphisto": 32,
         "etefcs": 16,
         "mapfcs": 16,
@@ -364,7 +364,7 @@ MODEL_BATCH_SIZES = {
     },
     "test": {
         "histogram": 128,
-        "sommap": 32,
+        "som": 32,
         "maphisto": 32,
         "etefcs": 16,
         "mapfcs": 32,
@@ -401,6 +401,7 @@ def load_dataset(cases, paths, filters, mapping):
     dataset = all_dataset.CombinedDataset.from_paths(cases, paths)
     dataset.filter(**filters)
     dataset.set_mapping(GROUP_MAPS[mapping])
+    dataset.set_available(["FCS", "HISTO", "SOM"])
     return dataset
 
 
@@ -472,13 +473,13 @@ def main():
     c_split_test_labels = "data/test_labels.json"
 
     # load existing model and use different parameters for retraining
-    c_model_name = "sommap"
+    c_model_name = "histogram"
     c_model_loader_options = {
         loaders.FCSLoader.__name__: {
             "subsample": 100,
         },
         loaders.CountLoader.__name__: {
-            "version": "dataframe",
+            "datatype": "dataframe",
         },
         loaders.Map2DLoader.__name__: {
             "sel_count": "counts",  # use count in SOM map as just another channel
@@ -529,11 +530,13 @@ def main():
     # split into train and test set
     # TODO: enable more complicated designs with kfold etc
     train, test = all_dataset.split_dataset(dataset, **config["split"])
+    print(len(dataset.labels), len(train.labels) + len(test.labels))
     utils.save_json(train.labels, outpath / "train_labels.json")
     utils.save_json(test.labels, outpath / "test_labels.json")
 
     # TODO: save inputspec with saved model for easier loading
     model, trainseq, testseq = generate_model_inputs(train, test, **config["model"])
+    print(len(trainseq.labels) + len(testseq.labels))
 
     pred_df = run_save_model(
         model, trainseq, testseq, name="0", **config["run"])

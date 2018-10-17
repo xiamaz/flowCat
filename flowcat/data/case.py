@@ -146,7 +146,7 @@ class Case:
             if p.tube == tube and (
                 material is None or material == p.material
             ) and (
-                not min_count or min_count == p.count)
+                not min_count or min_count <= p.count)
         ]
         return tubecases[-1] if tubecases else None
 

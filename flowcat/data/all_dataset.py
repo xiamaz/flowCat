@@ -230,8 +230,9 @@ class CombinedDataset:
         sum_count = functools.reduce(
             lambda x, y: x.add(y, fill_value=0), (self.datasets[req].counts for req in required))
         sum_count = sum_count / len(required)
-        labels = sum_count[sum_count == 1].index.get_level_values(0).tolist()
+        labels = [l for l, _ in sum_count.loc[sum_count["count"] == 1, :].index.values.tolist()]
         self.fcs = self.fcs.filter(labels=labels)
+        print(len(self.fcs.labels), len(labels), sum_count.shape)
         return self
 
     def set_mapping(self, mapping):

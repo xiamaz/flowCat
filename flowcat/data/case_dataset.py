@@ -45,7 +45,7 @@ def deduplicate_cases_by_sureness(data):
             deduplicated.append(cases[0])
         else:
             LOGGER.warning(
-                "DUP both removed: %s (%s), %s (%s)\nSureness: %s %s",
+                "DUP both removed: %s (%s), %s (%s)\nSureness: (%s) (%s)",
                 cases[0].id, cases[0].group, cases[1].id, cases[1].group,
                 cases[0].sureness_description, cases[1].sureness_description,
             )
@@ -207,22 +207,22 @@ class CaseIterable(IterableMixin):
         if materials is None:
             materials = ALLOWED_MATERIALS
         if tubes is None:
-            tubes = self.tubes
+            tubes = self.selected_tubes or self.tubes
 
         # choose the basis for further filtering from either all cases
         # or a preselection of cases
         data = self._data
 
-        if groups:
+        if groups is not None:
             data = [case for case in data if case.group in groups]
 
-        if labels:
+        if labels is not None:
             data = [case for case in data if case.id in labels]
 
         if infiltration:
             data = [d for d in data if d.infiltration >= infiltration or d.group in NO_INFILTRATION]
 
-        # create copy since we will start mutating the objects
+        # create copy since we will start modifying objects
         data = [d.copy() for d in data]
 
         ndata = []
@@ -239,6 +239,7 @@ class CaseIterable(IterableMixin):
                 ndata.append(ccase)
         data = ndata
 
+        selected_markers = selected_markers or self.selected_markers
         if selected_markers is None:
             tubemarkers = {
                 t: collections.Counter(m for c in data for m in c.get_tube(t).markers)
