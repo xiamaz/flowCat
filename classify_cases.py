@@ -542,7 +542,7 @@ def main():
         model, trainseq, testseq, name="0", **config["run"])
 
     create_stats(
-        outpath=outpath, dataset=dataset, pred_df=pred_df, **config["stats"])
+        outpath=outpath, dataset=dataset, pred_df=pred_df, **config["stat"])
 
 
 if __name__ == "__main__":
