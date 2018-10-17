@@ -171,7 +171,7 @@ class Case:
             filtered = [m for m in available_materials if m in allowed_materials]
         else:
             filtered = available_materials
-        return filtered[0] or None
+        return filtered[0] if filtered else None
 
     def has_same_material(self, tubes, allowed_materials=None):
         if allowed_materials is None:
