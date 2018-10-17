@@ -253,7 +253,7 @@ def get_urlpath(fun):
         if isinstance(path, URLPath):
             path = path.get()
         return fun(path, *args, **kwargs)
-    return fun
+    return get_local
 
 
 def put_urlpath(fun):
