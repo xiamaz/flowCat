@@ -16,7 +16,7 @@ from matplotlib import cm
 import seaborn
 from scipy.cluster import hierarchy
 
-from ..data.fcsdata import FCSData
+from ..data.case import FCSData
 
 
 LOGGER = logging.getLogger(__name__)
