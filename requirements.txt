@@ -2,3 +2,4 @@ git+https://github.com/xiamaz/fcsparser.git
 toml
 sklearn
 boto3
+pydot
