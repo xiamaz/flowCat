@@ -43,7 +43,7 @@ def timer(title):
     print(f"{title}: {time_diff:.3}s")
 
 
-def configure_print_logging(rootname="clustering"):
+def configure_print_logging(rootname="flowcat"):
     """Configure default logging for visual output to stdout."""
     rootlogger = logging.getLogger(rootname)
     rootlogger.setLevel(logging.INFO)
