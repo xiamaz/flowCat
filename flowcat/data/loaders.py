@@ -398,7 +398,10 @@ class DatasetSequence(LoaderMixin, Sequence):
         self.number_per_group = number_per_group
 
         if groups is None:
-            groups = list(set(self._data.groups))
+            if self._data.mapping:
+                groups = self._data.mapping["groups"]
+            else:
+                groups = list(set(self._data.groups))
         self.groups = groups
 
         self.label_groups = self._sample_data(data, epoch_size)

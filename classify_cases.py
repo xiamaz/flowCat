@@ -530,13 +530,11 @@ def main():
     # split into train and test set
     # TODO: enable more complicated designs with kfold etc
     train, test = all_dataset.split_dataset(dataset, **config["split"])
-    print(len(dataset.labels), len(train.labels) + len(test.labels))
     utils.save_json(train.labels, outpath / "train_labels.json")
     utils.save_json(test.labels, outpath / "test_labels.json")
 
     # TODO: save inputspec with saved model for easier loading
     model, trainseq, testseq = generate_model_inputs(train, test, **config["model"])
-    print(len(trainseq.labels) + len(testseq.labels))
 
     pred_df = run_save_model(
         model, trainseq, testseq, name="0", **config["run"])

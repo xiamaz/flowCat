@@ -333,12 +333,15 @@ def draw_histogram_3d(axes, data):
 
 def normalize_confusion_matrix(confusion_matrix):
     """Normalize the given confusion matrix."""
+    classes = None
     if isinstance(confusion_matrix, pd.DataFrame):
         classes = confusion_matrix.columns
         confusion_matrix = confusion_matrix.values
     confusion_matrix = confusion_matrix.astype('float') / confusion_matrix.sum(axis=1)[:, np.newaxis]
 
-    return pd.DataFrame(confusion_matrix, index=classes, columns=classes)
+    if classes is not None:
+        return pd.DataFrame(confusion_matrix, index=classes, columns=classes)
+    return confusion_matrix
 
 
 def matrix_to_sizes(matrix, sizes):
