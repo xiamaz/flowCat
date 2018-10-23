@@ -103,7 +103,7 @@ def generate_reference(all_config):
         model = tfsom.TFSom(channels=marker_list, **config["tfsom"])
 
         # create a data generator
-        datagen, length = tfsom.create_z_score_generator(tubedata.data)
+        datagen, length = tfsom.create_z_score_generator(tubedata.data, randnums=None)
 
         # train the network
         with timer("Training time"):
@@ -133,9 +133,14 @@ def generate_soms(all_config, references):
     cases = CaseCollection.from_dir(config["cases"])
     labels = load_labels(config["labels"])
     data = cases.filter(labels=labels, **config["view"])
+    if "randnums" in config["somnodes"]:
+        randnums = config["somnodes"]["randnums"]
+    else:
+        randnums = {}
     meta = {
-        "label": [c.id for c in data.data],
-        "group": [c.group for c in data.data],
+        "label": [c.id for c in data.data for i in range(randnums.get(c.group, 1))],
+        "randnum": [i for c in data.data for i in range(randnums.get(c.group, 1))],
+        "group": [c.group for c in data.data for i in range(randnums.get(c.group, 1))],
     }
 
     for tube in data.selected_tubes:
@@ -186,7 +191,7 @@ def main():
     c_general_tubes = [1, 2]
 
     # Reference SOMmap options
-    c_reference_name = "testreference"
+    c_reference_name = "selected1"
     c_reference_path = f"output/mll-sommaps/reference_maps/{c_reference_name}"
     c_reference_cases = c_general_cases
     c_reference_labels = "data/selected_cases.txt"
@@ -195,7 +200,7 @@ def main():
         "num": 1,
         "groups": None,
         "infiltration": None,
-        "counts": None,
+        "counts": 8192,
     }
     c_reference_tfsom = {
         "model_name": c_reference_name,
@@ -203,7 +208,7 @@ def main():
         "map_type": c_general_map_type,
         "max_epochs": 10,
         "batch_size": 1,
-        "subsample_size": 2048,
+        "subsample_size": 8192,
         "initial_learning_rate": 0.5,
         "end_learning_rate": 0.1,
         "learning_cooling": "exponential",
@@ -226,7 +231,7 @@ def main():
         "num": None,
         "groups": None,
         "infiltration": None,
-        "counts": None,
+        "counts": 8192,
     }
     c_soms_somnodes = {
         "m": c_general_gridsize, "n": c_general_gridsize,
@@ -234,10 +239,19 @@ def main():
         "max_epochs": 10,
         "initialization_method": "reference",
         "counts": True,
-        "subsample_size": 2048,
+        "subsample_size": 8192,
         "radius_cooling": "exponential",
         "learning_cooling": "exponential",
         "node_distance": "euclidean",
+        "randnums": {
+            "HCL": 11,
+            "FL": 10,
+            "MCL": 5,
+            "PL": 4,
+            "LPL": 4,
+            "MZL": 3,
+            "MBL": 2,
+        },
         "fitmap_args": {
             "max_epochs": 2,
             "initial_learn": 0.1,

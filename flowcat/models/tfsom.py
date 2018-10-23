@@ -621,7 +621,7 @@ class TFSom:
         Yields:
             Tuple of node weights and event mapping
         """
-        marker_generator = create_marker_generator(data_iterable, self.channels, batch_size=2)
+        marker_generator = create_marker_generator(data_iterable, self.channels, batch_size=1, loop=False)
 
         graph = tf.Graph()
         session = tf.Session(graph=graph)
@@ -811,7 +811,7 @@ class TFSom:
         return avg_distance
 
 
-def create_generator(data, transforms=None, fit_transformer=False):
+def create_generator(data, randnums=None, ):
     """Create a generator for the given data. Optionally applying additional transformations.
     Args:
         transforms: Optional transformation pipeline for the data.
@@ -822,15 +822,42 @@ def create_generator(data, transforms=None, fit_transformer=False):
 
     def generator_fun():
         for case in data:
+            if randnums is not None:
+                for i in range(randnums.get(case.parent.group, 1)):
+                    yield i, case
+            else:
+                yield 0, case
+
+    if randnums is not None:
+        length = len(list(generator_fun()))
+    else:
+        length = len(data)
+
+    return generator_fun, length
+
+
+def create_data_generator(data, transforms=None, fit_transformer=False, randnums=None):
+    datagen, length = create_generator(data, randnums=randnums)
+    def generator_fun():
+        for i, case in datagen():
             fcsdata = case.data
             if transforms is not None:
                 fcsdata = transforms.fit_transform(fcsdata) if fit_transformer else transforms.transform(fcsdata)
             yield fcsdata.data
 
-    return generator_fun, len(data)
+    return generator_fun, length
 
 
-def create_z_score_generator(tubecases):
+
+def create_label_generator(tubecases, randnums):
+    datagen, length = create_generator(tubecases, randnums=randnums)
+    def generator_fun():
+        for i, tubecase in datagen():
+            yield f"{tubecase.parent.id}_{i}"
+    return generator_fun, length
+
+
+def create_z_score_generator(tubecases, randnums):
     """Normalize channel information for mean and standard deviation.
     Args:
         tubecases: List of tubecases.
@@ -843,21 +870,25 @@ def create_z_score_generator(tubecases):
         ("scale", ccase.FCSMinMaxScaler()),
     ])
 
-    return create_generator(tubecases, transforms, fit_transformer=True)
+    return create_data_generator(tubecases, transforms, fit_transformer=True, randnums=randnums)
 
 
 class SOMNodes:
     """Transform FCS data into SOM nodes, optionally with number of mapped counts."""
 
-    def __init__(self, counts=False, fitmap_args=None, *args, **kwargs):
+    def __init__(self, counts=False, fitmap_args=None, randnums=None, *args, **kwargs):
         """
         Args:
             counts: Save counts together with marker channel data.
+            fitmap_args: Arguments to be passed to each iteration of the fitmap function.
+            randnums: Number of random passes for the given group, if the group is not
+                in the dict, a single sample will only be assessed once.
         """
         self._model = TFSom(*args, **kwargs)
         self._counts = counts
         self.history = []
         self._fitmap_args = {} if fitmap_args is None else fitmap_args
+        self._randnums = {} if randnums is None else randnums
 
     def fit(self, X, *_):
         """Optionally train the model on the provided data."""
@@ -886,8 +917,9 @@ class SOMNodes:
         Yields:
             Dataframe with som node weights and optionally counts.
         """
-        datagen, length = create_z_score_generator(X)
-        labels = [c.parent.id for c in X]
+        datagen, length = create_z_score_generator(X, self._randnums)
+        labelgen, length = create_label_generator(X, self._randnums)
+        labels = list(labelgen())
         for i, (weights, counts, count_prev) in enumerate(
                 self._model.fit_map(data_iterable=datagen(), num_inputs=length, **self._fitmap_args)):
             df_weights = pd.DataFrame(weights, columns=self._model.channels)
