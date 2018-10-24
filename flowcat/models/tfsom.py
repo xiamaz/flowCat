@@ -853,7 +853,7 @@ def create_label_generator(tubecases, randnums):
     datagen, length = create_generator(tubecases, randnums=randnums)
     def generator_fun():
         for i, tubecase in datagen():
-            yield f"{tubecase.parent.id}_{i}"
+            yield tubecase.parent.id, i
     return generator_fun, length
 
 
@@ -926,6 +926,7 @@ class SOMNodes:
             if self._counts:
                 df_weights["counts"] = counts
                 df_weights["count_prev"] = count_prev
-            df_weights.name = labels[i]
+            label, randnum = labels[i]
+            df_weights.name = f"{label}_{randnum}"
             # df_weights.name = label
-            yield df_weights
+            yield label, randnum, df_weights

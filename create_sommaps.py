@@ -17,7 +17,7 @@ from sklearn import preprocessing
 
 from flowcat.models import tfsom
 from flowcat.data import case as ccase
-from flowcat.data.case_dataset import CaseCollection
+from flowcat.data.case_dataset import CaseCollection, TubeView
 from flowcat.configuration import Configuration, compare_configurations
 from flowcat import utils
 
@@ -122,8 +122,26 @@ def generate_reference(all_config):
     return reference_data
 
 
-def generate_soms(all_config, references):
-    """Generate sommaps using the given configuration."""
+def filter_tubedata_existing(tubedata, outdir):
+    """Filter tubedata to remove all cases that have already been generated."""
+    not_existing = []
+    for tcase in tubedata:
+        filename = f"{tcase.parent.id}_0_t{tubedata.tube}.csv"
+        filepath = outdir / filename
+        if not filepath.exists():
+            not_existing.append(tcase)
+
+    ne_tcases = TubeView(not_existing, markers=tubedata.markers, tube=tubedata.tube)
+    return ne_tcases
+
+
+def generate_soms(all_config, references, recreate=True):
+    """Generate sommaps using the given configuration.
+    Args:
+        all_coufig: Configuration object
+        references: Reference SOM dict.
+        recreate: If true, existing files will be overwritten.
+    """
     config = all_config["soms"]
 
     output_dir = utils.URLPath(config["path"])
@@ -132,20 +150,28 @@ def generate_soms(all_config, references):
 
     cases = CaseCollection.from_dir(config["cases"])
     labels = load_labels(config["labels"])
-    data = cases.filter(labels=labels, **config["view"])
+
+    selected_markers = None
+    if config["somnodes"]["initialization_method"] != "random":
+        selected_markers = {k: list(v.columns) for k, v in references.items()}
+
+    data = cases.filter(labels=labels, selected_markers=selected_markers, **config["view"])
     if "randnums" in config["somnodes"]:
         randnums = config["somnodes"]["randnums"]
     else:
         randnums = {}
     meta = {
-        "label": [c.id for c in data.data for i in range(randnums.get(c.group, 1))],
-        "randnum": [i for c in data.data for i in range(randnums.get(c.group, 1))],
-        "group": [c.group for c in data.data for i in range(randnums.get(c.group, 1))],
+        "label": [c.id for c in data for i in range(randnums.get(c.group, 1))],
+        "randnum": [i for c in data for i in range(randnums.get(c.group, 1))],
+        "group": [c.group for c in data for i in range(randnums.get(c.group, 1))],
     }
 
     for tube in data.selected_tubes:
         # get the correct data from cases with the correct view
         tubedata = data.get_tube(tube)
+
+        if not recreate:
+            tubedata = filter_tubedata_existing(tubedata, output_dir)
 
         # get the referece if using reference initialization or sample based
         if config["somnodes"]["initialization_method"] == "random":
@@ -164,12 +190,14 @@ def generate_soms(all_config, references):
 
         circ_buffer = collections.deque(maxlen=20)
         time_a = time.time()
-        for result in model.transform_generator(tubedata):
+        for label, randnum, result in model.transform_generator(tubedata):
             time_b = time.time()
-            print(f"Saving {result.name}")
+            print(f"Saving {label} {randnum}")
+
             filename = f"{result.name}_t{tube}.csv"
             filepath = output_dir / filename
             utils.save_csv(result, filepath)
+
             time_d = time_b - time_a
             circ_buffer.append(time_d)
             print(f"Training time: {time_d}s Rolling avg: {np.mean(circ_buffer)}s")
@@ -271,6 +299,7 @@ def main():
     configure_print_logging()
 
     parser = argparse.ArgumentParser(usage="Generate references and individual SOMs.")
+    parser.add_argument("--recreate", help="Recreate existing maps.", action="store_true")
     parser.add_argument("--references", help="Generate references only.", action="store_true")
     args = parser.parse_args()
 
@@ -278,7 +307,7 @@ def main():
     if args.references:
         print("Only generating references. Not generating individual SOMs.")
     else:
-        generate_soms(config, reference_dict)
+        generate_soms(config, reference_dict, recreate=args.recreate)
 
 
 if __name__ == "__main__":

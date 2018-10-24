@@ -250,6 +250,9 @@ class CaseIterable(IterableMixin):
                 for t, v in tubemarkers.items()
             }
 
+        # filter files to have selected markers
+        data = [d for d in data if d.has_selected_markers(selected_markers)]
+
         # randomly sample num cases from each group
         if num:
             data = [
@@ -313,7 +316,8 @@ class CaseView(CaseIterable):
             [
                 d.get_tube(tube) for d in self
             ],
-            self.selected_markers[tube]
+            markers=self.selected_markers[tube],
+            tube=tube,
         )
 
     def download_all(self):
@@ -346,8 +350,9 @@ class CaseView(CaseIterable):
 
 class TubeView(IterableMixin):
     """List containing CasePath."""
-    def __init__(self, data, markers):
+    def __init__(self, data, markers, tube):
         self.markers = markers
+        self.tube = tube
         self._data = data
         self._materials = None
         self._current = None

@@ -165,6 +165,15 @@ class Case:
         found_all = functools.reduce(lambda x, y: x & y, materials)
         return found_all
 
+    def has_selected_markers(self, selected_markers):
+        """Check whether default samples can fulfill the selected markers."""
+        for tube, markers in selected_markers.items():
+            tcase = self.get_tube(tube)
+            if not tcase.has_markers(markers):
+                return False
+        return True
+
+
     def get_possible_material(self, tubes, allowed_materials=None):
         available_materials = self.get_same_materials(tubes)
         if allowed_materials:
