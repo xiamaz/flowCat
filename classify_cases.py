@@ -304,7 +304,7 @@ def create_output_spec(modelname, dataoptions):
             (loaders.CountLoader.create_inferred, {"tube": 1}),
             (loaders.CountLoader.create_inferred, {"tube": 2}),
         ]
-    elif modelname == "sommap":
+    elif modelname == "som":
         partial_spec = [
             (loaders.Map2DLoader.create_inferred, {"tube": 1}),
             (loaders.Map2DLoader.create_inferred, {"tube": 2}),
