@@ -208,7 +208,7 @@ def run_save_model(
     )
     pred_mat = model.predict_generator(testseq, workers=4, use_multiprocessing=True)
 
-    model.save(modelpath / f"model_{name}.h5")
+    model.save(str(modelpath / f"model_{name}.h5"))
     with open(str(modelpath / f"history_{name}.p"), "wb") as hfile:
         pickle.dump(history.history, hfile)
 
@@ -421,8 +421,8 @@ def create_stats(outpath, dataset, pred_df, confusion_sizes):
         title = f"Confusion matrix (weighted f1 {stats['weighted_f1']:.2f} unweighted f1 {stats['unweighted_f1']:.2f})"
         plotting.plot_confusion_matrix(
             conf.values, groupstat["groups"], normalize=True,
-            title=title, filename=outpath / f"confusion_{gname}", dendroname=None, sizes=sizes)
-        conf.to_csv(outpath / f"confusion_{gname}.csv")
+            title=title, filename=outpath / f"confusion_{gname}.png", dendroname=None, sizes=sizes)
+        utils.save_csv(conf, outpath / f"confusion_{gname}.csv")
         with open(str(outpath / f"stats_{gname}.json"), "w") as jsfile:
             json.dump(stats, jsfile)
 
@@ -526,6 +526,7 @@ def main():
     config.to_toml(outpath / "config.toml")
 
     dataset = load_dataset(**config["dataset"])
+
 
     # split into train and test set
     # TODO: enable more complicated designs with kfold etc

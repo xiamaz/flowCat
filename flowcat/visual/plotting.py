@@ -178,7 +178,7 @@ def plot_confusion_matrix(
         axes.set_title(title)
         fig.tight_layout()
         FigureCanvas(fig)
-        fig.savefig(filename, dpi=300)
+        fig.savefig(str(filename), dpi=300)
 
     if dendroname is not None:
         fig = Figure()
