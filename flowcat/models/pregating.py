@@ -5,7 +5,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.cluster import DBSCAN
 
 from .tfsom import SOMNodes
-from ..data.fcsdata import FCSData
+from ..data.case import FCSData
 
 
 LOGGER = logging.getLogger(__name__)
