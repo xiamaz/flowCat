@@ -4,3 +4,4 @@ sklearn
 boto3
 pydot
 keras
+tensorflow
