@@ -95,7 +95,7 @@ class CaseIterable(IterableMixin):
         elif isinstance(data, list):
             self.data = data
         else:
-            raise TypeError(f"Cannot initialize from {type(data)}")
+            raise ValueError(f"Cannot initialize from {type(data)}")
 
         self.selected_markers = selected_markers
         self.selected_tubes = selected_tubes
@@ -275,7 +275,10 @@ class CaseCollection(CaseIterable):
     overview information."""
 
     def __init__(self, data, path="", *args, **kwargs):
-        super().__init__(data, *args, **kwargs)
+        try:
+            super().__init__(data, *args, **kwargs)
+        except ValueError:
+            raise ValueError(f"Paths to directories should be instantiated with {self.__class__.__name__}.from_dir")
         self.path = path
 
     @classmethod
