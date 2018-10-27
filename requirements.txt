@@ -3,3 +3,4 @@ toml
 sklearn
 boto3
 pydot
+keras
