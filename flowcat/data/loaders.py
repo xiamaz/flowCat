@@ -193,8 +193,8 @@ class LoaderMixin:
     def __call__(self, label_groups, dataset):
         """Output specified format."""
         batchdata = []
-        for label, _ in label_groups:
-            pathdict = dataset.get(label, self.dtype)
+        for label, randnum, _ in label_groups:
+            pathdict = dataset.get(label, self.dtype, randnum=randnum)
             data = self.load_data(pathdict)  # pylint: disable=assignment-from-no-return
             batchdata.append(data)
         batch = np.stack(batchdata)
@@ -244,7 +244,7 @@ class CountLoader(LoaderMixin):
         if datatype == "dataframe":
             path = data[0][1]  # first element in tuple of (label, group), path
             # get the selected counts
-            indices = [i for i, _ in data]
+            indices = [i for i, _, in data]
             counts = cls.read_histo_df(path).loc[indices, :].values
         elif datatype == "mapcount":
             assert datacol is not None, "mapcount needs datacol"
@@ -260,7 +260,7 @@ class CountLoader(LoaderMixin):
     def __call__(self, label_groups, dataset):
         """Output specified format."""
         label_group_paths = [
-            ((l, g), dataset.get(l, self.dtype)[self.tube]) for l, g in label_groups
+            ((l, g), dataset.get(l, self.dtype, randnum=r)[self.tube]) for l, r, g in label_groups
         ]
         batch = self.load_histos(
             label_group_paths, self.tube, self.datatype, self.datacol)
@@ -407,6 +407,10 @@ class DatasetSequence(LoaderMixin, Sequence):
         self.label_groups = self._sample_data(data, epoch_size)
         self.epoch_size = len(self.label_groups)
 
+    @property
+    def output_dtypes(self):
+        return [o.dtype for o in self._output_spec]
+
     def _sample_data(self, data, epoch_size=None, number_per_group=None):
         """
         Get version of the dataset to be used for one epoch. This can be whole
@@ -427,29 +431,33 @@ class DatasetSequence(LoaderMixin, Sequence):
         # changing nothing will always return the same slices of data in each
         # epoch given the same batch numbers
         if self.draw_method == "sequential":
-            selection = data.label_groups
+            selection = data.get_label_rand_group(self.output_dtypes)
         # randomize the batches in subsequent epochs by reshuffling in each new
         # epoch
         elif self.draw_method == "shuffle":
-            selection = random.sample(data.label_groups, k=len(data.label_groups))
+            selection = data.get_label_rand_group(self.output_dtypes)
+            selection = random.sample(selection, k=len(selection))
         # always choose a similar number from all cohorts, smaller cohorts can
         # be duplicated to match the numbers in the larger cohorts
         # if epoch_size is provided the number per group is split evenly
         elif self.draw_method == "balanced":
+            selection = data.get_label_rand_group(self.output_dtypes)
             label_groups = collections.defaultdict(list)
-            for label, group in data.label_groups:
-                label_groups[group].append((label, group))
+            for label, randnum, group in selection:
+                label_groups[group].append((label, randnum, group))
 
-            sample_num = int((epoch_size or len(data.label_groups)) / len(label_groups))
+            # calculate number per group
+            sample_num = int((epoch_size or len(selection)) / len(label_groups))
 
             selection = []
             for labels in label_groups.values():
                 selection += random.choices(labels, k=sample_num)
         # directly provide number needed per group
         elif self.draw_method == "groupnum":
+            selection = data.get_label_rand_group(self.output_dtypes)
             label_groups = collections.defaultdict(list)
-            for label, group in data.label_groups:
-                label_groups[group].append((label, group))
+            for label, randnum, group in selection:
+                label_groups[group].append((label, randnum, group))
 
             assert number_per_group is not None, "groupnum needs number_per_group"
 
@@ -482,11 +490,15 @@ class DatasetSequence(LoaderMixin, Sequence):
 
     @property
     def labels(self):
-        return [l for l, _ in self.label_groups]
+        return [l for l, _, _ in self.label_groups]
 
     @property
     def ylabels(self):
-        return [g for _, g in self.label_groups]
+        return [g for _, _, g in self.label_groups]
+
+    @property
+    def randnums(self):
+        return [r for _, r, _ in self.label_groups]
 
     def get_batch_by_label(self, label):
         '''Return batch by label'''
@@ -503,7 +515,7 @@ class DatasetSequence(LoaderMixin, Sequence):
         # load data using output specs
         xdata = [x(batch_data, self._data) for x in self._output_spec]
 
-        ydata = [g for _, g in batch_data]
+        ydata = [g for _, _, g in batch_data]
         ybinary = preprocessing.label_binarize(ydata, classes=self.groups)
 
         if self.sample_weights:

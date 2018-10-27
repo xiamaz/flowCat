@@ -430,24 +430,6 @@ class FCSData:
         return f"<FCS :: {nevents} events :: {nchannels} channels>"
 
 
-class FCSPipeline:
-    def __init__(self, steps):
-        self.steps = steps
-
-    def fit(self, X, *_):
-        for _, model in self.steps:
-            model.fit(X)
-        return self
-
-    def transform(self, X, *_):
-        for _, model in self.steps:
-            X = model.transform(X)
-        return X
-
-    def fit_transform(self, X, *_):
-        return self.fit(X).transform(X)
-
-
 class FCSMarkersTransform(TransformerMixin, BaseEstimator):
     def __init__(self, markers):
         self._markers = markers
@@ -504,9 +486,10 @@ class FCSMinMaxScaler(TransformerMixin, BaseEstimator):
     """MinMaxScaling with adaptations for FCSData."""
 
     def __init__(self):
-        self._model = preprocessing.MinMaxScaler()
+        self._model = None
 
     def fit(self, X, *_):
+        self._model = preprocessing.MinMaxScaler()
         if isinstance(X, FCSData):
             data = X.ranges
         else:
@@ -532,9 +515,10 @@ class FCSMinMaxScaler(TransformerMixin, BaseEstimator):
 class FCSStandardScaler(TransformerMixin, BaseEstimator):
     """Standard deviation scaling adapted for FCSData objects."""
     def __init__(self):
-        self._model = preprocessing.StandardScaler()
+        self._model = None
 
     def fit(self, X, *_):
+        self._model = preprocessing.StandardScaler()
         if isinstance(X, FCSData):
             data = X.data
         else:

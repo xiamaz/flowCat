@@ -20,6 +20,8 @@ class Datasets(enum.Enum):
 
     @classmethod
     def from_str(cls, name):
+        if isinstance(name, cls):
+            return name
         name = name.upper()
         return cls[name]
 
@@ -45,7 +47,11 @@ def df_get_count(data, tubes):
     """
     counts = None
     for tube in tubes:
-        count = pd.DataFrame(1, index=data[tube].index, columns=["count"])
+        count = pd.DataFrame(
+            1, index=data[tube].index, columns=["count"])
+        count.reset_index(inplace=True)
+        count.set_index(["label", "group"], inplace=True)
+        count = count.loc[~count.index.duplicated(keep='first')]
         if counts is None:
             counts = count
         else:
@@ -88,6 +94,10 @@ class HistoDataset:
                 data[int(match[1])] = pd.DataFrame(str(lpath), index=df.index, columns=["path"])
         return data
 
+    def get_randnums(self, labels):
+        """Get randnums for the given labels."""
+        return {l: [0] for l in labels}
+
     def copy(self):
         data = {k: v.copy() for k, v in self.data.items()}
         return self.__class__(data, self.tubes.copy())
@@ -98,7 +108,7 @@ class HistoDataset:
     def get_path(self, tube, label, group):
         return self.data[tube].loc[label, group]
 
-    def get_paths(self, label):
+    def get_paths(self, label, randnum=0):
         return {k: v.loc[label, "path"].values[0] for k, v in self.data.items()}
 
     def __repr__(self):
@@ -137,20 +147,35 @@ class SOMDataset:
         soms = {}
         for tube in tubes:
             somtube = sompaths.copy()
-            somtube["path"] = somtube["label"].apply(
-                lambda l: cls.get_path(mappath, l, tube))
+            if "randnum" in somtube.columns:
+                somtube["path"] = somtube.apply(
+                    lambda r, t=tube: cls.get_path(mappath, r["label"], t, r["randnum"]), axis=1
+                )
+            else:
+                somtube["path"] = somtube["label"].apply(
+                    lambda l, t=tube: cls.get_path(mappath, l, t))
+                somtube["randnum"] = 0
 
-            somtube.set_index(["label", "group"], inplace=True)
+            somtube.set_index(["label", "randnum", "group"], inplace=True)
             soms[tube] = somtube
 
         return soms
 
-    def get_paths(self, label):
-        return {k: v.loc[label, "path"].values[0] for k, v in self.data.items()}
+    def get_paths(self, label, randnum=0):
+        return {
+            k: v.loc[[label, randnum], "path"].values[0]
+            for k, v in self.data.items()
+        }
+
+    def get_randnums(self, labels):
+        meta = next(iter(self.data.values()))
+        return {l: meta.loc[l].index.get_level_values("randnum") for l in labels}
 
     @staticmethod
-    def get_path(path, label, tube):
-        return str(path / f"{label}_t{tube}.csv")
+    def get_path(path, label, tube, random=None):
+        if random is None:
+            return str(path / f"{label}_t{tube}.csv")
+        return str(path / f"{label}_{random}_t{tube}.csv")
 
     @classmethod
     def infer_tubes(cls, path, label):
@@ -213,13 +238,30 @@ class CombinedDataset:
             return [self.mapping["map"].get(g, g) for g in self.fcs.groups]
         return self.fcs.groups
 
+    def get_label_rand_group(self, dtypes):
+        """Return list of label, randnum, group tuples
+        using the dtypes requested."""
+        lrandnums = [self.get_randnums(d) for d in dtypes]
+        randnums = lrandnums[0]
+        for randset in lrandnums[1:]:
+            for label in randnums:
+                randnums[label] = sorted(set(randset[label]) & set(randnums[label]))
+        labels = [
+            (label, randnum, group) for label, group in self.label_groups
+            for randnum in randnums[label]
+        ]
+        return labels
+
+    def get_randnums(self, dtype):
+        return self.datasets[Datasets.from_str(dtype)].get_randnums(self.labels)
+
     def copy(self):
         datasets = {k: v.copy() for k, v in self.datasets.items()}
         return self.__class__(self.cases.copy(), datasets)
 
-    def get(self, label, dtype):
+    def get(self, label, dtype, randnum=0):
         dtype = Datasets.from_str(dtype) if isinstance(dtype, str) else dtype
-        return self.datasets[dtype].get_paths(label)
+        return self.datasets[dtype].get_paths(label, randnum=randnum)
 
     def set_available(self, required):
         """Filter cases on availability in the required types."""
@@ -232,7 +274,6 @@ class CombinedDataset:
         sum_count = sum_count / len(required)
         labels = [l for l, _ in sum_count.loc[sum_count["count"] == 1, :].index.values.tolist()]
         self.fcs = self.fcs.filter(labels=labels)
-        print(len(self.fcs.labels), len(labels), sum_count.shape)
         return self
 
     def set_mapping(self, mapping):
@@ -245,12 +286,12 @@ class CombinedDataset:
         return self
 
     def get_sample_weights(self, indices):
-        labels = [l for l, _ in indices]
+        labels = [l for l, *_ in indices]
         sample_weights = {}
         for case in self.fcs:
             if case.id in labels:
                 sample_weights[case.id] = case.sureness
-        return [sample_weights[i] for i, _ in indices]
+        return [sample_weights[i] for i, *_ in indices]
 
 
 def split_dataset(data, test_num=None, test_labels=None, train_labels=None):

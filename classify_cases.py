@@ -158,7 +158,7 @@ def run_save_model(
 
         weights.to_csv(modelpath / f"weights_{name}.csv")
         plotting.plot_confusion_matrix(
-            weights.values, weights.columns, normalize=False, cmap=cm.Reds,
+            weights.values, weights.columns, normalize=False, cmap=cm.get_cmap("Reds"),
             title="Weight Matrix",
             filename=modelpath / f"weightsplot_{name}", dendroname=None)
 
@@ -401,7 +401,7 @@ def load_dataset(cases, paths, filters, mapping):
     dataset = all_dataset.CombinedDataset.from_paths(cases, paths)
     dataset.filter(**filters)
     dataset.set_mapping(GROUP_MAPS[mapping])
-    dataset.set_available(["FCS", "HISTO", "SOM"])
+    dataset.set_available([n for n, _ in paths] + ["FCS"])
     return dataset
 
 
@@ -449,21 +449,22 @@ def setup_logging(logpath):
 
 def main():
     # CONFIGURATION VARIABLES
-    c_general_name = "newconfig"
+    c_general_name = "test"
 
     # Output options
-    c_output_results = "output/mll-sommaps/output"
-    c_output_model = "output/mll-sommaps/models"
+    c_output_results = "output/test/output"
+    c_output_model = "output/test/models"
 
     # file locations
     c_dataset_cases = "s3://mll-flowdata/CLL-9F"
     c_dataset_paths = [
-        ("SOM", "s3://mll-sommaps/sample_maps/selected1_toroid_s32"),
-        ("HISTO", "s3://mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"),
+        ("SOM", "output/mll-sommaps/sample_maps/testrun_s32_ttoroid"),
+        # ("HISTO", "s3://mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"),
     ]
     c_dataset_filters = {
         "tubes": [1, 2],
         "counts": 10000,
+        "groups": ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
     }
     c_dataset_mapping = "8class"
 
@@ -473,7 +474,7 @@ def main():
     c_split_test_labels = "data/test_labels.json"
 
     # load existing model and use different parameters for retraining
-    c_model_name = "histogram"
+    c_model_name = "som"
     c_model_loader_options = {
         loaders.FCSLoader.__name__: {
             "subsample": 100,

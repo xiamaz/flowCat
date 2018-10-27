@@ -145,6 +145,9 @@ class CaseIterable(IterableMixin):
         index = pd.MultiIndex.from_tuples(list(zip(self.labels, self.groups)), names=["label", "group"])
         return pd.DataFrame(1, index=index, columns=["count"])
 
+    def get_randnums(self, labels):
+        return {l: [0] for l in labels}
+
     def copy(self):
         data = [d.copy() for d in self.data]
         return self.__class__(
@@ -179,7 +182,7 @@ class CaseIterable(IterableMixin):
                 return case
         return None
 
-    def get_paths(self, label):
+    def get_paths(self, label, randnum=0):
         case = self.get_label(label)
         tubes = self.selected_tubes or self.tubes
         # enforce same material

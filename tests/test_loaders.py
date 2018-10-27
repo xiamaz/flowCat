@@ -44,7 +44,7 @@ class TestLoaders(unittest.TestCase):
 
     def test_labels(self):
         self.assertListEqual(
-            list(zip(self.seq.labels, self.seq.ylabels)), self.seq.label_groups)
+            list(zip(self.seq.labels, self.seq.randnums, self.seq.ylabels)), self.seq.label_groups)
 
     def test_shapes(self):
         self.assertEqual(

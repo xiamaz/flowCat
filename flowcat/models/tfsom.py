@@ -836,19 +836,6 @@ def create_generator(data, randnums=None, ):
     return generator_fun, length
 
 
-def create_data_generator(data, transforms=None, fit_transformer=False, randnums=None):
-    datagen, length = create_generator(data, randnums=randnums)
-    def generator_fun():
-        for i, case in datagen():
-            fcsdata = case.data
-            if transforms is not None:
-                fcsdata = transforms.fit_transform(fcsdata) if fit_transformer else transforms.transform(fcsdata)
-            yield fcsdata.data
-
-    return generator_fun, length
-
-
-
 def create_label_generator(tubecases, randnums):
     datagen, length = create_generator(tubecases, randnums=randnums)
     def generator_fun():
@@ -864,13 +851,16 @@ def create_z_score_generator(tubecases, randnums):
     Returns:
         Generator function and length of tubecases.
     """
+    datagen, length = create_generator(tubecases, randnums=randnums)
 
-    transforms = ccase.FCSPipeline(steps=[
-        ("zscores", ccase.FCSStandardScaler()),
-        ("scale", ccase.FCSMinMaxScaler()),
-    ])
+    def generator_fun():
+        for i, case in datagen():
+            fcsdata = case.data
+            fcsdata = ccase.FCSStandardScaler().fit_transform(fcsdata)
+            fcsdata = ccase.FCSMinMaxScaler().fit_transform(fcsdata)
+            yield fcsdata.data
 
-    return create_data_generator(tubecases, transforms, fit_transformer=True, randnums=randnums)
+    return generator_fun, length
 
 
 class SOMNodes:
