@@ -255,7 +255,7 @@ def main():
     c_soms_labels = None
     c_soms_view = {
         "tubes": c_general_tubes,
-        "num": 5,
+        "num": None,
         "groups": None,
         "infiltration": None,
         "counts": 8192,
