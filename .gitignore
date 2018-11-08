@@ -9,7 +9,7 @@
 # python relevant files
 __pycache__
 *.pyc
-env
+.env
 
 # generated tags
 tags*
