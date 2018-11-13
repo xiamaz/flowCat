@@ -297,14 +297,14 @@ class CaseCollection(CaseIterable):
         self.path = path
 
     @classmethod
-    def from_dir(cls, inputpath):
+    def from_dir(cls, inputpath, **kwargs):
         """
         Initialize on datadir with info json.
         Args:
             inputpath: Input directory containing cohorts and a info file.
         """
         inputpath = URLPath(inputpath)
-        metapath = get_meta(inputpath, how="latest")
+        metapath = get_meta(inputpath, **kwargs)
         data = [
             Case(d, path=inputpath) for d in load_json(metapath.get())
         ]

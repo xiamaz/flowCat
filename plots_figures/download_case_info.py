@@ -14,6 +14,7 @@ parser = argparse.ArgumentParser(
     description="Download metadata from the specified repository. Always the latest case_info json will be used.")
 parser.add_argument("path", help="Path to Data repository.", type=utils.URLPath)
 parser.add_argument("--output", help="Output directory", default="data", type=pathlib.Path)
+parser.add_argument("--how", help="Choose which case_information to download.", default="latest", type=str)
 
 args = parser.parse_args()
 
@@ -22,4 +23,4 @@ utils.TMP_PATH = args.output
 
 # Creating the CaseCollection object using an URL will ensure downloading of
 # remote metadata objects
-cases = CaseCollection.from_dir(args.path)
+cases = CaseCollection.from_dir(args.path, how=args.how)
