@@ -253,6 +253,9 @@ class URLPath(object):
             return f"{self.scheme}://{self.netloc}{self.path}"
         return f"{self.path}"
 
+    def __lt__(self, other):
+        return str(self) < str(other)
+
 
 def get_urlpath(fun):
     @wraps(fun)

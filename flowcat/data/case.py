@@ -388,6 +388,9 @@ class FCSData:
             self.data = data
             self.ranges = self._get_ranges_from_pnr(self._meta)
 
+        self.data = self.data.astype("float64", copy=False)
+        self.ranges = self.ranges.astype("float64", copy=False)
+
     @property
     def meta(self):
         return self._meta
