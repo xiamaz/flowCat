@@ -135,7 +135,7 @@ def filter_tubedata_existing(tubedata, outdir):
     return ne_tcases
 
 
-def generate_soms(args, all_config, references, recreate=True):
+def generate_soms(args, all_config, recreate=True):
     """Generate sommaps using the given configuration.
     Args:
         all_coufig: Configuration object
@@ -154,6 +154,9 @@ def generate_soms(args, all_config, references, recreate=True):
     selected_markers = None
     if config["somnodes"]["initialization_method"] != "random":
         selected_markers = {k: list(v.columns) for k, v in references.items()}
+        references = generate_reference(args, all_config)
+    else:
+        references = {int(t): None for t in config["view"]["tubes"]}
 
     data = cases.filter(labels=labels, selected_markers=selected_markers, **config["view"])
     if "randnums" in config["somnodes"]:
@@ -174,18 +177,18 @@ def generate_soms(args, all_config, references, recreate=True):
             tubedata = filter_tubedata_existing(tubedata, output_dir)
 
         # get the referece if using reference initialization or sample based
-        if config["somnodes"]["initialization_method"] == "random":
-            reference = None
+        if selected_markers is None:
             used_channels = tubedata.markers
         else:
-            print(references.keys())
-            reference = references[tube]
-            used_channels = list(reference.columns)
+            used_channels = selected_markers[tube]
+        reference = references[tube]
 
         model = tfsom.SOMNodes(
             reference=reference,
             channels=used_channels,
+            tube=tube,
             **config["somnodes"],
+            tensorboard_dir=args.tensorboard,
         )
 
         circ_buffer = collections.deque(maxlen=20)
@@ -248,10 +251,10 @@ def create_config():
     }
 
     # Individual SOMmap configuration
-    c_soms_name = f"randnums_s{c_general_gridsize}_t{c_general_map_type}"
+    c_soms_name = f"eachfromrand_s{c_general_gridsize}_t{c_general_map_type}"
     c_soms_cases = c_general_cases
     c_soms_path = f"output/mll-sommaps/sample_maps/{c_soms_name}"
-    c_soms_labels = None
+    c_soms_labels = "data/selected_cases.txt"
     c_soms_view = {
         "tubes": c_general_tubes,
         "num": None,
@@ -263,26 +266,18 @@ def create_config():
         "m": c_general_gridsize, "n": c_general_gridsize,
         "map_type": c_general_map_type,
         "max_epochs": 10,
-        "initialization_method": "reference",
+        "initialization_method": "random",
         "counts": True,
         "subsample_size": 8192,
         "radius_cooling": "exponential",
         "learning_cooling": "exponential",
         "node_distance": "euclidean",
-        "randnums": {
-            "HCL": 11,
-            "FL": 10,
-            "MCL": 5,
-            "PL": 4,
-            "LPL": 4,
-            "MZL": 3,
-            "MBL": 2,
-        },
+        "randnums": {},
         "fitmap_args": {
-            "max_epochs": 2,
-            "initial_learn": 0.1,
-            "end_learn": 0.05,
-            "initial_radius": 6,
+            "max_epochs": 10,
+            "initial_learn": 0.5,
+            "end_learn": 0.1,
+            "initial_radius": 16,
             "end_radius": 1,
         },
         "model_name": c_soms_name,
@@ -312,11 +307,6 @@ def save_config(args, config):
         raise TypeError(f"Output fmt neither json nor toml format: {args.path}")
 
 
-def create_som(args, config):
-    reference_dict = generate_reference(args, config)
-    generate_soms(args, config, reference_dict, recreate=args.recreate)
-
-
 def main():
     configure_print_logging()
 
@@ -331,7 +321,7 @@ def main():
     parser_conf.set_defaults(fun=save_config)
 
     parser_create = subparsers.add_parser("som", help="Generate individual SOM, will also create reference if missing")
-    parser_create.set_defaults(fun=create_som)
+    parser_create.set_defaults(fun=generate_soms)
 
     parser_ref = subparsers.add_parser("reference", help="Generate reference SOM")
     parser_ref.set_defaults(fun=generate_reference)
