@@ -57,7 +57,7 @@ def print_stats(cpath, cinfo, pfun=print):
     for c in cinfo:
         labels[c["id"]].append(c["cohort"])
     for l in filter(lambda x: len(labels[x]) > 1, labels):
-        pfun(f"")
+        pfun(f"{l}: {labels[l]}")
 
 def print_diff(cpaths, cinfos, pfun=print):
     p1, p2 = cpaths
@@ -73,6 +73,9 @@ def print_diff(cpaths, cinfos, pfun=print):
         l1 = sum(1 for c in c1 if c["cohort"] == group)
         l2 = sum(1 for c in c2 if c["cohort"] == group)
         pfun(f"{group}: {l1} v {l2}: Δ{l2 - l1}")
+        if group == "MCL":
+            missing = {c["id"] for c in c1 if c["cohort"] == group} - {c["id"] for c in c2 if c["cohort"] == group}
+            print("\n".join(missing))
 
 
 def main():
