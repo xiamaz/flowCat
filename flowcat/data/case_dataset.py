@@ -33,6 +33,18 @@ LOGGER = logging.getLogger(__name__)
 INFONAME = "case_info.json"
 
 
+def get_meta(path, how="latest"):
+    if how == "latest":
+        case_info = sorted(path.glob("*.json"))[-1]
+    elif how == "oldest":
+        case_info = sorted(path.glob("*.json"))[0]
+    else:
+        # use how as the complete name
+        case_info = path / how
+        assert case_infos.exists()
+    return case_info
+
+
 def deduplicate_cases_by_sureness(data):
     """Remove duplicates by taking the one with the higher sureness score."""
     label_dict = collections.defaultdict(list)
@@ -285,13 +297,14 @@ class CaseCollection(CaseIterable):
         self.path = path
 
     @classmethod
-    def from_dir(cls, inputpath):
+    def from_dir(cls, inputpath, **kwargs):
         """
         Initialize on datadir with info json.
         Args:
             inputpath: Input directory containing cohorts and a info file.
         """
-        metapath = URLPath(inputpath, INFONAME)
+        inputpath = URLPath(inputpath)
+        metapath = get_meta(inputpath, **kwargs)
         data = [
             Case(d, path=inputpath) for d in load_json(metapath.get())
         ]

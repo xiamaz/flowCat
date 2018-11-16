@@ -125,7 +125,11 @@ class S3Backend(FileBackend):
         return [p.replace(path, "") for p in (files + prefixes)]
 
     def glob(self, netloc, path, pattern):
-        all_files = self.ls(netloc, path, delimiter=None)
+        if not pattern.startswith("/"):
+            delim = "/"
+        else:
+            delim = None
+        all_files = self.ls(netloc, path, delimiter=delim)
         matched = [f for f in all_files if fnmatch.fnmatch(f, pattern)]
         return matched
 

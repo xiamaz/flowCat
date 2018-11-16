@@ -97,7 +97,7 @@ class Case:
             self.group = data["cohort"]
             self.id = data["id"]
             self.short_diagnosis = data["diagnosis"]
-            self.sureness_description = data["sureness"]
+            self.sureness_description = data["sureness"] or ""
             self.sureness = self._infer_sureness()
 
             self.filepaths = data["filepaths"]
