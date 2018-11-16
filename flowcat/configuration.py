@@ -148,6 +148,14 @@ class Configuration:
             data[subsec] = to_int_naming(data[subsec], "selected_markers", "tube")
         return cls(data, section=section)
 
+    @classmethod
+    def from_file(cls, path):
+        if str(path).endswith(".json"):
+            return cls.from_json(path)
+        elif str(path).endswith(".toml"):
+            return cls.from_toml(path)
+        raise TypeError(f"Unknown filetype: {path}")
+
     def to_json(self, path):
         utils.save_json(self.dict, path)
 
@@ -158,6 +166,14 @@ class Configuration:
         for subsec in tomldata:
             tomldata[subsec] = to_string_naming(tomldata[subsec], "selected_markers", "tube")
         utils.save_toml(tomldata, path)
+
+    def to_file(self, path):
+        if str(path).endswith(".json"):
+            self.to_json(path)
+        elif str(path).endswith(".toml"):
+            self.to_toml(path)
+        else:
+            raise TypeError(f"Unknown filetype: {path}")
 
     def __getitem__(self, index):
         """Get data with the given index. Either return another configuration

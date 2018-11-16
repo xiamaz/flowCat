@@ -51,16 +51,19 @@ def deduplicate_cases_by_sureness(data):
     for single in data:
         label_dict[single.id].append(single)
     deduplicated = []
+    duplicates = []
     for cases in label_dict.values():
         cases.sort(key=lambda c: c.sureness, reverse=True)
         if len(cases) == 1 or cases[0].sureness > cases[1].sureness:
             deduplicated.append(cases[0])
         else:
-            LOGGER.warning(
+            duplicates.append(cases[0].id)
+            LOGGER.debug(
                 "DUP both removed: %s (%s), %s (%s)\nSureness: (%s) (%s)",
                 cases[0].id, cases[0].group, cases[1].id, cases[1].group,
                 cases[0].sureness_description, cases[1].sureness_description,
             )
+    LOGGER.warning("%d duplicates removed", len(duplicates))
     return deduplicated
 
 

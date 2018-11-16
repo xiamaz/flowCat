@@ -4,6 +4,7 @@ import os
 import pickle
 import pathlib
 import logging
+import argparse
 
 import numpy as np
 import pandas as pd
@@ -43,15 +44,36 @@ LOGGER = logging.getLogger(__name__)
 GLOBAL_DECAY = 0.001 / 2  # division by two for usage in l2 regularization
 
 
+MODEL_CONSTRUCTORS = {
+    "histogram": histo_nn.create_model_histo,
+    "som": som_cnn.create_model_cnn,
+    "etefcs": fcs_cnn.create_model_fcs,
+}
+
+
+MODEL_BATCH_SIZES = {
+    "train": {
+        "histogram": 64,
+        "som": 16,
+        "etefcs": 16,
+    },
+    "test": {
+        "histogram": 128,
+        "som": 32,
+        "etefcs": 16,
+    }
+}
+
+
 def inverse_binarize(y, classes):
     classes = np.asarray(classes)
     if isinstance(y, pd.DataFrame):
         y = y.values
     if len(classes) > 2:
         return classes.take(y.argmax(axis=1), mode="clip")
-
-    raise RuntimeError("Inverse binary not implemented yet.")
-
+    elif len(classes) == 2:
+        return classes.take(y[:, 1])
+    raise RuntimeError("Cannot invert less than 2 classes.")
 
 def get_weights_by_name(name, groups):
     if name == "weighted":
@@ -141,7 +163,7 @@ def plot_train_history(path, data):
 
 def run_save_model(
         model, trainseq, testseq,
-        train_epochs=200, epsilon=1e-8, initial_rate=1e-3, drop=0.5, epochs_drop=100,
+        train_epochs=200, epsilon=1e-8, initial_rate=1e-3, drop=0.5, epochs_drop=100, num_workers=1, validation=False,
         weights=None, path="mll-sommaps/models", name="0"):
     """Run and predict using the given model. Also save the model in the given
     path with specified name."""
@@ -192,7 +214,7 @@ def run_save_model(
             # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min"),
             create_stepped(initial_rate, drop, epochs_drop),
         ],
-        validation_data=testseq,
+        validation_data=testseq if validation else None,
         # class_weight={
         #     0: 1.0,  # CM
         #     1: 2.0,  # MCL
@@ -206,7 +228,7 @@ def run_save_model(
         workers=4,
         use_multiprocessing=True,
     )
-    pred_mat = model.predict_generator(testseq, workers=4, use_multiprocessing=True)
+    pred_mat = model.predict_generator(testseq, workers=num_workers, use_multiprocessing=True)
 
     model.save(str(modelpath / f"model_{name}.h5"))
     with open(str(modelpath / f"history_{name}.p"), "wb") as hfile:
@@ -309,30 +331,9 @@ def create_output_spec(modelname, dataoptions):
             (loaders.Map2DLoader.create_inferred, {"tube": 1}),
             (loaders.Map2DLoader.create_inferred, {"tube": 2}),
         ]
-    elif modelname == "maphisto":
-        partial_spec = [
-            (loaders.Map2DLoader.create_inferred, {"tube": 1}),
-            (loaders.Map2DLoader.create_inferred, {"tube": 2}),
-            (loaders.CountLoader.create_inferred, {"tube": 1}),
-            (loaders.CountLoader.create_inferred, {"tube": 2}),
-        ]
     elif modelname == "etefcs":
         partial_spec = [
             (loaders.FCSLoader.create_inferred, {"tubes": [1, 2]}),
-        ]
-    elif modelname == "mapfcs":
-        partial_spec = [
-            (loaders.FCSLoader.create_inferred, {"tubes": [1, 2]}),
-            (loaders.Map2DLoader.create_inferred, {"tube": 1}),
-            (loaders.Map2DLoader.create_inferred, {"tube": 2}),
-        ]
-    elif modelname == "maphistofcs":
-        partial_spec = [
-            (loaders.FCSLoader.create_inferred, {"tubes": [1, 2]}),
-            (loaders.Map2DLoader.create_inferred, {"tube": 1}),
-            (loaders.Map2DLoader.create_inferred, {"tube": 2}),
-            (loaders.CountLoader.create_inferred, {"tube": 1}),
-            (loaders.CountLoader.create_inferred, {"tube": 2}),
         ]
     else:
         raise RuntimeError(f"Unknown model {modelname}")
@@ -341,36 +342,6 @@ def create_output_spec(modelname, dataoptions):
     output_spec = [loaders.loader_builder(f, **{**v, **dataoptions[f.__self__.__name__]}) for f, v in partial_spec]
 
     return output_spec
-
-
-MODEL_CONSTRUCTORS = {
-    "histogram": histo_nn.create_model_histo,
-    "som": som_cnn.create_model_cnn,
-    "maphisto": merged_classifiers.create_model_maphisto,
-    "etefcs": fcs_cnn.create_model_fcs,
-    "mapfcs": merged_classifiers.create_model_mapfcs,
-    "maphistofcs": merged_classifiers.create_model_all,
-}
-
-
-MODEL_BATCH_SIZES = {
-    "train": {
-        "histogram": 64,
-        "som": 16,
-        "maphisto": 32,
-        "etefcs": 16,
-        "mapfcs": 16,
-        "maphistofcs": 32,
-    },
-    "test": {
-        "histogram": 128,
-        "som": 32,
-        "maphisto": 32,
-        "etefcs": 16,
-        "mapfcs": 32,
-        "maphistofcs": 32,
-    }
-}
 
 
 def generate_model_inputs(
@@ -398,6 +369,7 @@ def generate_model_inputs(
 
 
 def load_dataset(cases, paths, filters, mapping):
+    LOGGER.info("Loading combined dataset")
     dataset = all_dataset.CombinedDataset.from_paths(cases, paths)
     dataset.filter(**filters)
     dataset.set_mapping(GROUP_MAPS[mapping])
@@ -442,12 +414,12 @@ def setup_logging(logpath):
     LOGGER.setLevel(logging.DEBUG)
     LOGGER.addHandler(filelog)
     LOGGER.addHandler(printlog)
-    modulelog = logging.getLogger("clustering")
+    modulelog = logging.getLogger("flowcat")
     modulelog.setLevel(logging.INFO)
     modulelog.addHandler(filelog)
 
 
-def main():
+def create_config():
     # CONFIGURATION VARIABLES
     c_general_name = "test"
 
@@ -456,28 +428,32 @@ def main():
     c_output_model = "output/test/models"
 
     # file locations
-    c_dataset_cases = "s3://mll-flowdata/CLL-9F"
+    c_dataset_cases = "s3://mll-flowdata/newCLL-9F"
     c_dataset_paths = [
-        ("SOM", "output/mll-sommaps/sample_maps/testrun_s32_ttoroid"),
+        # ("SOM", "output/mll-sommaps/sample_maps/testrun_s32_ttoroid"),
         # ("HISTO", "s3://mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"),
     ]
     c_dataset_filters = {
         "tubes": [1, 2],
         "counts": 10000,
-        "groups": ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
+        # "groups": ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
+        "groups": ["CLL", "normal"],
+        "num": 600,
     }
     c_dataset_mapping = "8class"
 
     # specific train test splitting
-    c_split_test_num = None
-    c_split_train_labels = "data/train_labels.json"
-    c_split_test_labels = "data/test_labels.json"
+    c_split_test_num = 0.2
+    c_split_train_labels = None
+    c_split_test_labels = None
 
     # load existing model and use different parameters for retraining
-    c_model_name = "som"
+    # available models: histogram, som, etefcs
+    c_model_name = "etefcs"
     c_model_loader_options = {
         loaders.FCSLoader.__name__: {
-            "subsample": 100,
+            "subsample": 200,
+            "randomize": False,  # Always change the subsample in different epochs, MUCH SLOWER!
         },
         loaders.CountLoader.__name__: {
             "datatype": "dataframe",
@@ -489,9 +465,9 @@ def main():
     }
     c_model_traindata_args = {
         "batch_size": MODEL_BATCH_SIZES["train"][c_model_name],
-        "draw_method": "balanced",
-        "epoch_size": 16000,
-        "sample_weights": True,
+        "draw_method": "shuffle",  # possible: sequential, shuffle, balanced, groupnum
+        "epoch_size": None,
+        "sample_weights": False,
     }
     c_model_testdata_args = {
         "batch_size": MODEL_BATCH_SIZES["test"][c_model_name],
@@ -507,14 +483,28 @@ def main():
     c_run_drop = 0.5
     c_run_epochs_drop = 50
     c_run_epsilon = 1e-8
+    c_run_num_workers = 1
+    c_run_validation = True
     c_run_path = f"{c_output_model}/{c_general_name}"
 
     # Stat output
     c_stat_confusion_sizes = True
     # END CONFIGURATION VARIABLES
-
     # save configuration variables
     config = Configuration.from_localsdict(locals())
+    return config
+
+def main():
+    parser = argparse.ArgumentParser(description="Classify samples")
+    parser.add_argument("--seed", help="Seed for random number generator", type=int)
+    parser.add_argument("--config", help="Path to configuration file.", type=utils.URLPath)
+    parser.add_argument("--recreate", help="Recreate existing files.", action="store_true")
+    args = parser.parse_args()
+
+    if args.config:
+        config = Configuration.from_file(args.config)
+    else:
+        config = create_config()
 
     outpath = utils.URLPath(f"{config['output']['results']}/{config['general']['name']}")
 
@@ -528,19 +518,20 @@ def main():
 
     dataset = load_dataset(**config["dataset"])
 
-
     # split into train and test set
-    # TODO: enable more complicated designs with kfold etc
+    LOGGER.info("Splitting dataset")
     train, test = all_dataset.split_dataset(dataset, **config["split"])
-    utils.save_json(train.labels, outpath / "train_labels.json")
-    utils.save_json(test.labels, outpath / "test_labels.json")
+    utils.save_json(train.labels, outpath / "train_labels.json", clobber=args.recreate)
+    utils.save_json(test.labels, outpath / "test_labels.json", clobber=args.recreate)
 
-    # TODO: save inputspec with saved model for easier loading
+    LOGGER.info("Getting models")
     model, trainseq, testseq = generate_model_inputs(train, test, **config["model"])
 
+    LOGGER.info("Running model")
     pred_df = run_save_model(
         model, trainseq, testseq, name="0", **config["run"])
 
+    LOGGER.info("Creating statistics")
     create_stats(
         outpath=outpath, dataset=dataset, pred_df=pred_df, **config["stat"])
 

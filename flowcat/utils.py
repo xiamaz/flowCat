@@ -271,7 +271,7 @@ def put_urlpath(fun):
     def put_local(data, path, clobber=False):
         if isinstance(path, URLPath):
             return path.put(lambda p: fun(data, p), clobber=clobber)
-        if clobber and pathlib.Path(path).exists():
+        if not clobber and pathlib.Path(path).exists():
             raise RuntimeError(f"{path} already exists.")
         return fun(data, path)
 
