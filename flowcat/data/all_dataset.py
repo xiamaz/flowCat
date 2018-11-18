@@ -194,7 +194,7 @@ class SOMDataset:
 class CombinedDataset:
     """Combines information from different data sources."""
 
-    def __init__(self, cases, datasets):
+    def __init__(self, cases, datasets, mapping=None):
         """
         Args:
             fcspath: Path to fcs dataset. Necessary because of metainfo access.
@@ -203,7 +203,7 @@ class CombinedDataset:
         self.cases = cases
         self.datasets = datasets
         self.datasets[Datasets.FCS] = cases
-        self.mapping = None
+        self.mapping = mapping
 
     @classmethod
     def from_paths(cls, casepath, paths):
@@ -257,7 +257,7 @@ class CombinedDataset:
 
     def copy(self):
         datasets = {k: v.copy() for k, v in self.datasets.items()}
-        return self.__class__(self.cases.copy(), datasets)
+        return self.__class__(self.cases.copy(), datasets, mapping=self.mapping)
 
     def get(self, label, dtype, randnum=0):
         dtype = Datasets.from_str(dtype) if isinstance(dtype, str) else dtype
