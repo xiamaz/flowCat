@@ -31,6 +31,19 @@ Run availble unittests with:
    ./test.py
 
 
+Performance considerations
+--------------------------
+
+IO of input data can become the limiting factor, especially if the FCS files
+are loaded on-demand from S3 for the FCS end-to-end model. Consider downloading
+the whole dataset before running the classifier itself. This can be done
+with aws-cli.
+
+.. code-block:: sh
+
+   aws sync s3://mll-flowdata/<DATASET NAME> <DATASET NAME>
+
+
 Documentation
 -------------
 
