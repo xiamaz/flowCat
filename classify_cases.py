@@ -138,18 +138,20 @@ def plot_train_history(path, data):
     ax.plot(
         range(len(data["loss"])), data["loss"],
         c="blue", linestyle="--", label="Loss")
-    ax.plot(
-        range(len(data["loss"])), data["val_loss"],
-        c="red", linestyle="--", label="Validation Loss")
+    if "val_loss" in data:
+        ax.plot(
+            range(len(data["loss"])), data["val_loss"],
+            c="red", linestyle="--", label="Validation Loss")
 
     # Testing dataset loss and accuracy metrics
     ax.plot(
         range(len(data["acc"])), data["acc"],
         c="blue", linestyle="-", label="Accuracy")
-    ax.plot(
-        range(len(data["val_acc"])),
-        data["val_acc"],
-        c="red", linestyle="-", label="Validation Accuracy")
+    if "val_acc" in data:
+        ax.plot(
+            range(len(data["val_acc"])),
+            data["val_acc"],
+            c="red", linestyle="-", label="Validation Accuracy")
 
     ax.set_xlabel("No. Epoch")
     ax.set_ylabel("Loss value / Acc")
@@ -421,14 +423,14 @@ def setup_logging(logpath):
 
 def create_config():
     # CONFIGURATION VARIABLES
-    c_general_name = "test"
+    c_general_name = "etefcs"
 
     # Output options
     c_output_results = "output/test/output"
     c_output_model = "output/test/models"
 
     # file locations
-    c_dataset_cases = "s3://mll-flowdata/newCLL-9F"
+    c_dataset_cases = "s3://mll-flowdata/fixedCLL-9F"
     c_dataset_paths = [
         # ("SOM", "output/mll-sommaps/sample_maps/testrun_s32_ttoroid"),
         # ("HISTO", "s3://mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"),
@@ -438,7 +440,7 @@ def create_config():
         "counts": 10000,
         "groups": ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
         # "groups": ["CLL", "normal"],
-        "num": 100,
+        "num": None,
     }
     # available: 8class 6class 5class 3class 2class
     # see flowcat.mappings for details
@@ -486,7 +488,7 @@ def create_config():
     c_run_epochs_drop = 50
     c_run_epsilon = 1e-8
     c_run_num_workers = 1
-    c_run_validation = True
+    c_run_validation = False
     c_run_path = f"{c_output_model}/{c_general_name}"
 
     # Stat output
