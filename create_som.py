@@ -2,7 +2,6 @@
 Create SOM maps to be used as references and individual maps to be used for
 visualization and classification.
 """
-import os
 import time
 import contextlib
 import collections
@@ -13,23 +12,10 @@ import logging
 import numpy as np
 import pandas as pd
 
-from sklearn import preprocessing
-
 from flowcat.models import tfsom
-from flowcat.data import case as ccase
 from flowcat.data.case_dataset import CaseCollection, TubeView
 from flowcat.configuration import Configuration, compare_configurations
-from flowcat import utils
-
-
-# choose another directory to save downloaded data
-if "flowCat_tmp" in os.environ:
-    utils.TMP_PATH = os.environ["flowCat_tmp"]
-
-
-GROUPS = [
-    "CLL", "PL", "FL", "HCL", "LPL", "MBL", "MCL", "MZL", "normal"
-]
+from flowcat import utils, mappings
 
 
 @contextlib.contextmanager
@@ -153,8 +139,8 @@ def generate_soms(args, all_config, recreate=True):
 
     selected_markers = None
     if config["somnodes"]["initialization_method"] != "random":
-        selected_markers = {k: list(v.columns) for k, v in references.items()}
         references = generate_reference(args, all_config)
+        selected_markers = {k: list(v.columns) for k, v in references.items()}
     else:
         references = {int(t): None for t in config["view"]["tubes"]}
 
@@ -212,7 +198,17 @@ def generate_soms(args, all_config, recreate=True):
     return metadata
 
 
-def create_config():
+def create_config(name="testrun"):
+    """Create a configuration object by creating a dictionary from
+    local variables. Only variables with a c_ prefix will be included.
+
+    Creating configuration inside a python function function has the added
+    flexibility to add programmatic calculations and references, which will be
+    encded as easily accessible plaintext in the output configuration file.
+
+    Args:
+        name: Name of the current experiment run.
+    """
     # START Configuration
     # General SOMmap
     c_general_gridsize = 32
@@ -222,7 +218,7 @@ def create_config():
     c_general_tubes = [1, 2]
 
     # Reference SOMmap options
-    c_reference_name = "newselected1"
+    c_reference_name = name
     c_reference_path = f"output/mll-sommaps/reference_maps/{c_reference_name}"
     c_reference_cases = c_general_cases
     c_reference_labels = "data/selected_cases.txt"
@@ -251,7 +247,7 @@ def create_config():
     }
 
     # Individual SOMmap configuration
-    c_soms_name = f"eachfromrand_s{c_general_gridsize}_t{c_general_map_type}"
+    c_soms_name = f"{name}_s{c_general_gridsize}_t{c_general_map_type}"
     c_soms_cases = c_general_cases
     c_soms_path = f"output/mll-sommaps/sample_maps/{c_soms_name}"
     c_soms_labels = "data/selected_cases.txt"
@@ -286,25 +282,24 @@ def create_config():
     # Output Configurations
     # END Configuration
 
-    config = Configuration.from_localsdict(locals())
+    # Only use c_ prefixed variables for configuration generation
+    config = Configuration.from_localsdict(locals(), section="c")
     return config
 
 
-def load_config(path):
-    if str(path).endswith(".json"):
-        return Configuration.from_json(path)
-    elif str(path).endswith(".toml"):
-        return Configuration.from_toml(path)
-    raise TypeError(f"Config file neither json nor toml format: {path}")
-
-
-def save_config(args, config):
-    if str(args.path).endswith(".json"):
-        config.to_json(args.path)
-    elif str(args.path).endswith(".toml"):
-        config.to_toml(args.path)
-    else:
-        raise TypeError(f"Output fmt neither json nor toml format: {args.path}")
+def create_group_maps(tensorboard):
+    """Create SOM maps for each group from selected cases."""
+    class DummyArgs:
+        pass
+    args = DummyArgs()
+    args.config = None
+    args.recreate = True
+    args.tensorboard = tensorboard
+    for group in mappings.GROUPS:
+        print(f"Creating config for {group}")
+        config = create_config(name=f"gsel_{group}")
+        config["soms"]["view"]["groups"] = group
+        generate_soms(args, config)
 
 
 def main():
@@ -314,11 +309,12 @@ def main():
     parser.add_argument("--config", help="Configuration file to load from.", type=utils.URLPath)
     parser.add_argument("--recreate", help="Recreate existing maps.", action="store_true")
     parser.add_argument("--tensorboard", help="Tensorboard directory", type=utils.URLPath)
+    parser.add_argument("--name", help="Name of the current run. Will be used as output folder name.", type=str)
     subparsers = parser.add_subparsers()
 
     parser_conf = subparsers.add_parser("config", help="Generate the config to a specified directory")
     parser_conf.add_argument("path", help="Output path to save configuration", type=utils.URLPath)
-    parser_conf.set_defaults(fun=save_config)
+    parser_conf.set_defaults(fun=lambda args, config: config.to_file(args.path))
 
     parser_create = subparsers.add_parser("som", help="Generate individual SOM, will also create reference if missing")
     parser_create.set_defaults(fun=generate_soms)
@@ -328,9 +324,9 @@ def main():
 
     args = parser.parse_args()
     if args.config:
-        config = load_config(args.config)
+        config = Configuration.from_file(args.config)
     else:
-        config = create_config()
+        config = create_config(name=args.name)
     if hasattr(args, "fun"):
         args.fun(args, config)
     else:
@@ -340,3 +336,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # create_group_maps("tensorboard_test")

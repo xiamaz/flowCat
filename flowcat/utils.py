@@ -13,14 +13,17 @@ from functools import wraps
 import toml
 import pandas as pd
 import boto3
-from botocore.exceptions import ClientError
-
-
-TMP_PATH = "tmp"
-TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 
 
 LOGGER = logging.getLogger(__name__)
+TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
+
+
+if "flowCat_tmp" in os.environ:
+    TMP_PATH = os.environ["flowCat_tmp"]
+    LOGGER.warning("Setting tmp folder to %s", TMP_PATH)
+else:
+    TMP_PATH = "tmp"
 
 
 class Singleton(abc.ABCMeta):

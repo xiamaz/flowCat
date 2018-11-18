@@ -1,6 +1,4 @@
 """Manage configuration for different systems."""
-import toml
-
 from . import utils
 
 
@@ -11,6 +9,11 @@ def infer_sections(data):
     first_level = [k.split("_", 1)[0] for k in data]
     names = set(first_level)
     return names
+
+
+def filter_section(data, section):
+    """Only keep keys, which have the given section as a prefix."""
+    return {k: v for k, v in data.items() if str(k).startswith(section)}
 
 
 def strip_section(data, section):
@@ -35,17 +38,20 @@ def list_a_eq_b(list_a, list_b):
         return False
     return str(sorted(list_a)) == str(sorted(list_b))
 
+
 def dict_a_in_b(dict_a, dict_b):
-    for k, v in dict_a.items():
-        vb = dict_b.get(k, None)
-        if isinstance(v, dict):
-            if not dict_a_in_b(v, vb):
+    """Check that all keys in dictionary A are contained in dictionary B and
+    all contained keys have the same value in both dictionaries."""
+    for k, val in dict_a.items():
+        val_b = dict_b.get(k, None)
+        if isinstance(val, dict):
+            if not dict_a_in_b(val, val_b):
                 return False
-        elif isinstance(v, list):
-            if not list_a_eq_b(v, vb):
+        elif isinstance(val, list):
+            if not list_a_eq_b(val, val_b):
                 return False
         else:
-            if v != vb:
+            if val != val_b:
                 return False
     return True
 
@@ -77,12 +83,11 @@ def compare_configurations(conf_a, conf_b, section="", method="left"):
 
     if method == "left":
         return dict_a_in_b(section_a, section_b)
-    elif method == "right":
+    if method == "right":
         return dict_a_in_b(section_b, section_a)
-    elif method == "both":
+    if method == "both":
         return dict_a_in_b(section_a, section_b) and dict_a_in_b(section_b, section_a)
-    else:
-        raise TypeError(f"Unknown method {method}")
+    raise TypeError(f"Unknown method {method}")
 
 
 def to_int_naming(data, key, tag):
@@ -128,11 +133,18 @@ class Configuration:
         return cls.from_localsdict(data)
 
     @classmethod
-    def from_localsdict(cls, data):
-        """Get from local vars dictionary."""
-        first_sections = infer_sections(data)
-        assert len(first_sections) == 1
-        section = first_sections.pop()
+    def from_localsdict(cls, data, section=None):
+        """Get from local vars dictionary.
+        Args:
+            data: Dictionary containing variables, such as obtained with a locals() call.
+            section: Prefix required. Will be used to filter the input dictionary.
+        """
+        if section is None:
+            first_sections = infer_sections(data)
+            assert len(first_sections) == 1
+            section = first_sections.pop()
+        else:
+            data = filter_section(data, section)
 
         data = strip_section(data, section)
         sections = infer_sections(data)
@@ -141,6 +153,7 @@ class Configuration:
 
     @classmethod
     def from_toml(cls, path):
+        """Load configuration from an existing toml configuration file."""
         data = utils.load_toml(path)
         section = data.pop("section")
         # transform each section
@@ -150,16 +163,20 @@ class Configuration:
 
     @classmethod
     def from_file(cls, path):
+        """Load configuration from an existing file. Will infer the correct
+        format from the file-ending."""
         if str(path).endswith(".json"):
             return cls.from_json(path)
-        elif str(path).endswith(".toml"):
+        if str(path).endswith(".toml"):
             return cls.from_toml(path)
         raise TypeError(f"Unknown filetype: {path}")
 
     def to_json(self, path):
+        """Save configuration data into json file."""
         utils.save_json(self.dict, path)
 
     def to_toml(self, path):
+        """Save configuration data into a toml file."""
         tomldata = self._data.copy()
         tomldata["section"] = self.section
         # transform sections with int keys to strings to avoid TOML errors
@@ -168,6 +185,7 @@ class Configuration:
         utils.save_toml(tomldata, path)
 
     def to_file(self, path):
+        """Save configuration to file. Infer format from file ending."""
         if str(path).endswith(".json"):
             self.to_json(path)
         elif str(path).endswith(".toml"):

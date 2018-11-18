@@ -21,6 +21,10 @@ NAME_MAP = {
     "CLLPL": "PL"
 }
 
+GROUPS = [
+    "CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"
+]
+
 GROUP_MAPS = {
     "8class": {
         "groups": ["CM", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
