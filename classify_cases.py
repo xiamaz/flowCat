@@ -419,6 +419,7 @@ def setup_logging(logpath):
     modulelog = logging.getLogger("flowcat")
     modulelog.setLevel(logging.INFO)
     modulelog.addHandler(filelog)
+    modulelog.addHandler(printlog)
 
 
 def create_config():
@@ -447,7 +448,7 @@ def create_config():
     c_dataset_mapping = "2class"
 
     # specific train test splitting
-    c_split_test_num = 0.2
+    c_split_train_num = 0.9
     c_split_train_labels = None
     c_split_test_labels = None
 
