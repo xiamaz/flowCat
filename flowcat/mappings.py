@@ -1,5 +1,16 @@
 """
 Dicts containing different mappings.
+
+GROUP_MAPS: Mapping information for merging different cohorts
+
+Each map is a dictionary containing:
+- groups key (providing a list of groups, the order of which is used in all output generation)
+- map, which is a dictionary containing all name maps, keep in mind, that more
+  global maps should also contain the names of other merged classes in order to
+  apply these after another mapping
+- sizes, relative sizes of groups, only used for visual purposes in the
+  confusion matrix, in most cases this should translate into the number classes
+  contained in each label
 """
 
 NAME_MAP = {
@@ -36,9 +47,10 @@ GROUP_MAPS = {
             "MZL": "LMF",
             "LPL": "LMF",
             "FL": "LMF",
-            "LM": "LMF",
             "MCL": "MP",
             "PL": "MP",
+            # merged classes
+            "LM": "LMF",
         },
         "sizes": [2, 2, 3, 1, 1, ],
     },
@@ -47,22 +59,20 @@ GROUP_MAPS = {
         "map": {
             "CLL": "CD5+",
             "MBL": "CD5+",
-            "CM": "CD5+",
             "MCL": "CD5+",
             "PL": "CD5+",
-            "MP": "CD5+",
             "MZL": "CD5-",
             "LPL": "CD5-",
             "FL": "CD5-",
+            "HCL": "CD5-",
+            # merged classes
+            "CM": "CD5+",
+            "MP": "CD5+",
             "LM": "CD5-",
             "LMF": "CD5-",
-            "HCL": "CD5-",
         },
         "sizes": [4, 4, 1, ],
-    }
-}
-
-PATHOLOGIC_NORMAL = {
+    },
     "2class": {
         "groups": ["patho", "normal"],
         "map": {
@@ -74,6 +84,14 @@ PATHOLOGIC_NORMAL = {
             "MZL": "patho",
             "FL": "patho",
             "HCL": "patho",
-        }
+            # merged classes
+            "CM": "patho",
+            "MP": "patho",
+            "LM": "patho",
+            "LMF": "patho",
+            "CD5+": "patho",
+            "CD5-": "patho",
+        },
+        "sizes": [1, 1],
     }
 }

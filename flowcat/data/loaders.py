@@ -63,6 +63,7 @@ def mem_cache(fun):
     @functools.wraps(fun)
     def wrapper(*args, **kwargs):
         hashed = args_hasher(*args, **kwargs)
+        # print(f"{fun.__name__}: Size cache: ", len(cache))
         if hashed in cache:
             result = cache[hashed]
         else:
@@ -316,6 +317,7 @@ class FCSLoader(LoaderMixin):
 
     @classmethod
     @mem_cache
+    @disk_cache
     def load_fcs(cls, *args, **kwargs):
         return cls.load_fcs_randomized(*args, **kwargs)
 

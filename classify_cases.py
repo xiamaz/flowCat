@@ -30,7 +30,7 @@ from flowcat.models import fcs_cnn, histo_nn, som_cnn, merged_classifiers
 
 from flowcat import utils
 from flowcat.configuration import Configuration
-from flowcat.mappings import NAME_MAP, GROUP_MAPS, PATHOLOGIC_NORMAL
+from flowcat.mappings import NAME_MAP, GROUP_MAPS
 
 # choose another directory to save downloaded data
 if "flowCat_tmp" in os.environ:
@@ -72,7 +72,7 @@ def inverse_binarize(y, classes):
     if len(classes) > 2:
         return classes.take(y.argmax(axis=1), mode="clip")
     elif len(classes) == 2:
-        return classes.take(y[:, 1])
+        return classes.take(y[:, 1].astype("int64"))
     raise RuntimeError("Cannot invert less than 2 classes.")
 
 def get_weights_by_name(name, groups):
@@ -225,7 +225,7 @@ def run_save_model(
         #     6: 50.0,  # HCL
         #     7: 1.0,  # normal
         # }
-        workers=4,
+        workers=num_workers,
         use_multiprocessing=True,
     )
     pred_mat = model.predict_generator(testseq, workers=num_workers, use_multiprocessing=True)
@@ -436,11 +436,13 @@ def create_config():
     c_dataset_filters = {
         "tubes": [1, 2],
         "counts": 10000,
-        # "groups": ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
-        "groups": ["CLL", "normal"],
-        "num": 600,
+        "groups": ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
+        # "groups": ["CLL", "normal"],
+        "num": 100,
     }
-    c_dataset_mapping = "8class"
+    # available: 8class 6class 5class 3class 2class
+    # see flowcat.mappings for details
+    c_dataset_mapping = "2class"
 
     # specific train test splitting
     c_split_test_num = 0.2
