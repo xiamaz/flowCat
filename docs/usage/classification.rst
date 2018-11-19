@@ -17,12 +17,6 @@ Different models are available to be used for classification depending on the da
 
 * etefcs: classify samples directly from the fcs files
 
-* maphisto: merged classifier combining the som map and histogram representation
-
-* mapfcs: merged classifier combining the som map and fcs data
-
-* maphistofcs: merged classifier combining all three data types
-
 
 Run Classification:
 -------------------------
@@ -38,4 +32,6 @@ To run the classification, configuration parameters need to be set. Some of the 
 
 * Please check the remaining parameters in the script. These can be used to optimize the classifier as needed.
 
-Once the parameters are set, run classify_cases.py
+* Classification can be run by loading an exisiting configuration file. See *config_example.toml* for an example
+
+Once the parameters are set, run classify_cases.py with
