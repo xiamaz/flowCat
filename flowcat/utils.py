@@ -13,14 +13,17 @@ from functools import wraps
 import toml
 import pandas as pd
 import boto3
-from botocore.exceptions import ClientError
-
-
-TMP_PATH = "tmp"
-TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 
 
 LOGGER = logging.getLogger(__name__)
+TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
+
+
+if "flowCat_tmp" in os.environ:
+    TMP_PATH = os.environ["flowCat_tmp"]
+    LOGGER.warning("Setting tmp folder to %s", TMP_PATH)
+else:
+    TMP_PATH = "tmp"
 
 
 class Singleton(abc.ABCMeta):
@@ -253,6 +256,9 @@ class URLPath(object):
             return f"{self.scheme}://{self.netloc}{self.path}"
         return f"{self.path}"
 
+    def __lt__(self, other):
+        return str(self) < str(other)
+
 
 def get_urlpath(fun):
     @wraps(fun)
@@ -268,7 +274,7 @@ def put_urlpath(fun):
     def put_local(data, path, clobber=False):
         if isinstance(path, URLPath):
             return path.put(lambda p: fun(data, p), clobber=clobber)
-        if clobber and pathlib.Path(path).exists():
+        if not clobber and pathlib.Path(path).exists():
             raise RuntimeError(f"{path} already exists.")
         return fun(data, path)
 

@@ -63,6 +63,7 @@ def mem_cache(fun):
     @functools.wraps(fun)
     def wrapper(*args, **kwargs):
         hashed = args_hasher(*args, **kwargs)
+        # print(f"{fun.__name__}: Size cache: ", len(cache))
         if hashed in cache:
             result = cache[hashed]
         else:
@@ -115,6 +116,15 @@ def select_drop_counts(data, sel_count=None):
         errors="ignore"
     )
     return data
+
+
+def label_binarize(data, classes):
+    transformed = preprocessing.label_binarize(data, classes=classes)
+    if len(classes) == 2:
+        transformed = np.hstack((transformed, 1 - transformed))
+    elif len(classes) < 2:
+        raise RuntimeError("Output less than 2 classes.")
+    return transformed
 
 
 def loader_builder(constructor, *args, **kwargs):
@@ -272,10 +282,11 @@ class FCSLoader(LoaderMixin):
 
     dtype = "FCS"
 
-    def __init__(self, tubes, channels=None, subsample=200):
+    def __init__(self, tubes, channels=None, subsample=200, randomize=False,):
         self.tubes = tubes
         self.channels = channels
         self.subsample = subsample
+        self.randomize = randomize
 
     @classmethod
     def create_inferred(cls, data, tubes, subsample=200, channels=None, *args, **kwargs):
@@ -290,7 +301,7 @@ class FCSLoader(LoaderMixin):
         return (self.subsample * len(self.tubes), len(self.channels))
 
     @classmethod
-    def load_fcs(cls, pathdict, subsample, tubes, channels=None):
+    def load_fcs_randomized(cls, pathdict, subsample, tubes, channels=None):
         datas = []
         for tube in tubes:
             data = cls.read_fcs(pathdict[tube])
@@ -304,8 +315,17 @@ class FCSLoader(LoaderMixin):
         else:
             return merged
 
+    @classmethod
+    @mem_cache
+    @disk_cache
+    def load_fcs(cls, *args, **kwargs):
+        return cls.load_fcs_randomized(*args, **kwargs)
+
     def load_data(self, path):
-        return self.load_fcs(path, self.subsample, self.tubes, self.channels)
+        if self.randomize:
+            return self.load_fcs_randomized(path, self.subsample, self.tubes, self.channels)
+        else:
+            return self.load_fcs(path, self.subsample, self.tubes, self.channels)
 
 
 class Map2DLoader(LoaderMixin):
@@ -430,8 +450,10 @@ class DatasetSequence(LoaderMixin, Sequence):
         """
         # changing nothing will always return the same slices of data in each
         # epoch given the same batch numbers
+        # sequential draw method will be cached in batches
         if self.draw_method == "sequential":
             selection = data.get_label_rand_group(self.output_dtypes)
+            self.__getitem__ = mem_cache(self.__getitem__)
         # randomize the batches in subsequent epochs by reshuffling in each new
         # epoch
         elif self.draw_method == "shuffle":
@@ -516,7 +538,7 @@ class DatasetSequence(LoaderMixin, Sequence):
         xdata = [x(batch_data, self._data) for x in self._output_spec]
 
         ydata = [g for _, _, g in batch_data]
-        ybinary = preprocessing.label_binarize(ydata, classes=self.groups)
+        ybinary = label_binarize(ydata, classes=self.groups)
 
         if self.sample_weights:
             sample_weights = np.array(self._data.get_sample_weights(batch_data)) / self.avg_sample_weight * 5

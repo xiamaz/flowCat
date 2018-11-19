@@ -5,12 +5,16 @@ import re
 import enum
 import random
 import functools
+import logging
 import collections
 
 import pandas as pd
 
 from . import case_dataset, loaders
 from .. import utils
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Datasets(enum.Enum):
@@ -194,7 +198,7 @@ class SOMDataset:
 class CombinedDataset:
     """Combines information from different data sources."""
 
-    def __init__(self, cases, datasets):
+    def __init__(self, cases, datasets, mapping=None):
         """
         Args:
             fcspath: Path to fcs dataset. Necessary because of metainfo access.
@@ -203,7 +207,7 @@ class CombinedDataset:
         self.cases = cases
         self.datasets = datasets
         self.datasets[Datasets.FCS] = cases
-        self.mapping = None
+        self.mapping = mapping
 
     @classmethod
     def from_paths(cls, casepath, paths):
@@ -257,7 +261,7 @@ class CombinedDataset:
 
     def copy(self):
         datasets = {k: v.copy() for k, v in self.datasets.items()}
-        return self.__class__(self.cases.copy(), datasets)
+        return self.__class__(self.cases.copy(), datasets, mapping=self.mapping)
 
     def get(self, label, dtype, randnum=0):
         dtype = Datasets.from_str(dtype) if isinstance(dtype, str) else dtype
@@ -294,7 +298,7 @@ class CombinedDataset:
         return [sample_weights[i] for i, *_ in indices]
 
 
-def split_dataset(data, test_num=None, test_labels=None, train_labels=None):
+def split_dataset(data, train_num=None, test_labels=None, train_labels=None):
     """Split data in stratified fashion by group.
     Args:
         data: Dataset to be split. Label should be contained in 'group' column.
@@ -303,30 +307,34 @@ def split_dataset(data, test_num=None, test_labels=None, train_labels=None):
         (train, test) with same columns as input data.
     """
     if test_labels is not None and train_labels is not None:
+        LOGGER.info("Splitting based on provided label files")
+        # simply load label lists from json files
         if not isinstance(test_labels, list):
             test_labels = utils.load_json(test_labels)
         if not isinstance(train_labels, list):
             train_labels = utils.load_json(train_labels)
-    elif test_num is not None:
+    elif train_num is not None:
         group_labels = collections.defaultdict(list)
         for label, group in data.label_groups:
             group_labels[group].append(label)
-
+        LOGGER.info("Stratifying in %d groups with a %f train split.", len(group_labels), train_num)
+        # Splitting into test and train labels
         train_labels = []
         test_labels = []
         for group, labels in group_labels.items():
             random.shuffle(labels)
-            if test_num < 1:
-                k = int(len(labels) * test_num + 0.5)
+            if train_num < 1:
+                k = int(len(labels) * train_num)
             else:
-                if len(labels) < test_num:
-                    raise ValueError(f"{group} size {len(labels)} < {test_num}")
-                k = test_num
+                if len(labels) < train_num:
+                    raise ValueError(f"{group} size {len(labels)} < {train_num}")
+                k = train_num
             train_labels += labels[:k]
             test_labels += labels[k:]
     else:
-        raise RuntimeError
+        raise RuntimeError(f"Specify either train_num or labels")
 
+    LOGGER.info("Splitting into %d train and %d test cases.", len(train_labels), len(test_labels))
     train = data.copy().filter(labels=train_labels)
     test = data.copy().filter(labels=test_labels)
 

@@ -206,7 +206,7 @@ class TFSom:
 
     def __init__(
             self,
-            m, n, channels,
+            m, n, channels, tube,
             max_epochs=10, batch_size=1,
             initial_radius=None, end_radius=None, radius_cooling="linear",
             initial_learning_rate=0.05, end_learning_rate=0.01, learning_cooling="linear",
@@ -222,6 +222,7 @@ class TFSom:
             m, n: Number of rows and columns.
             channels: Columns in the input data. Names will be used for
                 alignment of the input dataframe prior to training and prediction.
+            tube: Tube number only used in config name.
             max_epochs: Number of epochs in training.
             batch_size: Number of cases in a single batch. (Not the number of
                 rows in one FCS files, this is more akin to passing multiple FCS
@@ -250,6 +251,7 @@ class TFSom:
         self._m = abs(int(m))
         self._n = abs(int(n))
         self.channels = list(channels)
+        self.tube = tube
         self._dim = len(channels)
 
         self._initial_radius = max(m, n) / 2.0 if initial_radius is None else float(initial_radius)
@@ -298,7 +300,7 @@ class TFSom:
         # tensorboard visualizations
         self._tensorboard = tensorboard_dir is not None
         if self._tensorboard:
-            self._tensorboard_dir = Path(tensorboard_dir) / self.config_name
+            self._tensorboard_dir = Path(str(tensorboard_dir)) / self.config_name
             self._tensorboard_dir.mkdir(parents=True, exist_ok=True)
             # save configuration
             with open(str(self._tensorboard_dir / "config.json"), "w") as f:
@@ -330,7 +332,7 @@ class TFSom:
     @property
     def config_tag(self):
         """Create config tag without model name."""
-        return f"s{self._m}_e{self._max_epochs}_m{self._map_type}_d{self._node_distance}"
+        return f"t{self.tube}_s{self._m}_e{self._max_epochs}_m{self._map_type}_d{self._node_distance}"
 
     def _initialize_tf_graph(self, batches_per_epoch):
         """Initialize the SOM on the TensorFlow graph"""
