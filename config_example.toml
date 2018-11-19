@@ -1,0 +1,24 @@
+# To run the classification,configuration parameters need to be set. 
+# Some of the parameters that needs to be set are described belowin this example_file
+
+# name for the generated models
+c_general_name = "som_classifier"
+
+# Output directory options
+c_output_results = "output/test/output"
+c_output_model = "output/test/models"
+
+# input file locations
+c_dataset_cases = "s3://mll-flowdata/CLL-9F"
+c_dataset_paths = [
+  ("SOM", "output/mll-sommaps/sample_maps/testrun_s32_ttoroid"),
+# ("HISTO", "s3://mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"),
+]
+
+# specify train and test split
+c_split_train_num = 2
+c_split_train_labels = None
+c_split_test_labels = None
+
+# available models: histogram, som, etefcs
+c_model_name = "som"
