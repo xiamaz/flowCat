@@ -34,4 +34,4 @@ To run the classification, configuration parameters need to be set. Some of the 
 
 * Classification can be run by loading an exisiting configuration file. See *config_example.toml* for an example
 
-Once the parameters are set, run classify_cases.py with
+Once the parameters are set, run classify_cases.py with necessary arguments
