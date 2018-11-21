@@ -49,6 +49,9 @@ class Material(enum.Enum):
             return Material.OTHER
 
 
+ALLOWED_MATERIALS = [Material.PERIPHERAL_BLOOD, Material.BONE_MARROW]
+
+
 class Case:
     """Basic case object containing all metadata for a case."""
     __slots__ = (
@@ -175,12 +178,18 @@ class Case:
 
 
     def get_possible_material(self, tubes, allowed_materials=None):
+        """Get one possible material for the given case.
+        """
         available_materials = self.get_same_materials(tubes)
         if allowed_materials:
             filtered = [m for m in available_materials if m in allowed_materials]
         else:
             filtered = available_materials
         return filtered[0] if filtered else None
+
+    def set_allowed_material(self, tubes):
+        """Set used material to one of the allowed materials."""
+        self.used_material = self.get_possible_material(tubes, ALLOWED_MATERIALS)
 
     def has_same_material(self, tubes, allowed_materials=None):
         if allowed_materials is None:
