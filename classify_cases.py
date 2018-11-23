@@ -525,7 +525,7 @@ def main():
 
     # split into train and test set
     LOGGER.info("Splitting dataset")
-    train, test = all_dataset.split_dataset(dataset, **config["split"])
+    train, test = all_dataset.split_dataset(dataset, **config["split"], seed=args.seed)
     utils.save_json(train.labels, outpath / "train_labels.json", clobber=args.recreate)
     utils.save_json(test.labels, outpath / "test_labels.json", clobber=args.recreate)
 
