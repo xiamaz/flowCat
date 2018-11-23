@@ -298,14 +298,17 @@ class CombinedDataset:
         return [sample_weights[i] for i, *_ in indices]
 
 
-def split_dataset(data, train_num=None, test_labels=None, train_labels=None):
+def split_dataset(data, train_num=None, test_labels=None, train_labels=None, seed=None):
     """Split data in stratified fashion by group.
     Args:
         data: Dataset to be split. Label should be contained in 'group' column.
         test_num: Ratio of samples in test per group or absolute number of samples in each group for test.
+        seed: Seed for randomness in splitting.
     Returns:
         (train, test) with same columns as input data.
     """
+    if seed:
+        random.seed(seed)
     if test_labels is not None and train_labels is not None:
         LOGGER.info("Splitting based on provided label files")
         # simply load label lists from json files
