@@ -70,9 +70,9 @@ def inverse_binarize(y, classes):
     if isinstance(y, pd.DataFrame):
         y = y.values
     if len(classes) > 2:
-        return classes.take(y.argmax(axis=1), mode="clip")
+        return classes.take(y.argmax(axis=1), mode="raise")
     elif len(classes) == 2:
-        return classes.take(y[:, 1].astype("int64"))
+        return classes.take(y.argmax(axis=1), mode="raise")
     raise RuntimeError("Cannot invert less than 2 classes.")
 
 def get_weights_by_name(name, groups):
