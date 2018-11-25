@@ -198,7 +198,7 @@ class SOMDataset:
 class CombinedDataset:
     """Combines information from different data sources."""
 
-    def __init__(self, cases, datasets, mapping=None):
+    def __init__(self, cases, datasets, mapping=None, group_names=None):
         """
         Args:
             fcspath: Path to fcs dataset. Necessary because of metainfo access.
@@ -207,9 +207,10 @@ class CombinedDataset:
         self.cases = cases
         self.datasets = datasets
         self.mapping = mapping
+        self._group_names = group_names
 
     @classmethod
-    def from_paths(cls, casepath, paths):
+    def from_paths(cls, casepath, paths, **kwargs):
         """Initialize from a list of paths with associated types.
         Args:
             casepath: Path to fcs dataset also containing all metadata for cases.
@@ -220,7 +221,7 @@ class CombinedDataset:
             Datasets.from_str(name): Datasets.from_str(name).get_class().from_path(path) if path != casepath else cases
             for name, path in paths
         }
-        return cls(cases, datasets)
+        return cls(cases, datasets, **kwargs)
 
     @property
     def fcs(self):
@@ -245,9 +246,15 @@ class CombinedDataset:
             return [self.mapping["map"].get(g, g) for g in self.fcs.groups]
         return self.fcs.groups
 
+    @property
+    def group_names(self):
+        if self.mapping is not None:
+            return self.mapping["groups"]
+        else:
+            return self._group_names
+
     def get_label_rand_group(self, dtypes):
-        """Return list of label, randnum, group tuples
-        using the dtypes requested."""
+        """Return list of label, randnum, group tuples using the dtypes requested."""
         lrandnums = [self.get_randnums(d) for d in dtypes]
         randnums = lrandnums[0]
         for randset in lrandnums[1:]:
@@ -264,7 +271,7 @@ class CombinedDataset:
 
     def copy(self):
         datasets = {k: v.copy() for k, v in self.datasets.items()}
-        return self.__class__(self.cases.copy(), datasets, mapping=self.mapping)
+        return self.__class__(self.cases.copy(), datasets, mapping=self.mapping, group_names=self._group_names)
 
     def get(self, label, dtype, randnum=0):
         dtype = Datasets.from_str(dtype) if isinstance(dtype, str) else dtype

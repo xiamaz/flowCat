@@ -1,4 +1,6 @@
 """Manage configuration for different systems."""
+import collections
+
 from . import utils
 
 
@@ -117,7 +119,7 @@ class Configuration:
     def __init__(self, data, section=""):
         """Initialize from input data."""
         self.section = section
-        self._data = data
+        self._data = {k: collections.defaultdict(lambda: None, v) for k, v in data.items()}
 
     @property
     def dict(self):
