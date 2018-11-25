@@ -59,6 +59,7 @@ def inverse_binarize(y, classes):
         return classes.take(y.argmax(axis=1), mode="raise")
     raise RuntimeError("Cannot invert less than 2 classes.")
 
+
 def get_weights_by_name(name, groups):
     if name == "weighted":
         # Group weights are a dict mapping tuples to tuples. Weights are for
