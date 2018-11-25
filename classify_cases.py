@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import math
 import json
 import os
@@ -401,25 +402,45 @@ def create_stats(outpath, dataset, pred_df, confusion_sizes):
             json.dump(stats, jsfile)
 
 
-def setup_logging(logpath):
-    # setup logging
-    filelog = logging.FileHandler(str(logpath))
-    filelog.setLevel(logging.DEBUG)
-    printlog = logging.StreamHandler()
-    printlog.setLevel(logging.INFO)
+LOGGING_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-    fileform = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    filelog.setFormatter(fileform)
-    printform = logging.Formatter("%(levelname)s - %(message)s")
-    printlog.setFormatter(printform)
 
-    LOGGER.setLevel(logging.DEBUG)
-    LOGGER.addHandler(filelog)
-    LOGGER.addHandler(printlog)
-    modulelog = logging.getLogger("flowcat")
-    modulelog.setLevel(logging.INFO)
-    modulelog.addHandler(filelog)
-    modulelog.addHandler(printlog)
+def add_logger(log, handlers, level=logging.DEBUG):
+    if isinstance(log, str):
+        log = logging.getLogger(log)
+    elif not isinstance(log, logging.Logger):
+        raise TypeError("Wrong type for log")
+
+    log.setLevel(level)
+    for handler in handlers:
+        log.addHandler(handler)
+
+
+def create_handler(handler, fmt, level=logging.DEBUG):
+    handler.setLevel(level)
+    if not isinstance(fmt, logging.Formatter):
+        fmt = logging.Formatter(fmt)
+    handler.setFormatter(fmt)
+    return handler
+
+
+def setup_logging(filelog=None, filelevel=logging.DEBUG, printlevel=logging.WARNING):
+    """Setup logging to both visible output and file output.
+    Args:
+        filelog: Logging file. Will not log to file if None
+        filelevel: Logging level inside file.
+        printlevel: Logging level for visible output.
+    """
+    handlers = [
+        create_handler(logging.StreamHandler(), LOGGING_FORMAT, printlevel),
+    ]
+    if filelog is not None:
+        handlers.append(
+            create_handler(logging.FileHandler(str(filelog)), LOGGING_FORMAT, filelevel)
+        )
+
+    add_logger("flowcat", handlers, level=logging.DEBUG)
+    add_logger(LOGGER, handlers, level=logging.DEBUG)
 
 
 def create_config():
@@ -439,13 +460,13 @@ def create_config():
     c_dataset_filters = {
         "tubes": [1, 2],
         "counts": 10000,
-        "groups": ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
-        # "groups": ["CLL", "normal"],
-        "num": None,
+        # "groups": ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
+        "groups": ["CLL", "MZL", "normal"],
+        "num": 600,
     }
     # available: 8class 6class 5class 3class 2class
     # see flowcat.mappings for details
-    c_dataset_mapping = "2class"
+    c_dataset_mapping = "3class"
 
     # specific train test splitting
     c_split_train_num = 0.9
@@ -489,7 +510,7 @@ def create_config():
     c_run_epochs_drop = 50
     c_run_epsilon = 1e-8
     c_run_num_workers = 1
-    c_run_validation = False
+    c_run_validation = True
     c_run_path = f"{c_output_model}/{c_general_name}"
 
     # Stat output
@@ -499,13 +520,7 @@ def create_config():
     config = Configuration.from_localsdict(locals())
     return config
 
-def main():
-    parser = argparse.ArgumentParser(description="Classify samples")
-    parser.add_argument("--seed", help="Seed for random number generator", type=int)
-    parser.add_argument("--config", help="Path to configuration file.", type=utils.URLPath)
-    parser.add_argument("--recreate", help="Recreate existing files.", action="store_true")
-    args = parser.parse_args()
-
+def run(args):
     if args.config:
         config = Configuration.from_file(args.config)
     else:
@@ -516,7 +531,7 @@ def main():
     # Create logfiles
     logpath = outpath / f"classification.log"
     logpath.local.parent.mkdir(parents=True, exist_ok=True)
-    setup_logging(logpath)
+    setup_logging(logpath, printlevel=logging.INFO)
 
     # save configuration
     config.to_toml(outpath / "config.toml")
@@ -539,6 +554,45 @@ def main():
     LOGGER.info("Creating statistics")
     create_stats(
         outpath=outpath, dataset=dataset, pred_df=pred_df, **config["stat"])
+
+
+def config(args):
+    setup_logging(filelog=None, printlevel=logging.ERROR)
+    config = create_config()
+    if args.output is None:
+        print(getattr(config, args.format))
+    else:
+        print(f"Writing configuration to {args.output}")
+        getattr(config, f"to_{args.format}")(args.output)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Classify samples")
+    subparsers = parser.add_subparsers()
+
+    # Save configuration files in specified in the create configuration file
+    cparser = subparsers.add_parser("config", help="Output the current configuration. Hint: Get rid of import messages by eg piping stderr to /dev/null")
+    cparser.add_argument("-o", "--output", help="Write configuration to output file.", type=utils.URLPath)
+    cparser.add_argument(
+        "--format",
+        help="Format of configuration. Either json or toml.",
+        choices=["json", "toml"],
+        default="toml",)
+    cparser.set_defaults(fun=config)
+
+    # Run the classification process
+    rparser = subparsers.add_parser("run", help="Run classification")
+    rparser.add_argument("--seed", help="Seed for random number generator", type=int)
+    rparser.add_argument("--config", help="Path to configuration file.", type=utils.URLPath)
+    rparser.add_argument("--recreate", help="Recreate existing files.", action="store_true")
+    rparser.set_defaults(fun=run)
+
+    args = parser.parse_args()
+
+    if not hasattr(args, "fun") or args.fun is None:
+        parser.print_help()
+    else:
+        args.fun(args)
 
 
 if __name__ == "__main__":
