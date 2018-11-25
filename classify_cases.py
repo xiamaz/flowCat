@@ -378,10 +378,10 @@ def load_dataset(pathconfig, config):
     LOGGER.info("Loading combined dataset")
     casepath = pathconfig["input"]["cases"]
     datasets = pathconfig["input"]["datasets"]
-    dataset = all_dataset.CombinedDataset.from_paths(casepath, datasets)
-
     filters = config["dataset"]["filters"]
     mapping = config["dataset"]["mapping"]
+
+    dataset = all_dataset.CombinedDataset.from_paths(casepath, datasets, group_names=filters["groups"])
     dataset.filter(**filters)
     dataset.set_mapping(GROUP_MAPS[mapping])
     dataset.set_available([n for n, _ in datasets])
