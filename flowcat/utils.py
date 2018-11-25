@@ -26,6 +26,14 @@ else:
     TMP_PATH = "tmp"
 
 
+# Overwrites existing data if true
+if "flowCat_clobber" in os.environ:
+    CLOBBER = bool(os.environ["flowCat_clobber"])
+    LOGGER.warning(f"Setting clobber to {CLOBBER}")
+else:
+    CLOBBER = False
+
+
 class Singleton(abc.ABCMeta):
     _instances = {}
 
@@ -214,17 +222,16 @@ class URLPath(object):
         """Load the file if it is not already local."""
         return self._backend.get(self.local, self.netloc, self.path)
 
-    def put(self, writefun, clobber=False):
+    def put(self, writefun):
         """Create a new file using a given write function.
         Args:
             writefun: Function writing data to a given path.
-            clobber: Overwrite data in the location.
         """
-        if not self.local.exists() or clobber:
-            self.local.parent.mkdir(parents=True, exist_ok=True)
-            writefun(str(self.local))
-
-        self._backend.put(self.local, self.netloc, self.path, clobber=clobber)
+        if self.local.exists() and not CLOBBER:
+            raise RuntimeError(f"{self} already exists and clobber is {CLOBBER}. Use env var flowCat_clobber to overwrite files.")
+        self.local.parent.mkdir(parents=True, exist_ok=True)
+        writefun(str(self.local))
+        self._backend.put(self.local, self.netloc, self.path, clobber=CLOBBER)
 
     def clear(self):
         """Remove temporary file if remote resource."""
@@ -271,10 +278,10 @@ def get_urlpath(fun):
 
 def put_urlpath(fun):
     @wraps(fun)
-    def put_local(data, path, clobber=False):
+    def put_local(data, path):
         if isinstance(path, URLPath):
-            return path.put(lambda p: fun(data, p), clobber=clobber)
-        if not clobber and pathlib.Path(path).exists():
+            return path.put(lambda p: fun(data, p))
+        if not CLOBBER and pathlib.Path(path).exists():
             raise RuntimeError(f"{path} already exists.")
         return fun(data, path)
 

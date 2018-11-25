@@ -206,15 +206,18 @@ class CombinedDataset:
         """
         self.cases = cases
         self.datasets = datasets
-        self.datasets[Datasets.FCS] = cases
         self.mapping = mapping
 
     @classmethod
     def from_paths(cls, casepath, paths):
-        """Initialize from a list of paths with associated types."""
+        """Initialize from a list of paths with associated types.
+        Args:
+            casepath: Path to fcs dataset also containing all metadata for cases.
+            paths: Path to additional datasets with preprocessed data or other additional information.
+        """
         cases = case_dataset.CaseCollection.from_dir(casepath)
         datasets = {
-            Datasets.from_str(name): Datasets.from_str(name).get_class().from_path(path)
+            Datasets.from_str(name): Datasets.from_str(name).get_class().from_path(path) if path != casepath else cases
             for name, path in paths
         }
         return cls(cases, datasets)
