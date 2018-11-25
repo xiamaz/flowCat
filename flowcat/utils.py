@@ -323,6 +323,14 @@ def save_toml(data, path):
         toml.dump(data, f)
 
 
+def to_json(data):
+    return json.dumps(data, indent=4)
+
+
+def to_toml(data):
+    return toml.dumps(data)
+
+
 @get_urlpath
 def load_csv(path):
     data = pd.read_csv(str(path), index_col=0)
