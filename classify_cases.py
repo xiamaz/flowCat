@@ -520,6 +520,16 @@ def create_config():
     config = Configuration.from_localsdict(locals())
     return config
 
+
+def args_loglevel(vlevel):
+    """Get logging level from number of verbosity chars."""
+    if vlevel == 1:
+        return logging.INFO
+    if vlevel >= 2:
+        return logging.DEBUG
+    return logging.WARNING
+
+
 def run(args):
     if args.config:
         config = Configuration.from_file(args.config)
@@ -531,7 +541,7 @@ def run(args):
     # Create logfiles
     logpath = outpath / f"classification.log"
     logpath.local.parent.mkdir(parents=True, exist_ok=True)
-    setup_logging(logpath, printlevel=logging.INFO)
+    setup_logging(logpath, printlevel=args_loglevel(args.verbose))
 
     # save configuration
     config.to_toml(outpath / "config.toml")
@@ -585,6 +595,7 @@ def main():
     rparser.add_argument("--seed", help="Seed for random number generator", type=int)
     rparser.add_argument("--config", help="Path to configuration file.", type=utils.URLPath)
     rparser.add_argument("--recreate", help="Recreate existing files.", action="store_true")
+    rparser.add_argument("-v", "--verbose", help="Control verbosity. -v is info, -vv is debug", action="count")
     rparser.set_defaults(fun=run)
 
     args = parser.parse_args()
