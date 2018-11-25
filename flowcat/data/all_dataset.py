@@ -337,7 +337,9 @@ def split_dataset(data, train_num=None, test_labels=None, train_labels=None, see
     else:
         raise RuntimeError(f"Specify either train_num or labels")
 
-    LOGGER.info("Splitting into %d train and %d test cases. (seed %d)", len(train_labels), len(test_labels), seed)
+    LOGGER.info(
+        "Splitting into %d train and %d test cases. (seed %s)",
+        len(train_labels), len(test_labels), str(seed))
     train = data.copy().filter(labels=train_labels)
     test = data.copy().filter(labels=test_labels)
 
