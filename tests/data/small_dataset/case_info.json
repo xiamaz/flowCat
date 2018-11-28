@@ -1,0 +1,852 @@
+[
+    {
+        "id": "a027a84b1b80e1f10666f9915ec8d5cb147fe2ac",
+        "date": "2017-07-29",
+        "filepaths": [
+            {
+                "id": "a027a84b1b80e1f10666f9915ec8d5cb147fe2ac",
+                "panel": "CLL 9F",
+                "tube": 3,
+                "date": "2017-07-29",
+                "material": "PB",
+                "fcs": {
+                    "path": "LPL/a027a84b1b80e1f10666f9915ec8d5cb147fe2ac-PB CLL 9F 03 N13 003.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "CD8-FITC",
+                        "CD4-PE",
+                        "CD3-ECD",
+                        "nix-PC5.5",
+                        "nix-PC7",
+                        "CD56-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "HLA-DR-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "a027a84b1b80e1f10666f9915ec8d5cb147fe2ac",
+                "panel": "CLL 9F",
+                "tube": 2,
+                "date": "2017-07-29",
+                "material": "PB",
+                "fcs": {
+                    "path": "LPL/a027a84b1b80e1f10666f9915ec8d5cb147fe2ac-PB CLL 9F 02 N13 002.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "Kappa-FITC",
+                        "Lambda-PE",
+                        "CD38-ECD",
+                        "CD25-PC5.5",
+                        "CD11c-PC7",
+                        "CD103-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD22-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "a027a84b1b80e1f10666f9915ec8d5cb147fe2ac",
+                "panel": "CLL 9F",
+                "tube": 1,
+                "date": "2017-07-29",
+                "material": "PB",
+                "fcs": {
+                    "path": "LPL/a027a84b1b80e1f10666f9915ec8d5cb147fe2ac-PB CLL 9F 01 N13 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "FMC7-FITC",
+                        "CD10-PE",
+                        "IgM-ECD",
+                        "CD79b-PC5.5",
+                        "CD20-PC7",
+                        "CD23-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD5-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            }
+        ],
+        "infiltration": 4.0,
+        "diagnosis": "Reife B-Zellneoplasie",
+        "cohort": "LPL",
+        "sureness": ""
+    },
+    {
+        "id": "36a99bbc331dd093fa5f7a25fe795f2e813a1a89",
+        "date": "2016-10-04",
+        "filepaths": [
+            {
+                "id": "36a99bbc331dd093fa5f7a25fe795f2e813a1a89",
+                "panel": "CLL 9F",
+                "tube": 2,
+                "date": "2016-10-04",
+                "material": "3",
+                "fcs": {
+                    "path": "normal/36a99bbc331dd093fa5f7a25fe795f2e813a1a89-3 CLL 9F 02 N07 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "Kappa-FITC",
+                        "Lambda-PE",
+                        "CD38-ECD",
+                        "CD25-PC5.5",
+                        "CD11c-PC7",
+                        "CD103-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD22-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "36a99bbc331dd093fa5f7a25fe795f2e813a1a89",
+                "panel": "CLL 9F",
+                "tube": 3,
+                "date": "2016-10-04",
+                "material": "3",
+                "fcs": {
+                    "path": "normal/36a99bbc331dd093fa5f7a25fe795f2e813a1a89-3 CLL 9F 03 N06 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "CD8-FITC",
+                        "CD4-PE",
+                        "CD3-ECD",
+                        "nix-PC5.5",
+                        "nix-PC7",
+                        "CD56-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "HLA-DR-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "36a99bbc331dd093fa5f7a25fe795f2e813a1a89",
+                "panel": "CLL 9F",
+                "tube": 1,
+                "date": "2016-10-04",
+                "material": "3",
+                "fcs": {
+                    "path": "normal/36a99bbc331dd093fa5f7a25fe795f2e813a1a89-3 CLL 9F 01 N06 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "FMC7-FITC",
+                        "CD10-PE",
+                        "IgM-ECD",
+                        "CD79b-PC5.5",
+                        "CD20-PC7",
+                        "CD23-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD5-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            }
+        ],
+        "infiltration": 0.0,
+        "diagnosis": "Kein Hinweis auf Lymphom",
+        "cohort": "normal",
+        "sureness": ""
+    },
+    {
+        "id": "70d3d6cc1d4bbd6f942164fccdfeff7ba2cf685d",
+        "date": "2016-07-13",
+        "filepaths": [
+            {
+                "id": "70d3d6cc1d4bbd6f942164fccdfeff7ba2cf685d",
+                "panel": "CLL 9F",
+                "tube": 2,
+                "date": "2016-07-13",
+                "material": "4",
+                "fcs": {
+                    "path": "normal/70d3d6cc1d4bbd6f942164fccdfeff7ba2cf685d-4 CLL 9F 02 N08 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "Kappa-FITC",
+                        "Lambda-PE",
+                        "CD38-ECD",
+                        "CD25-PC5.5",
+                        "CD11c-PC7",
+                        "CD103-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD22-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "70d3d6cc1d4bbd6f942164fccdfeff7ba2cf685d",
+                "panel": "CLL 9F",
+                "tube": 3,
+                "date": "2016-07-13",
+                "material": "4",
+                "fcs": {
+                    "path": "normal/70d3d6cc1d4bbd6f942164fccdfeff7ba2cf685d-4 CLL 9F 03 N06 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "CD8-FITC",
+                        "CD4-PE",
+                        "CD3-ECD",
+                        "nix-PC5.5",
+                        "nix-PC7",
+                        "CD56-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "HLA-DR-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "70d3d6cc1d4bbd6f942164fccdfeff7ba2cf685d",
+                "panel": "CLL 9F",
+                "tube": 1,
+                "date": "2016-07-13",
+                "material": "4",
+                "fcs": {
+                    "path": "normal/70d3d6cc1d4bbd6f942164fccdfeff7ba2cf685d-4 CLL 9F 01 N06 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "FMC7-FITC",
+                        "CD10-PE",
+                        "IgM-ECD",
+                        "CD79b-PC5.5",
+                        "CD20-PC7",
+                        "CD23-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD5-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            }
+        ],
+        "infiltration": 0.0,
+        "diagnosis": "Kein Hinweis auf Lymphom",
+        "cohort": "normal",
+        "sureness": ""
+    },
+    {
+        "id": "6cc25ce9abfd4d3fce14f4baee1c1ea48d7fd524",
+        "date": "2017-08-09",
+        "filepaths": [
+            {
+                "id": "6cc25ce9abfd4d3fce14f4baee1c1ea48d7fd524",
+                "panel": "CLL 9F",
+                "tube": 2,
+                "date": "2017-08-09",
+                "material": "3",
+                "fcs": {
+                    "path": "CLL/6cc25ce9abfd4d3fce14f4baee1c1ea48d7fd524-3 CLL 9F 02 N14 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "Kappa-FITC",
+                        "Lambda-PE",
+                        "CD38-ECD",
+                        "CD25-PC5.5",
+                        "CD11c-PC7",
+                        "CD103-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD22-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 35563
+                }
+            },
+            {
+                "id": "6cc25ce9abfd4d3fce14f4baee1c1ea48d7fd524",
+                "panel": "CLL 9F",
+                "tube": 3,
+                "date": "2017-08-09",
+                "material": "3",
+                "fcs": {
+                    "path": "CLL/6cc25ce9abfd4d3fce14f4baee1c1ea48d7fd524-3 CLL 9F 03 N16 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "CD8-FITC",
+                        "CD4-PE",
+                        "CD3-ECD",
+                        "nix-PC5.5",
+                        "nix-PC7",
+                        "CD56-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "HLA-DR-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "6cc25ce9abfd4d3fce14f4baee1c1ea48d7fd524",
+                "panel": "CLL 9F",
+                "tube": 1,
+                "date": "2017-08-09",
+                "material": "3",
+                "fcs": {
+                    "path": "CLL/6cc25ce9abfd4d3fce14f4baee1c1ea48d7fd524-3 CLL 9F 01 N16 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "FMC7-FITC",
+                        "CD10-PE",
+                        "IgM-ECD",
+                        "CD79b-PC5.5",
+                        "CD20-PC7",
+                        "CD23-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD5-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            }
+        ],
+        "infiltration": 57.0,
+        "diagnosis": "CLL",
+        "cohort": "CLL",
+        "sureness": ""
+    },
+    {
+        "id": "6dc13f6237012b484f2a50793ac0eafd0dd8aebf",
+        "date": "2016-08-03",
+        "filepaths": [
+            {
+                "id": "6dc13f6237012b484f2a50793ac0eafd0dd8aebf",
+                "panel": "CLL 9F",
+                "tube": 2,
+                "date": "2016-08-03",
+                "material": "3",
+                "fcs": {
+                    "path": "PL/6dc13f6237012b484f2a50793ac0eafd0dd8aebf-3 CLL 9F 02 N12 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "Kappa-FITC",
+                        "Lambda-PE",
+                        "CD38-ECD",
+                        "CD25-PC5.5",
+                        "CD11c-PC7",
+                        "CD103-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD22-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 48278
+                }
+            },
+            {
+                "id": "6dc13f6237012b484f2a50793ac0eafd0dd8aebf",
+                "panel": "CLL 9F",
+                "tube": 1,
+                "date": "2016-08-03",
+                "material": "3",
+                "fcs": {
+                    "path": "PL/6dc13f6237012b484f2a50793ac0eafd0dd8aebf-3 CLL 9F 01 N09 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "FMC7-FITC",
+                        "CD10-PE",
+                        "IgM-ECD",
+                        "CD79b-PC5.5",
+                        "CD20-PC7",
+                        "CD23-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD5-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "6dc13f6237012b484f2a50793ac0eafd0dd8aebf",
+                "panel": "CLL 9F",
+                "tube": 3,
+                "date": "2016-08-03",
+                "material": "3",
+                "fcs": {
+                    "path": "PL/6dc13f6237012b484f2a50793ac0eafd0dd8aebf-3 CLL 9F 03 N09 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "CD8-FITC",
+                        "CD4-PE",
+                        "CD3-ECD",
+                        "nix-PC5.5",
+                        "nix-PC7",
+                        "CD56-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "HLA-DR-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 46702
+                }
+            }
+        ],
+        "infiltration": 41.0,
+        "diagnosis": "Reife B-Zellneoplasie",
+        "cohort": "PL",
+        "sureness": "kein Nachweis eines IGH-CCND1-Rearrangements"
+    },
+    {
+        "id": "eef5b3d2f21e780715a806532c7da42a2ed8cd3a",
+        "date": "2017-06-21",
+        "filepaths": [
+            {
+                "id": "eef5b3d2f21e780715a806532c7da42a2ed8cd3a",
+                "panel": "CLL 9F",
+                "tube": 3,
+                "date": "2017-06-21",
+                "material": "2",
+                "fcs": {
+                    "path": "normal/eef5b3d2f21e780715a806532c7da42a2ed8cd3a-2 CLL 9F 03 N14 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "CD8-FITC",
+                        "CD4-PE",
+                        "CD3-ECD",
+                        "nix-PC5.5",
+                        "nix-PC7",
+                        "CD56-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "HLA-DR-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "eef5b3d2f21e780715a806532c7da42a2ed8cd3a",
+                "panel": "CLL 9F",
+                "tube": 2,
+                "date": "2017-06-21",
+                "material": "2",
+                "fcs": {
+                    "path": "normal/eef5b3d2f21e780715a806532c7da42a2ed8cd3a-2 CLL 9F 02 N14 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "Kappa-FITC",
+                        "Lambda-PE",
+                        "CD38-ECD",
+                        "CD25-PC5.5",
+                        "CD11c-PC7",
+                        "CD103-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD22-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "eef5b3d2f21e780715a806532c7da42a2ed8cd3a",
+                "panel": "CLL 9F",
+                "tube": 1,
+                "date": "2017-06-21",
+                "material": "2",
+                "fcs": {
+                    "path": "normal/eef5b3d2f21e780715a806532c7da42a2ed8cd3a-2 CLL 9F 01 N14 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "FMC7-FITC",
+                        "CD10-PE",
+                        "IgM-ECD",
+                        "CD79b-PC5.5",
+                        "CD20-PC7",
+                        "CD23-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD5-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            }
+        ],
+        "infiltration": 0.0,
+        "diagnosis": "Kein Hinweis auf Lymphom",
+        "cohort": "normal",
+        "sureness": ""
+    },
+    {
+        "id": "7c80bee8bc439994bdfdae58c3182a6d0bd29059",
+        "date": "2017-03-09",
+        "filepaths": [
+            {
+                "id": "7c80bee8bc439994bdfdae58c3182a6d0bd29059",
+                "panel": "CLL 9F",
+                "tube": 1,
+                "date": "2017-03-09",
+                "material": "KM",
+                "fcs": {
+                    "path": "CLL/7c80bee8bc439994bdfdae58c3182a6d0bd29059-KM CLL 9F 01 N07 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "FMC7-FITC",
+                        "CD10-PE",
+                        "IgM-ECD",
+                        "CD79b-PC5.5",
+                        "CD20-PC7",
+                        "CD23-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD5-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 30711
+                }
+            },
+            {
+                "id": "7c80bee8bc439994bdfdae58c3182a6d0bd29059",
+                "panel": "CLL 9F",
+                "tube": 2,
+                "date": "2017-03-09",
+                "material": "KM",
+                "fcs": {
+                    "path": "CLL/7c80bee8bc439994bdfdae58c3182a6d0bd29059-KM CLL 9F 02 N08 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "Kappa-FITC",
+                        "Lambda-PE",
+                        "CD38-ECD",
+                        "CD25-PC5.5",
+                        "CD11c-PC7",
+                        "CD103-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD22-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 30400
+                }
+            },
+            {
+                "id": "7c80bee8bc439994bdfdae58c3182a6d0bd29059",
+                "panel": "CLL 9F",
+                "tube": 3,
+                "date": "2017-03-09",
+                "material": "KM",
+                "fcs": {
+                    "path": "CLL/7c80bee8bc439994bdfdae58c3182a6d0bd29059-KM CLL 9F 03 N07 002.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "CD8-FITC",
+                        "CD4-PE",
+                        "CD3-ECD",
+                        "nix-PC5.5",
+                        "nix-PC7",
+                        "CD56-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "HLA-DR-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 41224
+                }
+            }
+        ],
+        "infiltration": 79.0,
+        "diagnosis": "CLL",
+        "cohort": "CLL",
+        "sureness": ""
+    },
+    {
+        "id": "7b463e7431b89c59c7400749de627b6133184521",
+        "date": "2016-03-24",
+        "filepaths": [
+            {
+                "id": "7b463e7431b89c59c7400749de627b6133184521",
+                "panel": "CLL 9F",
+                "tube": 2,
+                "date": "2016-03-24",
+                "material": "3",
+                "fcs": {
+                    "path": "normal/7b463e7431b89c59c7400749de627b6133184521-3 CLL 9F 02 N05 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "Kappa-FITC",
+                        "Lambda-PE",
+                        "CD38-ECD",
+                        "CD25-PC5.5",
+                        "CD11c-PC7",
+                        "CD103-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD22-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "7b463e7431b89c59c7400749de627b6133184521",
+                "panel": "CLL 9F",
+                "tube": 3,
+                "date": "2016-03-24",
+                "material": "3",
+                "fcs": {
+                    "path": "normal/7b463e7431b89c59c7400749de627b6133184521-3 CLL 9F 03 N11 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "CD8-FITC",
+                        "CD4-PE",
+                        "CD3-ECD",
+                        "nix-PC5.5",
+                        "nix-PC7",
+                        "CD56-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "HLA-DR-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "7b463e7431b89c59c7400749de627b6133184521",
+                "panel": "CLL 9F",
+                "tube": 1,
+                "date": "2016-03-24",
+                "material": "3",
+                "fcs": {
+                    "path": "normal/7b463e7431b89c59c7400749de627b6133184521-3 CLL 9F 01 N11 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "FMC7-FITC",
+                        "CD10-PE",
+                        "IgM-ECD",
+                        "CD79b-PC5.5",
+                        "CD20-PC7",
+                        "CD23-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD5-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            }
+        ],
+        "infiltration": 0.0,
+        "diagnosis": "Kein Hinweis auf Lymphom",
+        "cohort": "normal",
+        "sureness": ""
+    },
+    {
+        "id": "caae2a7dac944bddfc87b981c51e4be5ec3cdae6",
+        "date": "2017-04-08",
+        "filepaths": [
+            {
+                "id": "caae2a7dac944bddfc87b981c51e4be5ec3cdae6",
+                "panel": "CLL 9F",
+                "tube": 2,
+                "date": "2017-04-08",
+                "material": "4",
+                "fcs": {
+                    "path": "normal/caae2a7dac944bddfc87b981c51e4be5ec3cdae6-4 CLL 9F 02 N10 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "Kappa-FITC",
+                        "Lambda-PE",
+                        "CD38-ECD",
+                        "CD25-PC5.5",
+                        "CD11c-PC7",
+                        "CD103-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD22-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "caae2a7dac944bddfc87b981c51e4be5ec3cdae6",
+                "panel": "CLL 9F",
+                "tube": 1,
+                "date": "2017-04-08",
+                "material": "4",
+                "fcs": {
+                    "path": "normal/caae2a7dac944bddfc87b981c51e4be5ec3cdae6-4 CLL 9F 01 N05 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "FMC7-FITC",
+                        "CD10-PE",
+                        "IgM-ECD",
+                        "CD79b-PC5.5",
+                        "CD20-PC7",
+                        "CD23-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD5-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "caae2a7dac944bddfc87b981c51e4be5ec3cdae6",
+                "panel": "CLL 9F",
+                "tube": 3,
+                "date": "2017-04-08",
+                "material": "4",
+                "fcs": {
+                    "path": "normal/caae2a7dac944bddfc87b981c51e4be5ec3cdae6-4 CLL 9F 03 N05 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "CD8-FITC",
+                        "CD4-PE",
+                        "CD3-ECD",
+                        "nix-PC5.5",
+                        "nix-PC7",
+                        "CD56-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "HLA-DR-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            }
+        ],
+        "infiltration": 0.0,
+        "diagnosis": "Kein Hinweis auf Lymphom",
+        "cohort": "normal",
+        "sureness": ""
+    },
+    {
+        "id": "fd50c85858e42771ad27af9ab0fb9d5cdc6c0d07",
+        "date": "2016-06-24",
+        "filepaths": [
+            {
+                "id": "fd50c85858e42771ad27af9ab0fb9d5cdc6c0d07",
+                "panel": "CLL 9F",
+                "tube": 1,
+                "date": "2016-06-24",
+                "material": "4",
+                "fcs": {
+                    "path": "normal/fd50c85858e42771ad27af9ab0fb9d5cdc6c0d07-4 CLL 9F 01 N11 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "FMC7-FITC",
+                        "CD10-PE",
+                        "IgM-ECD",
+                        "CD79b-PC5.5",
+                        "CD20-PC7",
+                        "CD23-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD5-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "fd50c85858e42771ad27af9ab0fb9d5cdc6c0d07",
+                "panel": "CLL 9F",
+                "tube": 3,
+                "date": "2016-06-24",
+                "material": "4",
+                "fcs": {
+                    "path": "normal/fd50c85858e42771ad27af9ab0fb9d5cdc6c0d07-4 CLL 9F 03 N11 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "CD8-FITC",
+                        "CD4-PE",
+                        "CD3-ECD",
+                        "nix-PC5.5",
+                        "nix-PC7",
+                        "CD56-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "HLA-DR-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            },
+            {
+                "id": "fd50c85858e42771ad27af9ab0fb9d5cdc6c0d07",
+                "panel": "CLL 9F",
+                "tube": 2,
+                "date": "2016-06-24",
+                "material": "4",
+                "fcs": {
+                    "path": "normal/fd50c85858e42771ad27af9ab0fb9d5cdc6c0d07-4 CLL 9F 02 N05 001.LMD",
+                    "markers": [
+                        "FS INT LIN",
+                        "SS INT LIN",
+                        "Kappa-FITC",
+                        "Lambda-PE",
+                        "CD38-ECD",
+                        "CD25-PC5.5",
+                        "CD11c-PC7",
+                        "CD103-APC",
+                        "nix-APCA700",
+                        "CD19-APCA750",
+                        "CD22-PacBlue",
+                        "CD45-KrOr"
+                    ],
+                    "event_count": 50000
+                }
+            }
+        ],
+        "infiltration": 0.0,
+        "diagnosis": "Kein Hinweis auf Lymphom",
+        "cohort": "normal",
+        "sureness": ""
+    }
+]
