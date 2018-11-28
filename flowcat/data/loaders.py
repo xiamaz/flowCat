@@ -121,7 +121,7 @@ def select_drop_counts(data, sel_count=None):
 def label_binarize(data, classes):
     transformed = preprocessing.label_binarize(data, classes=classes)
     if len(classes) == 2:
-        transformed = np.hstack((transformed, 1 - transformed))
+        transformed = np.hstack((1 - transformed, transformed))
     elif len(classes) < 2:
         raise RuntimeError("Output less than 2 classes.")
     return transformed
@@ -383,7 +383,7 @@ class DatasetSequence(LoaderMixin, Sequence):
     def __init__(
             self, data, output_spec,
             batch_size=32, draw_method="shuffle", epoch_size=None,
-            groups=None, number_per_group=None, sample_weights=False,
+            number_per_group=None, sample_weights=False,
     ):
         """
         Args:
@@ -417,12 +417,7 @@ class DatasetSequence(LoaderMixin, Sequence):
 
         self.number_per_group = number_per_group
 
-        if groups is None:
-            if self._data.mapping:
-                groups = self._data.mapping["groups"]
-            else:
-                groups = list(set(self._data.groups))
-        self.groups = groups
+        self.groups = self._data.group_names
 
         self.label_groups = self._sample_data(data, epoch_size)
         self.epoch_size = len(self.label_groups)

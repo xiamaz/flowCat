@@ -1,21 +1,17 @@
+#!/usr/bin/env python3
+import sys
 import math
-import json
 import os
-import pickle
-import pathlib
 import logging
 import argparse
 
 import numpy as np
 import pandas as pd
-from sklearn import manifold, model_selection, preprocessing
-from sklearn import naive_bayes
 from sklearn import metrics
 
 import keras
-from keras import layers, models, regularizers, optimizers
+from keras import models, optimizers
 from keras.utils import plot_model
-from keras_applications import resnet50
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -26,31 +22,21 @@ from flowcat.data import case_dataset as cc
 from flowcat.data import loaders, all_dataset
 
 from flowcat.models import weighted_crossentropy
-from flowcat.models import fcs_cnn, histo_nn, som_cnn, merged_classifiers
+from flowcat.models import fcs_cnn, histo_nn, som_cnn
 
 from flowcat import utils
 from flowcat.configuration import Configuration
 from flowcat.mappings import NAME_MAP, GROUP_MAPS
 
-# choose another directory to save downloaded data
-if "flowCat_tmp" in os.environ:
-    utils.TMP_PATH = os.environ["flowCat_tmp"]
 
 COLS = "grcmyk"
-
 LOGGER = logging.getLogger(__name__)
-
-
 GLOBAL_DECAY = 0.001 / 2  # division by two for usage in l2 regularization
-
-
 MODEL_CONSTRUCTORS = {
     "histogram": histo_nn.create_model_histo,
     "som": som_cnn.create_model_cnn,
     "etefcs": fcs_cnn.create_model_fcs,
 }
-
-
 MODEL_BATCH_SIZES = {
     "train": {
         "histogram": 64,
@@ -69,11 +55,10 @@ def inverse_binarize(y, classes):
     classes = np.asarray(classes)
     if isinstance(y, pd.DataFrame):
         y = y.values
-    if len(classes) > 2:
-        return classes.take(y.argmax(axis=1), mode="clip")
-    elif len(classes) == 2:
-        return classes.take(y[:, 1].astype("int64"))
+    if len(classes) > 1:
+        return classes.take(y.argmax(axis=1), mode="raise")
     raise RuntimeError("Cannot invert less than 2 classes.")
+
 
 def get_weights_by_name(name, groups):
     if name == "weighted":
@@ -163,28 +148,58 @@ def plot_train_history(path, data):
     fig.savefig(path)
 
 
-def run_save_model(
-        model, trainseq, testseq,
-        train_epochs=200, epsilon=1e-8, initial_rate=1e-3, drop=0.5, epochs_drop=100, num_workers=1, validation=False,
-        weights=None, path="mll-sommaps/models", name="0"):
-    """Run and predict using the given model. Also save the model in the given
-    path with specified name."""
+def save_model(model, path, name):
+    """Save the given model to the given path."""
+    # plot a model diagram
+    plotpath = path / f"modelplot_{name}.png"
+    plotpath.put(lambda p: keras.utils.plot_model(model, p, show_shapes=True))
 
-    # save the model weights after training
-    modelpath = pathlib.Path(path)
-    modelpath.mkdir(parents=True, exist_ok=True)
+    modelpath = path / f"model_{name}.h5"
+    modelpath.put(lambda p: model.save(p))
+
+
+def save_predictions(df, path, name):
+    """Save the given predictions into a specified csv file."""
+    predpath = path / f"predictions_{name}.csv"
+    predpath.put(lambda p: df.to_csv(str(p)))
+
+
+def save_history(history, path, name):
+    """Save train history."""
+    histpath = path / f"trainhistory_{name}"
+    histpath.put(lambda p: plot_train_history(p, history.history))
+    utils.save_pickle(history.history, path / f"history_{name}.p")
+
+
+def load_weights(weights):
+    """Load weights using named labels or load matrices from paths."""
+    # TODO implement real functionality
+    if weights is not None:
+        raise RuntimeError("Weights have not been implemented yet.")
+    return weights
+
+
+def save_weights(weights, path, name):
+    """Save weighted matrix."""
+    if weights is not None:
+        weights.to_csv(path / f"weights_{name}.csv")
+        plotting.plot_confusion_matrix(
+            weights.values, weights.columns, normalize=False, cmap=cm.get_cmap("Reds"),
+            title="Weight Matrix",
+            filename=path / f"weightsplot_{name}", dendroname=None)
+
+
+def run_model(
+        model, trainseq, testseq,
+        train_epochs=200, epsilon=1e-8, initial_rate=1e-3, drop=0.5, epochs_drop=100, num_workers=1,
+        validation=False, weights=None):
+    """Run and predict using the given model."""
 
     if weights is None:
         lossfun = "categorical_crossentropy"
     else:
         lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
             weights=weights.values)
-
-        weights.to_csv(modelpath / f"weights_{name}.csv")
-        plotting.plot_confusion_matrix(
-            weights.values, weights.columns, normalize=False, cmap=cm.get_cmap("Reds"),
-            title="Weight Matrix",
-            filename=modelpath / f"weightsplot_{name}", dendroname=None)
 
     def top2_acc(y_true, y_pred):
         return keras.metrics.top_k_categorical_accuracy(y_true, y_pred, k=2)
@@ -206,9 +221,6 @@ def run_save_model(
             # top2_acc,
         ]
     )
-
-    # plot a model diagram
-    keras.utils.plot_model(model, modelpath / f"modelplot_{name}.png", show_shapes=True)
 
     history = model.fit_generator(
         trainseq, epochs=train_epochs,
@@ -232,18 +244,10 @@ def run_save_model(
     )
     pred_mat = model.predict_generator(testseq, workers=num_workers, use_multiprocessing=True)
 
-    model.save(str(modelpath / f"model_{name}.h5"))
-    with open(str(modelpath / f"history_{name}.p"), "wb") as hfile:
-        pickle.dump(history.history, hfile)
-
-    trainhistory_path = modelpath / f"trainhistory_{name}"
-    plot_train_history(trainhistory_path, history.history)
-
     pred_df = pd.DataFrame(
         pred_mat, columns=testseq.groups, index=testseq.labels)
     pred_df["correct"] = testseq.ylabels
-    pred_df.to_csv(modelpath / f"predictions_{name}.csv")
-    return pred_df
+    return model, pred_df, history
 
 
 def merge_predictions(prediction, group_map, groups):
@@ -370,12 +374,17 @@ def generate_model_inputs(
     return model, train, test
 
 
-def load_dataset(cases, paths, filters, mapping):
+def load_dataset(pathconfig, config):
     LOGGER.info("Loading combined dataset")
-    dataset = all_dataset.CombinedDataset.from_paths(cases, paths)
+    casepath = pathconfig["input"]["cases"]
+    datasets = pathconfig["input"]["datasets"]
+    filters = config["dataset"]["filters"]
+    mapping = config["dataset"]["mapping"]
+
+    dataset = all_dataset.CombinedDataset.from_paths(casepath, datasets, group_names=filters["groups"])
     dataset.filter(**filters)
     dataset.set_mapping(GROUP_MAPS[mapping])
-    dataset.set_available([n for n, _ in paths] + ["FCS"])
+    dataset.set_available([n for n, _ in datasets])
     return dataset
 
 
@@ -393,59 +402,86 @@ def create_stats(outpath, dataset, pred_df, confusion_sizes):
         sizes = groupstat["sizes"] if confusion_sizes else None
 
         title = f"Confusion matrix (weighted f1 {stats['weighted_f1']:.2f} unweighted f1 {stats['unweighted_f1']:.2f})"
-        plotting.plot_confusion_matrix(
-            conf.values, groupstat["groups"], normalize=True,
-            title=title, filename=outpath / f"confusion_{gname}.png", dendroname=None, sizes=sizes)
+        plotpath = outpath / f"confusion_{gname}.png"
+        plotpath.put(
+            lambda p: plotting.plot_confusion_matrix(
+                conf.values, groupstat["groups"], normalize=True,
+                title=title, filename=p, dendroname=None, sizes=sizes))
         utils.save_csv(conf, outpath / f"confusion_{gname}.csv")
-        with open(str(outpath / f"stats_{gname}.json"), "w") as jsfile:
-            json.dump(stats, jsfile)
+        utils.save_json(stats, outpath / "stats_{gname}.json")
 
 
-def setup_logging(logpath):
-    # setup logging
-    filelog = logging.FileHandler(str(logpath))
-    filelog.setLevel(logging.DEBUG)
-    printlog = logging.StreamHandler()
-    printlog.setLevel(logging.INFO)
+LOGGING_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-    fileform = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    filelog.setFormatter(fileform)
-    printform = logging.Formatter("%(levelname)s - %(message)s")
-    printlog.setFormatter(printform)
 
-    LOGGER.setLevel(logging.DEBUG)
-    LOGGER.addHandler(filelog)
-    LOGGER.addHandler(printlog)
-    modulelog = logging.getLogger("flowcat")
-    modulelog.setLevel(logging.INFO)
-    modulelog.addHandler(filelog)
-    modulelog.addHandler(printlog)
+def add_logger(log, handlers, level=logging.DEBUG):
+    if isinstance(log, str):
+        log = logging.getLogger(log)
+    elif not isinstance(log, logging.Logger):
+        raise TypeError("Wrong type for log")
+
+    log.setLevel(level)
+    for handler in handlers:
+        log.addHandler(handler)
+
+
+def create_handler(handler, fmt, level=logging.DEBUG):
+    handler.setLevel(level)
+    if not isinstance(fmt, logging.Formatter):
+        fmt = logging.Formatter(fmt)
+    handler.setFormatter(fmt)
+    return handler
+
+
+def setup_logging(filelog=None, filelevel=logging.DEBUG, printlevel=logging.WARNING):
+    """Setup logging to both visible output and file output.
+    Args:
+        filelog: Logging file. Will not log to file if None
+        filelevel: Logging level inside file.
+        printlevel: Logging level for visible output.
+    """
+    handlers = [
+        create_handler(logging.StreamHandler(), LOGGING_FORMAT, printlevel),
+    ]
+    if filelog is not None:
+        handlers.append(
+            create_handler(logging.FileHandler(str(filelog)), LOGGING_FORMAT, filelevel)
+        )
+
+    add_logger("flowcat", handlers, level=logging.DEBUG)
+    add_logger(LOGGER, handlers, level=logging.DEBUG)
+
+
+def create_pathconfig():
+    # CONFIGURATION VARIABLES
+    # Input paths
+    p_input_cases = "s3://mll-flowdata/fixedCLL-9F"
+    p_input_datasets = [
+        ("FCS", p_input_cases),
+        # ("SOM", "output/mll-sommaps/sample_maps/testrun_s32_ttoroid"),
+        # ("HISTO", "s3://mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"),
+    ]
+
+    # Output paths
+    p_output_path = "output/mll-sommaps/classification"
+    config = Configuration.from_localsdict(locals())
+    return config
 
 
 def create_config():
     # CONFIGURATION VARIABLES
     c_general_name = "etefcs"
 
-    # Output options
-    c_output_results = "output/test/output"
-    c_output_model = "output/test/models"
-
-    # file locations
-    c_dataset_cases = "s3://mll-flowdata/fixedCLL-9F"
-    c_dataset_paths = [
-        # ("SOM", "output/mll-sommaps/sample_maps/testrun_s32_ttoroid"),
-        # ("HISTO", "s3://mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"),
-    ]
+    # Dataset filter options
     c_dataset_filters = {
         "tubes": [1, 2],
         "counts": 10000,
         "groups": ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
-        # "groups": ["CLL", "normal"],
         "num": None,
     }
     # available: 8class 6class 5class 3class 2class
     # see flowcat.mappings for details
-    c_dataset_mapping = "2class"
+    c_dataset_mapping = "3class"
 
     # specific train test splitting
     c_split_train_num = 0.9
@@ -479,18 +515,16 @@ def create_config():
         "draw_method": "sequential",
         "epoch_size": None,
     }
-    c_model_path = None  # load model weights from the given path
 
     # Run options
     c_run_weights = None
-    c_run_train_epochs = 100
+    c_run_train_epochs = 2
     c_run_initial_rate = 1e-4
     c_run_drop = 0.5
     c_run_epochs_drop = 50
     c_run_epsilon = 1e-8
     c_run_num_workers = 1
-    c_run_validation = False
-    c_run_path = f"{c_output_model}/{c_general_name}"
+    c_run_validation = True
 
     # Stat output
     c_stat_confusion_sizes = True
@@ -499,46 +533,110 @@ def create_config():
     config = Configuration.from_localsdict(locals())
     return config
 
-def main():
-    parser = argparse.ArgumentParser(description="Classify samples")
-    parser.add_argument("--seed", help="Seed for random number generator", type=int)
-    parser.add_argument("--config", help="Path to configuration file.", type=utils.URLPath)
-    parser.add_argument("--recreate", help="Recreate existing files.", action="store_true")
-    args = parser.parse_args()
 
-    if args.config:
-        config = Configuration.from_file(args.config)
+def args_loglevel(vlevel):
+    """Get logging level from number of verbosity chars."""
+    if not vlevel:
+        return logging.WARNING
+    if vlevel == 1:
+        return logging.INFO
+    return logging.DEBUG
+
+
+def get_config(args, attr, alt):
+    if getattr(args, attr):
+        config = Configuration.from_file(getattr(args, attr))
     else:
-        config = create_config()
+        config = alt()
+    return config
 
-    outpath = utils.URLPath(f"{config['output']['results']}/{config['general']['name']}")
+
+def run(args):
+    config = get_config(args, "config", create_config)
+    pathconfig = get_config(args, "pathconfig", create_pathconfig)
+
+    outpath = utils.URLPath(f"{pathconfig['output']['path']}/{config['general']['name']}")
 
     # Create logfiles
     logpath = outpath / f"classification.log"
     logpath.local.parent.mkdir(parents=True, exist_ok=True)
-    setup_logging(logpath)
+    setup_logging(logpath, printlevel=args_loglevel(args.verbose))
 
     # save configuration
     config.to_toml(outpath / "config.toml")
 
-    dataset = load_dataset(**config["dataset"])
+    dataset = load_dataset(pathconfig, config)
 
     # split into train and test set
     LOGGER.info("Splitting dataset")
-    train, test = all_dataset.split_dataset(dataset, **config["split"])
-    utils.save_json(train.labels, outpath / "train_labels.json", clobber=args.recreate)
-    utils.save_json(test.labels, outpath / "test_labels.json", clobber=args.recreate)
+    train, test = all_dataset.split_dataset(dataset, **config["split"], seed=args.seed)
+    utils.save_json(train.labels, outpath / "train_labels.json")
+    utils.save_json(test.labels, outpath / "test_labels.json")
 
     LOGGER.info("Getting models")
     model, trainseq, testseq = generate_model_inputs(train, test, **config["model"])
 
     LOGGER.info("Running model")
-    pred_df = run_save_model(
-        model, trainseq, testseq, name="0", **config["run"])
+    weights = load_weights(config["run"]["weights"])
+    model, pred_df, history = run_model(
+        model, trainseq, testseq, **{**config["run"], "weights": weights})
+    save_model(model, outpath, name="0")
+    save_history(history, outpath, name="0")
+    save_weights(weights, outpath, name="0")
+    save_predictions(pred_df, outpath, name="0")
 
     LOGGER.info("Creating statistics")
     create_stats(
         outpath=outpath, dataset=dataset, pred_df=pred_df, **config["stat"])
+
+
+def config(args):
+    setup_logging(filelog=None, printlevel=logging.ERROR)
+    if args.pathconfig:
+        config = create_pathconfig()
+    else:
+        config = create_config()
+
+    if args.output is None:
+        print("HINT: Redirect stderr to get config output suitable for piping.", file=sys.stderr)
+        print(getattr(config, args.format))
+    else:
+        print(f"Writing configuration to {args.output}")
+        getattr(config, f"to_{args.format}")(args.output)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Classify samples")
+    subparsers = parser.add_subparsers()
+
+    # Save configuration files in specified in the create configuration file
+    cparser = subparsers.add_parser("config", help="Output the current configuration. Hint: Get rid of import messages by eg piping stderr to /dev/null")
+    cparser.add_argument("-o", "--output", help="Write configuration to output file.", type=utils.URLPath)
+    cparser.add_argument(
+        "--format",
+        help="Format of configuration. Either json or toml.",
+        choices=["json", "toml"],
+        default="toml",)
+    cparser.add_argument(
+        "--pathconfig", help="Output pathconfig instead of model configuration.", action="store_true")
+    cparser.set_defaults(fun=config)
+
+    # Run the classification process
+    rparser = subparsers.add_parser("run", help="Run classification")
+    rparser.add_argument("--seed", help="Seed for random number generator", type=int)
+    rparser.add_argument("--model", help="Use an existing model", type=utils.URLPath) # TODO
+    rparser.add_argument("--pathconfig", help="Config file containing paths.", type=utils.URLPath, default="paths.toml")
+    rparser.add_argument("--config", help="Path to configuration file.", type=utils.URLPath)
+    rparser.add_argument("--recreate", help="Recreate existing files.", action="store_true")
+    rparser.add_argument("-v", "--verbose", help="Control verbosity. -v is info, -vv is debug", action="count")
+    rparser.set_defaults(fun=run)
+
+    args = parser.parse_args()
+
+    if not hasattr(args, "fun") or args.fun is None:
+        parser.print_help()
+    else:
+        args.fun(args)
 
 
 if __name__ == "__main__":

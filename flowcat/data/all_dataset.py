@@ -198,7 +198,7 @@ class SOMDataset:
 class CombinedDataset:
     """Combines information from different data sources."""
 
-    def __init__(self, cases, datasets, mapping=None):
+    def __init__(self, cases, datasets, mapping=None, group_names=None):
         """
         Args:
             fcspath: Path to fcs dataset. Necessary because of metainfo access.
@@ -206,18 +206,22 @@ class CombinedDataset:
         """
         self.cases = cases
         self.datasets = datasets
-        self.datasets[Datasets.FCS] = cases
         self.mapping = mapping
+        self._group_names = group_names
 
     @classmethod
-    def from_paths(cls, casepath, paths):
-        """Initialize from a list of paths with associated types."""
+    def from_paths(cls, casepath, paths, **kwargs):
+        """Initialize from a list of paths with associated types.
+        Args:
+            casepath: Path to fcs dataset also containing all metadata for cases.
+            paths: Path to additional datasets with preprocessed data or other additional information.
+        """
         cases = case_dataset.CaseCollection.from_dir(casepath)
         datasets = {
-            Datasets.from_str(name): Datasets.from_str(name).get_class().from_path(path)
+            Datasets.from_str(name): Datasets.from_str(name).get_class().from_path(path) if path != casepath else cases
             for name, path in paths
         }
-        return cls(cases, datasets)
+        return cls(cases, datasets, **kwargs)
 
     @property
     def fcs(self):
@@ -242,9 +246,15 @@ class CombinedDataset:
             return [self.mapping["map"].get(g, g) for g in self.fcs.groups]
         return self.fcs.groups
 
+    @property
+    def group_names(self):
+        if self.mapping is not None:
+            return self.mapping["groups"]
+        else:
+            return self._group_names
+
     def get_label_rand_group(self, dtypes):
-        """Return list of label, randnum, group tuples
-        using the dtypes requested."""
+        """Return list of label, randnum, group tuples using the dtypes requested."""
         lrandnums = [self.get_randnums(d) for d in dtypes]
         randnums = lrandnums[0]
         for randset in lrandnums[1:]:
@@ -261,7 +271,7 @@ class CombinedDataset:
 
     def copy(self):
         datasets = {k: v.copy() for k, v in self.datasets.items()}
-        return self.__class__(self.cases.copy(), datasets, mapping=self.mapping)
+        return self.__class__(self.cases.copy(), datasets, mapping=self.mapping, group_names=self._group_names)
 
     def get(self, label, dtype, randnum=0):
         dtype = Datasets.from_str(dtype) if isinstance(dtype, str) else dtype
@@ -298,14 +308,17 @@ class CombinedDataset:
         return [sample_weights[i] for i, *_ in indices]
 
 
-def split_dataset(data, train_num=None, test_labels=None, train_labels=None):
+def split_dataset(data, train_num=None, test_labels=None, train_labels=None, seed=None):
     """Split data in stratified fashion by group.
     Args:
         data: Dataset to be split. Label should be contained in 'group' column.
         test_num: Ratio of samples in test per group or absolute number of samples in each group for test.
+        seed: Seed for randomness in splitting.
     Returns:
         (train, test) with same columns as input data.
     """
+    if seed:
+        random.seed(seed)
     if test_labels is not None and train_labels is not None:
         LOGGER.info("Splitting based on provided label files")
         # simply load label lists from json files
@@ -334,7 +347,9 @@ def split_dataset(data, train_num=None, test_labels=None, train_labels=None):
     else:
         raise RuntimeError(f"Specify either train_num or labels")
 
-    LOGGER.info("Splitting into %d train and %d test cases.", len(train_labels), len(test_labels))
+    LOGGER.info(
+        "Splitting into %d train and %d test cases. (seed %s)",
+        len(train_labels), len(test_labels), str(seed))
     train = data.copy().filter(labels=train_labels)
     test = data.copy().filter(labels=test_labels)
 

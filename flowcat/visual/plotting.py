@@ -176,16 +176,16 @@ def plot_confusion_matrix(
         fig = Figure()
         axes = fig.add_subplot(111)
         axes.set_title(title)
-        fig.tight_layout()
         FigureCanvas(fig)
+        fig.tight_layout()
         fig.savefig(str(filename), dpi=300)
 
     if dendroname is not None:
         fig = Figure()
         axes = fig.add_subplot(111)
         draw_dendrogram(axes, confusion_matrix, classes=classes)
-        fig.tight_layout()
         FigureCanvas(fig)
+        fig.tight_layout()
         fig.savefig(dendroname, dpi=300)
 
 

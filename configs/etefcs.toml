@@ -1,0 +1,51 @@
+section = "c"
+
+[run]
+validation = true
+num_workers = 1
+epsilon = 1e-8
+epochs_drop = 50
+drop = 0.5
+initial_rate = 0.0001
+train_epochs = 100
+
+[stat]
+confusion_sizes = true
+
+[split]
+train_num = 0.9
+
+[general]
+name = "etefcs_normpatho"
+
+[dataset]
+mapping = "2class"
+
+[model]
+name = "etefcs"
+
+[dataset.filters]
+tubes = [ 1, 2,]
+counts = 10000
+groups = [ "CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal",]
+num = 5000
+
+[model.testdata_args]
+batch_size = 64
+draw_method = "sequential"
+
+[model.traindata_args]
+batch_size = 64
+draw_method = "shuffle"
+sample_weights = false
+
+[model.loader_options.FCSLoader]
+subsample = 200
+randomize = false
+
+[model.loader_options.CountLoader]
+datatype = "dataframe"
+
+[model.loader_options.Map2DLoader]
+sel_count = "counts"
+pad_width = 1

@@ -1,4 +1,6 @@
 """Manage configuration for different systems."""
+import collections
+
 from . import utils
 
 
@@ -117,7 +119,7 @@ class Configuration:
     def __init__(self, data, section=""):
         """Initialize from input data."""
         self.section = section
-        self._data = data
+        self._data = {k: collections.defaultdict(lambda: None, v) for k, v in data.items()}
 
     @property
     def dict(self):
@@ -125,6 +127,24 @@ class Configuration:
             f"{self.section}_{section}_{k}": v
             for section, secdict in self._data.items() for k, v in secdict.items()
         }
+
+    @property
+    def tomldict(self):
+        tomldata = self._data.copy()
+        tomldata["section"] = self.section
+        # transform sections with int keys to strings to avoid TOML errors
+        for subsec in tomldata:
+            tomldata[subsec] = to_string_naming(tomldata[subsec], "selected_markers", "tube")
+        return tomldata
+
+    @property
+    def toml(self):
+        return utils.to_toml(self.tomldict)
+
+    @property
+    def json(self):
+        """String containing json representation of configuration."""
+        return utils.to_json(self.dict)
 
     @classmethod
     def from_json(cls, path):
@@ -176,13 +196,9 @@ class Configuration:
         utils.save_json(self.dict, path)
 
     def to_toml(self, path):
-        """Save configuration data into a toml file."""
-        tomldata = self._data.copy()
-        tomldata["section"] = self.section
-        # transform sections with int keys to strings to avoid TOML errors
-        for subsec in tomldata:
-            tomldata[subsec] = to_string_naming(tomldata[subsec], "selected_markers", "tube")
-        utils.save_toml(tomldata, path)
+        """Save configuration data into a toml file.
+        """
+        utils.save_toml(self.tomldict, path)
 
     def to_file(self, path):
         """Save configuration to file. Infer format from file ending."""
