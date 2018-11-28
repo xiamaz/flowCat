@@ -17,20 +17,14 @@ Different models are available to be used for classification depending on the da
 
 * etefcs: classify samples directly from the fcs files
 
-* maphisto: merged classifier combining the som map and histogram representation
-
-* mapfcs: merged classifier combining the som map and fcs data
-
-* maphistofcs: merged classifier combining all three data types
-
 
 Run Classification:
 -------------------------
 To run the classification, configuration parameters need to be set. Some of the parameters that needs to be set are described below:
 
-* Set the config parameter for input file path: *c_dataset_cases* in *classify_cases.py*
+* Set the config parameter for input and out file paths file path in *paths.toml*. See the file for default values
 
-* Depending on the available intermediary representation set the config param for *c_dataset_paths * and selct the appropriate model by setting *c_model_name*
+* Depending on the available intermediary representation set the config param for *c_dataset_paths * and select the appropriate model by setting *c_model_name* inside *create_config()*
 
 * Set how the dataset is to be split into test and training sets. A predefined list of labels for test and training sets can be specified by *c_split_train_labels* and *c_split_test_labels*
 
@@ -38,4 +32,4 @@ To run the classification, configuration parameters need to be set. Some of the 
 
 * Please check the remaining parameters in the script. These can be used to optimize the classifier as needed.
 
-Once the parameters are set, run classify_cases.py
+* An exisiting configuration file can be loaded to run the script. As an example see *configs/etefcs.toml*
