@@ -40,13 +40,13 @@ MODEL_CONSTRUCTORS = {
 MODEL_BATCH_SIZES = {
     "train": {
         "histogram": 64,
-        "som": 16,
-        "etefcs": 16,
+        "som": 64,
+        "etefcs": 64,
     },
     "test": {
         "histogram": 128,
-        "som": 32,
-        "etefcs": 16,
+        "som": 128,
+        "etefcs": 128,
     }
 }
 
@@ -555,6 +555,9 @@ def run(args):
     config = get_config(args, "config", create_config)
     pathconfig = get_config(args, "pathconfig", create_pathconfig)
 
+    if args.name:
+        config["general"]["name"] = args.name
+
     outpath = utils.URLPath(f"{pathconfig['output']['path']}/{config['general']['name']}")
 
     # Create logfiles
@@ -628,6 +631,7 @@ def main():
     rparser.add_argument("--pathconfig", help="Config file containing paths.", type=utils.URLPath, default="paths.toml")
     rparser.add_argument("--config", help="Path to configuration file.", type=utils.URLPath)
     rparser.add_argument("--recreate", help="Recreate existing files.", action="store_true")
+    rparser.add_argument("--name", help="Set an alternative output name.")
     rparser.add_argument("-v", "--verbose", help="Control verbosity. -v is info, -vv is debug", action="count")
     rparser.set_defaults(fun=run)
 
