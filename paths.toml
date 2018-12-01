@@ -10,7 +10,7 @@ section = "p"
 [input]
 # list datasets to be used for classification
 # possible options are: FCS, HISTO, SOM
-datasets = [ [ "FCS", "s3://mll-flowdata/fixedCLL-9F",],]
+datasets = [[ "FCS", "s3://mll-flowdata/fixedCLL-9F",], [ "SOM", "s3://mll-sommaps/sample_maps/selected1_toroid_s32",],]
 # dataset containing metadata used for filtering
 cases = "s3://mll-flowdata/fixedCLL-9F"
 

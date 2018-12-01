@@ -458,7 +458,7 @@ def create_pathconfig():
     p_input_cases = "s3://mll-flowdata/fixedCLL-9F"
     p_input_datasets = [
         ("FCS", p_input_cases),
-        # ("SOM", "output/mll-sommaps/sample_maps/testrun_s32_ttoroid"),
+        ("SOM", "s3://mll-sommaps/sample_maps/selected1_toroid_s32"),
         # ("HISTO", "s3://mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"),
     ]
 
@@ -470,7 +470,7 @@ def create_pathconfig():
 
 def create_config():
     # CONFIGURATION VARIABLES
-    c_general_name = "etefcs"
+    c_general_name = "som"
 
     # Dataset filter options
     c_dataset_filters = {
@@ -481,7 +481,7 @@ def create_config():
     }
     # available: 8class 6class 5class 3class 2class
     # see flowcat.mappings for details
-    c_dataset_mapping = "3class"
+    c_dataset_mapping = "8class"
 
     # specific train test splitting
     c_split_train_num = 0.9
@@ -490,7 +490,7 @@ def create_config():
 
     # load existing model and use different parameters for retraining
     # available models: histogram, som, etefcs
-    c_model_name = "etefcs"
+    c_model_name = "som"
     c_model_loader_options = {
         loaders.FCSLoader.__name__: {
             "subsample": 200,
@@ -506,8 +506,8 @@ def create_config():
     }
     c_model_traindata_args = {
         "batch_size": MODEL_BATCH_SIZES["train"][c_model_name],
-        "draw_method": "shuffle",  # possible: sequential, shuffle, balanced, groupnum
-        "epoch_size": None,
+        "draw_method": "balanced",  # possible: sequential, shuffle, balanced, groupnum
+        "epoch_size": 8000,
         "sample_weights": False,
     }
     c_model_testdata_args = {
