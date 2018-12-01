@@ -13,10 +13,14 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.figure import Figure
 from matplotlib import cm
 
+import keras
+import vis
+
 import seaborn
 from scipy.cluster import hierarchy
 
 from ..data.case import FCSData
+from ..models import tfsom
 
 
 LOGGER = logging.getLogger(__name__)
@@ -75,6 +79,80 @@ def save_figure(figure, path):
     FigureCanvas(figure)
     figure.savefig(path)
 
+def plot_tube(case, tube, grads, classes, sommappath=""):
+    '''Plot scatterplots where the color indicates the maximum saliency value of the two
+    corresponding channels.
+    Args:
+        case: Case object for which the gradients were computed.
+        tube: Tube for which the values will be plotted.
+        grads: Saliency gradients.
+        classes: List of classes for which the salincy are supposed to be plotted.
+        title: Main title for the subplots.
+        sommappath: Path to the sommap data.
+        plot_path: Path where the plot is supposed to be saved.
+    Returns:
+        List of figures (one for each class). This figures needs to be bound to a backend.
+    '''
+    tubecase = case.get_tube(tube)
+    fcsdata = tubecase.data.data
+
+    tubegates = ALL_VIEWS[tube]
+
+    nodedata = map_fcs_to_sommap(case, tube, sommappath)
+
+    fcsmapped, gridwidth = map_fcs_to_sommap(case, tube, sommappath)
+    figures = []
+    for idx, grad in enumerate(grads):
+        chosen_selections = []
+        for i, gating in enumerate(tubegates):
+            channel_gradients = [grad[..., fcsdata.columns.get_loc(gate)] for gate in gating]
+            max_gradients = np.maximum(channel_gradients[0], channel_gradients[1])
+            mapped_gradients = [max_gradients[index] for index in fcsmapped['somnode']]
+            fcsmapped['gradients'] = pd.Series(mapped_gradients, index=fcsmapped.index)
+            chosen_selection = sommap_selection(fcsmapped.sort_values(by='gradients', ascending=False), max_gradients, gridwidth=gridwidth)
+            chosen_selections.append(chosen_selection)
+            fcsmapped.drop('gradients', 1, inplace=True)
+        fig = Figure(figsize=(12, 8), dpi=300)
+        for i, selection in enumerate(chosen_selections):
+            axes = fig.add_subplot(3, 4, i + 1)
+            draw_scatterplot(
+                axes, fcsdata, tubegates[i], selections=selection)
+
+        fig.tight_layout(rect=(0, 0, 1, 0.95))
+        fig.suptitle(f"Scatterplots Tube {tube} Class {classes[idx]}")
+        figures.append(fig)
+    return figures
+
+def draw_saliency_heatmap(case, gradients, classes,  tube):
+    '''Plots the saliency values as heatmeap for each of the classes.
+    Args:
+        case: Case object for which the gradients were computed.
+        gradients: Saliency gradient values.
+        classes: List of classes for which the heatmap will be plotted.
+        tube: Tube which is supposed to be plotted.
+    Returns:
+        List of figures (one for each class). This figures needs to be bound to a backend.
+    '''
+    tubecase = case.get_tube(tube)
+    channels = tubecase.data.data.columns
+    figures = []
+    for idx, group in enumerate(classes):
+        #if saliency were not maximized a heatmap for each channel is plotted
+        if gradients[tube-1][idx].ndim > 1:
+            fig = Figure(figsize=(3, 4), dpi=300)
+            for i in range(0, gradients[tube-1][idx].shape[-1]):
+                axes = fig.add_subplot(3, 4, i + 1)
+                axes.set_title(f"{channels[i]}", fontsize=5)
+                axes.imshow(gradients[tube-1][idx][..., i].reshape(34, 34), cmap='jet')
+                axes.tick_params(axis='both', labelsize=3,
+                                 width=0.5, length=0.5)
+        else:
+            fig = Figure(figsize=(1, 1), dpi=300)
+            axes = fig.add_subplot(111)
+            axes.imshow(gradients[tube-1][idx].reshape(34, 34), cmap='jet')
+        fig.tight_layout(pad=0.3)
+        figures.append(fig)
+    return figures
 
 def plot_histogram3d_som(sommap, count_column="counts"):
     """Plot a 3d histogram for the given sommap."""
@@ -292,7 +370,7 @@ def draw_scatterplot(axes, data, channels, selections=None, ranges=None):
         for sel, color, label in selections:
             axes.scatter(
                 data.loc[sel, xchannel], data.loc[sel, ychannel],
-                s=1, marker=".", c=color, label=label)
+                s=1, marker=".", c=[color], label=label)
 
     axes.set_xlabel(xchannel)
     axes.set_ylabel(ychannel)
@@ -396,3 +474,84 @@ def sommap_to_xydata(data, data_columns="counts"):
     gridsize = int(np.round(np.sqrt(data.shape[0])))
     xydata = data[data_columns].values.reshape(shape=(gridsize, gridsize, -1))
     return xydata
+
+def calc_saliency(dataset, case, model, classes, layer_idx=-1, maximization=False):
+    '''Calculates the saliency values / gradients for the case, model and each of the classes.
+    Args:
+        dataset: SOMMapDataset object.
+        case: Case object for which the saliency values will be computed.
+        model: Path to hd5 file containing a keras model.
+        layer_idx: Index of the layer for which the saleincy values will be computed.
+        maximization: If true, the maximum of the saliency values over all channels will be returned.
+    Returns:
+        List of gradient values sorted first by tube and then class (e.g. [[tube1_class1,tube1_class1][tube2_class1,tube2_class2]]).
+    '''
+    # load existing model
+    model = keras.models.load_model(model)
+
+    # modify model for saliency usage
+    model.layers[layer_idx].activation = keras.activations.linear
+    model = vis.utils.utils.apply_modifications(model)
+
+    xdata, ydata = dataset.get_batch_by_label(case.id)
+
+    input_indices = [*range(len(xdata))]
+
+    gradients = [vis.visualization.visualize_saliency(model, layer_idx, dataset.groups.index(
+        group), seed_input=xdata, input_indices=input_indices, maximization=maximization) for group in set(classes)]
+
+
+    if maximization:
+        # regroup gradients into tube1 and tube2
+        gradients = [[grad[0].flatten() for grad in gradients], [
+            grad[1].flatten() for grad in gradients]]
+    else:
+        # regroup gradients into 2D array (nodes,channels) for tube1 and tube2
+        gradients = [[grad[0].reshape(1156, 12) for grad in gradients], [
+            grad[1].reshape(1156, 12) for grad in gradients]]
+
+    return gradients
+
+def map_fcs_to_sommap(case, tube, sommap_path):
+    """Map for the given case the fcs data to their respective sommap data."""
+    sommap_data = get_sommap_tube(sommap_path, case.id, tube)
+    counts = sommap_data["counts"]
+    sommap_data.drop(["counts", "count_prev"],
+                     inplace=True, errors="ignore", axis=1)
+    gridwidth = int(np.round(np.sqrt(sommap_data.shape[0])))
+
+    tubecase = case.get_tube(tube)
+    # get scaled zscores
+    fcsdata = tubecase.get_data().data
+
+    model = tfsom.TFSom(
+        m=gridwidth, n=gridwidth, channels=sommap_data.columns,
+        initialization_method="reference", reference=sommap_data,
+        max_epochs=0, tube=tube)
+
+    model.train([fcsdata], num_inputs=1)
+    mapping = model.map_to_nodes(fcsdata)
+
+    fcsdata["somnode"] = mapping
+    return fcsdata, gridwidth
+
+
+def get_sommap_tube(dataset_path, label, tube):
+    '''Read the sommap data at the given path.'''
+    path = dataset_path / f"{label}_t{tube}.csv"
+    data = pd.read_csv(path, index_col=0)
+    return data
+
+
+def sommap_selection(fcsdata, grads, gridwidth=32):
+    '''Determine a color for a somnode based on the corresponding gradient value.'''
+    selection = []
+    grad_colors = cm.ScalarMappable(cmap='autumn').to_rgba(1 - grads)
+    for name, gdata in fcsdata.groupby("somnode"):
+        color = grad_colors[name]
+        if grads[name] < 0.1:
+            color = [0.95, 0.95, 0.95, 0.1]
+        else:
+            color[3] = grads[name]
+        selection.append((gdata.index, color, name))
+    return selection
