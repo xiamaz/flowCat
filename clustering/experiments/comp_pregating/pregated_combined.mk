@@ -1,4 +1,0 @@
-METHOD=gated
-PREMETHOD = normal
-TRANSMETHOD = normal
-UPSAMPLING_NUM = "-1"

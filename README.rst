@@ -1,50 +1,58 @@
-Classification of MFC data using self-organizing maps
-=====================================================
+flowCat: Automated classification of MFC data
+=============================================
 
 Organization and general discussion at: Trello_.
 
 .. _Trello: https://trello.com/b/Krk9nkPg/flowcat
 
-Folder structure
+Module structure
 ----------------
 
-preprocessing
-    Old R and flowSOM based upsampling
+.. code::
 
-clustering
-    Transformation of FCS information into histrogram form with SOM
-
-classification
-    Prediction of cohort labels using histogram data
-
-report
-    Analysis and presentation of information in the other stages
-
-aws
-    Convenience scripts for job submission into AWS Batch
+    flowcat/
 
 
-Installation
-------------
+Runnable scripts
+~~~~~~~~~~~~~~~~
 
-The project requires python 3.6 or later and tensorflow.
+``./create_sommaps.py``
+    Generate SOMmap references and individual SOM maps for single cases.
 
-AWS interaction is required for:
-- automatic download of case data and clustering data from S3
-- automatic upload of results from clustering and classification to S3
+``./classify_cases.py``
+    Classify single cases to diagnoses using either direct FCS data, histogram
+    data or individual SOM data.
 
-AWS access is expected to be set up per user using normal credentials. awscli
-is required for AWS Batch interactions and some upload and download operations.
 
-docker CE is required for building and running of images generated from
-dockerfiles individually for clustering and classification.
+Run availble unittests with:
 
-Both clustering and classification require installation of some dependencies
-defined in :code:`requirements.txt` in their respective directories using
-:code:`pip`. This can be made easier by using virtualenvs.
+.. code-block:: sh
 
+   ./test.py
+
+
+Performance considerations
+--------------------------
+
+IO of input data can become the limiting factor, especially if the FCS files
+are loaded on-demand from S3 for the FCS end-to-end model. Consider downloading
+the whole dataset before running the classifier itself. This can be done
+with aws-cli.
+
+.. code-block:: sh
+
+   aws sync s3://mll-flowdata/<DATASET NAME> <DATASET NAME>
+
+
+Documentation
+-------------
+
+Documentation is contained in ``docs`` in rst/sphinx format. To read the
+documentation in html format simply run :code:`make html` inside the docs
+folder. Built html documentation can be found in ``docs/_build/html``.
+Navigate there to read them in your browser.
 
 Contributions
 -------------
 
-Logicle functions from fcm package by Jacob Frelinger licensed under simplified BSD
+tensorflow SOM code taken from cgorman.

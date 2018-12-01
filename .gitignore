@@ -1,20 +1,18 @@
-*.csv
-*.json
-*.LMD
-*.rds
-
-# output directory for plots and other information
+/mll-*
+/tmp
+/cache
 /output
-/archive/*esults
-/*/analysis
 
-# allow all files in abstract
-!/report/abstract/**
+# TODO: integrate test data into git repo itself
+/tests/data
 
 # python relevant files
 __pycache__
 *.pyc
-env
+.env
 
 # generated tags
 tags*
+
+# ignore sphinx build folder
+/docs/_build

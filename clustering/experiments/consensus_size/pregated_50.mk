@@ -1,4 +1,0 @@
-PREMETHOD = gated
-TRANSMETHOD = gated
-UPSAMPLING_NUM = "-1"
-NUM = 50

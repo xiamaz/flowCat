@@ -1,5 +1,0 @@
-Case with very few (~90 events). Bug caused by
-0e0b4b22c7ab6e954bdf4a52253e26309d09dc4f
-
-This case also has another sample with sufficient number of events. For each
-tube samples with very few events should be discarded.

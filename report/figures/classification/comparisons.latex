@@ -1,8 +1,0 @@
-\begin{tabular}{lrrrrr}
-\toprule
-{} &    mean\_a &  n\_a &    mean\_b &  n\_b &   p\_value \\
-\midrule
-normal vs somgated         &  0.675281 &   10 &  0.738160 &   10 &  0.000011 \\
-normal vs sqrt\_transformed &  0.792941 &    1 &  0.872941 &    1 &       NaN \\
-\bottomrule
-\end{tabular}

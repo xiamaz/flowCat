@@ -1,0 +1,19 @@
+## Paths configuration
+
+# This file should be adapted to where these folders can be found on the local
+# computer
+
+# settings prefix, this is used as a first level section identifier
+# do not change this
+section = "p"
+
+[input]
+# list datasets to be used for classification
+# possible options are: FCS, HISTO, SOM
+datasets = [ [ "FCS", "s3://mll-flowdata/fixedCLL-9F",],]
+# dataset containing metadata used for filtering
+cases = "s3://mll-flowdata/fixedCLL-9F"
+
+[output]
+# model files, predictions and other data will be saved to this path
+path = "output/mll-sommaps/classification"

@@ -1,5 +1,0 @@
-Summary comparisons as a baseline for next developments - August 2018
-
-normal - no additional features
-pregated - automatic pregating on CD45 SS
-somgated - pregating, but before consensus-SOM generation, all cases are individually transformed to SOM nodes before combining to generate the consensus SOM
