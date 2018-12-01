@@ -15,5 +15,5 @@ before_script:
   - aws s3 sync "s3://flowcat-test" tests/data
 
 script:
-  - pylint flowcat
+  # - pylint flowcat
   - python test.py unit
