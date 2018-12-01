@@ -313,7 +313,7 @@ def split_dataset(data, train_num=None, test_labels=None, train_labels=None, see
     """Split data in stratified fashion by group.
     Args:
         data: Dataset to be split. Label should be contained in 'group' column.
-        test_num: Ratio of samples in test per group or absolute number of samples in each group for test.
+        train_num: Ratio of samples in test per group or absolute number of samples in each group for test.
         seed: Seed for randomness in splitting.
     Returns:
         (train, test) with same columns as input data.
@@ -338,7 +338,7 @@ def split_dataset(data, train_num=None, test_labels=None, train_labels=None, see
         for group, labels in group_labels.items():
             random.shuffle(labels)
             if train_num < 1:
-                k = int(len(labels) * train_num)
+                k = int(len(labels) * train_num + 0.5)
             else:
                 if len(labels) < train_num:
                     raise ValueError(f"{group} size {len(labels)} < {train_num}")
