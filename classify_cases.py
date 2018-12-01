@@ -380,8 +380,10 @@ def load_dataset(pathconfig, config):
     datasets = pathconfig["input"]["datasets"]
     filters = config["dataset"]["filters"]
     mapping = config["dataset"]["mapping"]
+    tubes = config["dataset"]["filters"]["tubes"]
 
-    dataset = all_dataset.CombinedDataset.from_paths(casepath, datasets, group_names=filters["groups"])
+    dataset = all_dataset.CombinedDataset.from_paths(
+        casepath, datasets, group_names=filters["groups"], tubes=tubes)
     dataset.filter(**filters)
     dataset.set_mapping(GROUP_MAPS[mapping])
     dataset.set_available([n for n, _ in datasets])

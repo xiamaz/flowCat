@@ -211,15 +211,16 @@ class CombinedDataset:
         self._group_names = group_names
 
     @classmethod
-    def from_paths(cls, casepath, paths, **kwargs):
+    def from_paths(cls, casepath, paths, tubes=None, **kwargs):
         """Initialize from a list of paths with associated types.
         Args:
             casepath: Path to fcs dataset also containing all metadata for cases.
             paths: Path to additional datasets with preprocessed data or other additional information.
+            tubes: List of tubes to be used. This avoids searching for tubes inside the dataset.
         """
         cases = case_dataset.CaseCollection.from_dir(casepath)
         datasets = {
-            Datasets.from_str(name): Datasets.from_str(name).get_class().from_path(path) if path != casepath else cases
+            Datasets.from_str(name): Datasets.from_str(name).get_class().from_path(path, tubes=tubes) if path != casepath else cases
             for name, path in paths
         }
         return cls(cases, datasets, **kwargs)
