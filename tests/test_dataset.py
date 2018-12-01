@@ -1,7 +1,7 @@
 import unittest
 import pathlib
 
-from .shared import *
+from shared import *
 
 from flowcat.data import all_dataset
 from flowcat.mappings import GROUP_MAPS

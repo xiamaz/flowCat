@@ -140,6 +140,9 @@ class S3Backend(FileBackend):
             delim = "/"
         else:
             delim = None
+
+        if not path.endswith("/"):
+            path += "/"
         all_files = self.ls(netloc, path, delimiter=delim)
         matched = [f for f in all_files if fnmatch.fnmatch(f, pattern)]
         return matched
