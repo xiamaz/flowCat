@@ -1,23 +1,19 @@
 import unittest
 import pathlib
 
+from shared import *
+
 from flowcat.data import loaders
 from flowcat.data import all_dataset
 from tests.test_dataset import TestCombinedDataset
-
-TESTPATH = pathlib.Path(__file__).parent
-DATAPATH = TESTPATH / "data"
-
-FCS_PATH = DATAPATH / "small_dataset"
-SOM_PATH = DATAPATH / "som" / "testrun_s32_ttoroid"
-HISTO_PATH = DATAPATH / "histogram" / "abstract_normal"
 
 
 class TestLoaders(unittest.TestCase):
 
     def setUp(self):
         self.data = all_dataset.CombinedDataset.from_paths(
-            casepath=FCS_PATH, paths=[("HISTO", HISTO_PATH), ("SOM", SOM_PATH)]
+            casepath=FCS_PATH, paths=[("FCS", FCS_PATH), ("HISTO", HISTO_PATH), ("SOM", SOM_PATH)],
+            group_names=["CLL", "LPL", "PL", "normal"],
         )
         output_spec = [
             loaders.loader_builder(

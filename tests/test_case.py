@@ -6,12 +6,9 @@ import pathlib
 import pandas as pd
 from pandas.testing import assert_series_equal
 
+from shared import *
+
 from flowcat.data import case_dataset
-from flowcat.utils import URLPath
-
-
-TESTPATH = pathlib.Path(__file__).parent
-DATAPATH = TESTPATH / "data"
 
 
 class TestBasicCase(unittest.TestCase):
@@ -26,7 +23,7 @@ class TestBasicCase(unittest.TestCase):
         """Exception should be thrown if we try to instantiate the CaseCollection using a string or pathlike object."""
         self.assertRaises(ValueError, case_dataset.CaseCollection, "teststr")
         self.assertRaises(ValueError, case_dataset.CaseCollection, pathlib.Path("teststr"))
-        self.assertRaises(ValueError, case_dataset.CaseCollection, URLPath("teststr"))
+        self.assertRaises(ValueError, case_dataset.CaseCollection, utils.URLPath("teststr"))
 
 
     def test_json_same(self):

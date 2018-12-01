@@ -6,4 +6,4 @@ install:
   - pip install pylint
 script:
   - pylint flowcat
-  - python test.py
+  - python test.py unit

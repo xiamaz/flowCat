@@ -198,7 +198,7 @@ class SOMDataset:
 class CombinedDataset:
     """Combines information from different data sources."""
 
-    def __init__(self, cases, datasets, mapping=None, group_names=None):
+    def __init__(self, cases, datasets, group_names, mapping=None):
         """
         Args:
             fcspath: Path to fcs dataset. Necessary because of metainfo access.
