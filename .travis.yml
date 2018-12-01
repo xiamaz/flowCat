@@ -1,15 +1,19 @@
 branches:
   only:
     - master
+
 language: python
 
 python:
   - "3.6"
+
 install:
   - pip install -r requirements.txt
   - pip install pylint aws
+
 before_script:
   - aws s3 sync "s3://flowcat-test" tests/data
+
 script:
   - pylint flowcat
   - python test.py unit
