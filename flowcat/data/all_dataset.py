@@ -24,6 +24,7 @@ class Datasets(enum.Enum):
 
     @classmethod
     def from_str(cls, name):
+        """Get enum type from a string as a case-insensitive operation."""
         if isinstance(name, cls):
             return name
         name = name.upper()
