@@ -9,7 +9,7 @@ python:
 
 install:
   - pip install -r requirements.txt
-  - pip install pylint aws
+  - pip install pylint awscli
 
 before_script:
   - aws s3 sync "s3://flowcat-test" tests/data
