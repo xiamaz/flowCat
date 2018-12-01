@@ -1,0 +1,35 @@
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{CLL, FL, HCL, LPL, MBL, MCL, MZL, PL, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/0_CFHLMMMPn.latex}
+  }
+\end{subtable}
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{CM, FL, HCL, LMg, MtCp, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/1_CFHLMn.latex}
+  }
+\end{subtable}
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{CD5neg, CD5pos, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/2_CCn.latex}
+  }
+\end{subtable}
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{CLL, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/3_Cn.latex}
+  }
+\end{subtable}
+\begin{subtable}{.49\textwidth}
+  \centering
+  \caption{CM, normal}
+  \resizebox{\columnwidth}{!}{
+    \input{numbers/classification_overview/4_Cn.latex}
+  }
+\end{subtable}

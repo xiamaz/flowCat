@@ -1,0 +1,111 @@
+\documentclass[8pt]{beamer}
+
+%% adding graphics
+\usepackage{graphicx}
+%% nicer tables
+\usepackage{booktabs}
+
+\begin{document}
+
+\newcommand{\colimg}[3]{
+   \begin{column}{#3\columnwidth}
+      \begin{center}
+         \includegraphics[width=\columnwidth]{#1}
+         {\footnotesize #2}
+      \end{center}
+   \end{column}
+}
+
+\newcommand{\threecol}[2]{
+   \colimg{#1}{#2}{0.32}
+}
+
+\newcommand{\twocol}[2]{
+   \colimg{#1}{#2}{0.49}
+}
+
+\newcommand{\multi}[2]{
+   \begin{center}
+   \begin{columns}[onlytextwidth]
+      #2
+   \end{columns}
+   #1
+   \end{center}
+}
+
+\begin{frame}
+   \frametitle{CLL vs normal}
+
+   \multi{100 cases in each cohort.}{
+      \threecol{confusion/cll_normal/normal_dedup.png}{Normal}
+      \threecol{confusion/cll_normal/pregated_dedup.png}{Pregated}
+      \threecol{confusion/cll_normal/somcombined_dedup.png}{SOM combined}
+   }
+\end{frame}
+\begin{frame}
+   \frametitle{CLL vs normal}
+   \multi{Both size of CLL cohort (n=3293)}{
+      \threecol{confusion/cll_normal/max_normal.png}{Normal}
+      \threecol{confusion/cll_normal/max_pregated.png}{Pregated}
+      \threecol{confusion/cll_normal/max_somcombined.png}{SOM combined}
+   }
+
+   \multi{Both maximum size CLL (n=3293) and normal (n=8183}{
+      \threecol{confusion/cll_normal/all_normal.png}{Normal}
+      \threecol{confusion/cll_normal/all_pregated.png}{Pregated}
+      \threecol{confusion/cll_normal/all_somcombined.png}{SOM combined}
+   }
+
+\end{frame}
+
+\begin{frame}
+   \frametitle{CM (MBL \& CLL) vs normal}
+
+   \begin{columns}[onlytextwidth]
+      \begin{column}{0.6\columnwidth}
+         \centering
+         \includegraphics[width=\columnwidth]{confusion/mblcll/normal.png}
+         {\footnotesize Normal}
+      \end{column}
+
+      \begin{column}{0.39\columnwidth}
+         Average Accuracy: 96,90 \%
+      \end{column}
+
+   \end{columns}
+
+\end{frame}
+
+\begin{frame}
+   \frametitle{9-class classification}
+   \multi{9-class classification results}{
+      \threecol{confusion/single_groups/normal.png}{Normal}
+      \threecol{confusion/single_groups/pregated.png}{Pregated}
+      \threecol{confusion/single_groups/somgated.png}{SOMgated}
+   }
+\end{frame}
+
+\begin{frame}
+   \frametitle{Hierarchical clustering}
+   \begin{column}{0.6\columnwidth}
+      \centering
+      \includegraphics[width=\columnwidth]{confusion/single_groups/somgated_dendro.png}
+   \end{column}
+   \begin{column}{0.39\columnwidth}
+      Hierarchical clustering of SOMGated confusion matrix results.
+      Groups sharing similar misclassifications are grouped closer.
+
+      Inner groupings reflect known similarities in manual MFC analysis.
+   \end{column}
+\end{frame}
+
+
+\begin{frame}
+   \frametitle{Merged classification}
+
+   Groups are merged based on shared similarities. HCL has been removedHierarchical clustering of SOMGated confusion matrix results.
+   Groups sharing similar misclassifications are grouped closer.
+
+   Inner groupings reflect known similarities in manual MFC analysis.
+
+\end{document}

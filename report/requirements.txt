@@ -1,0 +1,4 @@
+boto3
+git+https://github.com/xiamaz/fcsparser.git
+matplotlib
+scipy

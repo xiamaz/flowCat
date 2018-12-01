@@ -1,0 +1,24 @@
+\begin{figure}
+   \includegraphics[width=\linewidth]{numbers/cohorts_num.png}
+   \caption[Cohort sizes]{Overview of cohort sizes using the CLL 9F panel. These numbers include only cases with at least tube 1 and 2 of the same material and each fcs file having more than 10,000 events.}
+\end{figure}
+
+\begin{figure}
+   \includegraphics[width=\linewidth]{numbers/event_distribution.png}
+   \caption[Event distribution in FCS data]{Number of events in each fcs file in tube 1 for each cohort. The whiskers represent 25th and 75th percentile. Numbers outside these ranges are represented as individual dots.}
+\end{figure}
+
+\begin{figure}
+   \includegraphics[width=\linewidth]{numbers/time_distribution.png}
+   \caption[Date distribution of samples]{Time-histogram of case date over time. This visualization can be used to spot skewed distributions in individual cohorts.}
+\end{figure}
+
+\begin{table}
+   \caption[Event counts in samples]{Detailed event count numbers per cohort with the maximum event number in the given cutoff written in brackets.}
+   \input{numbers/event_counts.latex}
+\end{table}
+
+\begin{table}
+   \caption[Classification results]{Overview of classification runs so far and the different applied processing steps in clustering. The mean accuracy has been calculate counting single cases (micro-average), taking class-imbalances into account.}
+   \input{numbers/classification_overview.latex}
+\end{table}

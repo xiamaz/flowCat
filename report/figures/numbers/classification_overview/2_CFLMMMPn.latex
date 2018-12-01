@@ -1,0 +1,8 @@
+\begin{tabular}{llllrr}
+\toprule
+                       &          &        & count &    f1 &  std \\
+set & name & type &       &       &      \\
+\midrule
+abstract\_single\_no\_hcl & somgated & random &     1 &  0.77 &  0.0 \\
+\bottomrule
+\end{tabular}

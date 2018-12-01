@@ -1,0 +1,9 @@
+# combination of distance and amount
+
+merge current distance and amount classifiers
+
+# granularization and convolution
+
+put all data into discrete blocks, treat each block as having an intensity value and apply cnn
+
+issues: how to treat higher dimensions?

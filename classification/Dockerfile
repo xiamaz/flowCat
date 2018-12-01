@@ -1,0 +1,14 @@
+# minimal bioconductor image for deploying flowSOM
+FROM registry.hub.docker.com/library/python:3.6
+
+RUN pip install awscli && apt-get update && apt-get install -y git fish
+
+# adding user repositories
+COPY requirements.txt .
+
+RUN pip install -r requirements.txt
+
+COPY . /app
+WORKDIR "/app/"
+
+ENTRYPOINT ["./run.fish"]

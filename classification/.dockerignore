@@ -1,0 +1,16 @@
+*.png
+*.json
+*.csv
+*.pdf
+
+output/**/*
+output
+
+env/**/*
+env
+
+test/**/*
+test
+
+report/**/*
+report

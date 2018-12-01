@@ -1,0 +1,20 @@
+Running the join tubes function with different numbers of clusters
+
+Unit: seconds
+      expr       min        lq      mean    median        uq       max neval
+  test.100  16.22897  16.22897  16.22897  16.22897  16.22897  16.22897     1
+  test.400  24.05414  24.05414  24.05414  24.05414  24.05414  24.05414     1
+  test.900 108.24016 108.24016 108.24016 108.24016 108.24016 108.24016     1
+ test.1600 323.62211 323.62211 323.62211 323.62211 323.62211 323.62211     1
+ test.2500 620.81437 620.81437 620.81437 620.81437 620.81437 620.81437     1
+
+Number of cells though join
+Original - Tube 1: 25789 Tube 2: 26698
+10x10 - 3,595,830
+20x20 - 708,005
+
+102 normal cases will need approx 50gb uncompressed storage (3gb compressed,
+since it is very repetitive data)
+
+Dimensionality will need to be drastically reduced to make this approach
+feasible.
