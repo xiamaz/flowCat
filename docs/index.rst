@@ -30,6 +30,8 @@ keras_ for classifications.
    :maxdepth: 1
 
    devel/paths_io.rst
+   devel/dataset.rst
+   devel/testing.rst
 
 .. _tensorflow: https://www.tensorflow.org/api_docs/python/tf
 .. _keras: https://keras.io
