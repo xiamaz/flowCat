@@ -40,6 +40,25 @@ class TestLoaders(unittest.TestCase):
         ]
         cls.seq = loaders.DatasetSequence(cls.data, cls.output_spec, draw_method="sequential")
 
+        cls.xshapes = [
+            (400, 36),
+            (100, ),
+            (100, ),
+            (32, 32, 12, ),
+            (34, 34, 11, ),
+        ]
+        cls.yshape = (4, )
+
+    def get_batch_shape(self, batch_size):
+        return [[(batch_size, *t) for t in self.xshapes], (batch_size, * self.yshape)]
+
+    def assertShape(self, data, batch_size):
+        """Ensure that output data matches our input specification."""
+        xdata, ydata = data
+        dshapes = [d.shape for d in xdata]
+        shapes = [dshapes, ydata.shape]
+        self.assertEqual(shapes, self.get_batch_shape(batch_size))
+
     def test_labels(self):
         """Check that the returned label list is correct."""
         self.assertListEqual(
@@ -58,13 +77,7 @@ class TestLoaders(unittest.TestCase):
 
     def test_get_index(self):
         """Check that getting a single batch will return data of the correct shape."""
-        xdata, ydata = self.seq[0]  # pylint: disable=unbalanced-tuple-unpacking
-        self.assertEqual(xdata[0].shape, (10, 400, 36))
-        self.assertEqual(xdata[1].shape, (10, 100, ))
-        self.assertEqual(xdata[2].shape, (10, 100, ))
-        self.assertEqual(xdata[3].shape, (10, 32, 32, 12, ))
-        self.assertEqual(xdata[4].shape, (10, 34, 34, 11, ))
-        self.assertEqual(ydata.shape, (10, 4))
+        self.assertShape(self.seq[0], batch_size=10)
 
     def test_draw_methods(self):
         """Check that the different draw methods behave as expected."""
@@ -107,3 +120,16 @@ class TestLoaders(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 incomplete_grouped = loaders.DatasetSequence(
                     self.data, self.output_spec, draw_method="balanced", number_per_group=incomplete_nums)
+
+    def test_generate_batches(self):
+        """Test generation of samples using multiprocessing."""
+        shuffled = loaders.DatasetSequence(self.data, self.output_spec, draw_method="shuffle", batch_size=2)
+        num_workers = [1, 4, 8]
+        for num_worker in num_workers:
+            with self.subTest(num_workers=num_workers):
+                shuffled.generate_batches(num_workers=num_worker)
+                res = shuffled._cache
+                for r in res:
+                    self.assertShape(r, batch_size=2)
+                self.assertEqual(len(res), len(shuffled))
+                self.assertShape(shuffled[0], batch_size=2)

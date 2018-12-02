@@ -8,6 +8,7 @@ import pickle
 import logging
 import random
 import collections
+import multiprocessing
 
 import numpy as np
 import pandas as pd
@@ -432,6 +433,8 @@ class DatasetSequence(LoaderMixin, Sequence):
         self.epoch_size, self.label_groups, self.number_per_group = self._sample_data(
             data, epoch_size, number_per_group)
 
+        self._cache = [None] * len(self)
+
     @property
     def output_dtypes(self):
         return [o.dtype for o in self._output_spec]
@@ -516,13 +519,23 @@ class DatasetSequence(LoaderMixin, Sequence):
         '''Return batch by label'''
         return self[self.labels.index(label)]
 
+    def generate_batches(self, num_workers=1):
+        """Generate data of batches into a cache for later usage.
+        """
+        LOGGER.debug("Generate all batches in %d processes", num_workers)
+        with multiprocessing.Pool(processes=num_workers) as pool:
+            result = pool.map(self.__getitem__, range(len(self)))
+        self._cache = result
+
     def __len__(self):
         """Return the number of batches generated."""
         return int(np.ceil(self.epoch_size / float(self.batch_size)))
 
-    @mem_cache
     def __getitem__(self, idx):
         """Get a single batch by id."""
+        if self._cache[idx] is not None:
+            return self._cache[idx]
+
         batch_data = self.label_groups[idx * self.batch_size: (idx + 1) * self.batch_size]
 
         # load data using output specs
