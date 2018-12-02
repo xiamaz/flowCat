@@ -63,7 +63,8 @@ def deduplicate_cases_by_sureness(data):
                 cases[0].id, cases[0].group, cases[1].id, cases[1].group,
                 cases[0].sureness_description, cases[1].sureness_description,
             )
-    LOGGER.warning("%d duplicates removed", len(duplicates))
+    if len(duplicates):
+        LOGGER.warning("%d duplicates removed", len(duplicates))
     return deduplicated
 
 
