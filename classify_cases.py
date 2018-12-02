@@ -228,7 +228,7 @@ def run_model(
             # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min"),
             create_stepped(initial_rate, drop, epochs_drop),
         ],
-        validation_data=testseq if validation else None,
+        validation_data=None,# testseq if validation else None,
         # class_weight={
         #     0: 1.0,  # CM
         #     1: 2.0,  # MCL
@@ -240,7 +240,8 @@ def run_model(
         #     7: 1.0,  # normal
         # }
         workers=num_workers,
-        use_multiprocessing=True,
+        use_multiprocessing=False,
+        shuffle=True,
     )
     pred_mat = model.predict_generator(testseq, workers=num_workers, use_multiprocessing=True)
 
@@ -472,7 +473,7 @@ def create_pathconfig():
 
 def create_config():
     # CONFIGURATION VARIABLES
-    c_general_name = "som"
+    c_general_name = "som_testepoch"
 
     # Dataset filter options
     c_dataset_filters = {
@@ -509,7 +510,7 @@ def create_config():
     c_model_traindata_args = {
         "batch_size": MODEL_BATCH_SIZES["train"][c_model_name],
         "draw_method": "balanced",  # possible: sequential, shuffle, balanced, groupnum
-        "epoch_size": 8000,
+        "epoch_size": 160,
         "sample_weights": False,
     }
     c_model_testdata_args = {
@@ -520,7 +521,7 @@ def create_config():
 
     # Run options
     c_run_weights = None
-    c_run_train_epochs = 2
+    c_run_train_epochs = 100
     c_run_initial_rate = 1e-4
     c_run_drop = 0.5
     c_run_epochs_drop = 50
