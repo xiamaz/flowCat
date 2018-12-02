@@ -1,6 +1,6 @@
 import unittest
 
-from shared import *
+from .shared import *
 
 
 class TestURLPathBase(unittest.TestCase):
