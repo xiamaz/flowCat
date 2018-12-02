@@ -192,7 +192,7 @@ def save_weights(weights, path, name):
 def run_model(
         model, trainseq, testseq,
         train_epochs=200, epsilon=1e-8, initial_rate=1e-3, drop=0.5, epochs_drop=100, num_workers=1,
-        validation=False, weights=None):
+        validation=False, weights=None, pregenerate=False):
     """Run and predict using the given model."""
 
     if weights is None:
@@ -222,13 +222,19 @@ def run_model(
         ]
     )
 
+    if pregenerate:
+        trainseq.generate_batches(num_workers)
+        testseq.generate_batches(num_workers)
+        LOGGER.info("Pregenerating batches in sequences. Worker number will be ignored in the fit generator")
+        num_workers = 0
+
     history = model.fit_generator(
         trainseq, epochs=train_epochs,
         callbacks=[
             # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min"),
             create_stepped(initial_rate, drop, epochs_drop),
         ],
-        validation_data=None,# testseq if validation else None,
+        validation_data=testseq if validation else None,
         # class_weight={
         #     0: 1.0,  # CM
         #     1: 2.0,  # MCL
@@ -510,7 +516,7 @@ def create_config():
     c_model_traindata_args = {
         "batch_size": MODEL_BATCH_SIZES["train"][c_model_name],
         "draw_method": "balanced",  # possible: sequential, shuffle, balanced, groupnum
-        "epoch_size": 160,
+        "epoch_size": 16000,
         "sample_weights": False,
     }
     c_model_testdata_args = {
@@ -526,8 +532,9 @@ def create_config():
     c_run_drop = 0.5
     c_run_epochs_drop = 50
     c_run_epsilon = 1e-8
-    c_run_num_workers = 1
-    c_run_validation = True
+    c_run_num_workers = 8
+    c_run_validation = False
+    c_run_pregenerate = True
 
     # Stat output
     c_stat_confusion_sizes = True
