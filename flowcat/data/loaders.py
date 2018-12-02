@@ -24,11 +24,16 @@ LOGGER = logging.getLogger(__name__)
 CACHEDIR = "cache"
 
 
+def stringify(*args, **kwargs):
+    """Transform args and kwargs into a single string, which can be used for hashing"""
+    return "".join(str(a) for a in args) + "".join(str(k) + str(v) for k, v in kwargs.items())
+
+
 def args_hasher(*args, **kwargs):
     """Use at own discretion. Will simply concatenate all input args as
     strings to generate keys."""
     hasher = hashlib.blake2b()
-    hashstr = "".join(str(a) for a in args) + "".join(str(k) + str(v) for k, v in kwargs.items())
+    hashstr = stringify(*args, **kwargs)
     hasher.update(hashstr.encode())
     return hasher.hexdigest()
 
@@ -449,7 +454,6 @@ class DatasetSequence(LoaderMixin, Sequence):
 
         if self.draw_method == "sequential":
             LOGGER.debug("Sequentially sampling data. Will cache batches in memory.")
-            # self.__getitem__ = mem_cache(self.__getitem__)
         elif self.draw_method == "shuffle":
             LOGGER.debug("Shuffling all data.")
             selection = random.sample(selection, k=len(selection))
