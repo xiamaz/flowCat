@@ -39,19 +39,23 @@ class TestLoaders(unittest.TestCase):
         self.seq = loaders.DatasetSequence(self.data, output_spec)
 
     def test_labels(self):
+        """Check that the returned label list is correct."""
         self.assertListEqual(
             list(zip(self.seq.labels, self.seq.randnums, self.seq.ylabels)), self.seq.label_groups)
 
     def test_shapes(self):
+        """Check that the returned shape of the sequantial object is correct."""
         self.assertEqual(
             self.seq.shape,
             ([(400, 36), (100, ), (100, ), (32, 32, 12), (34, 34, 11)], 4)
         )
 
     def test_num_batches(self):
+        """Check that the number of calculated batches is correct"""
         self.assertEqual(len(self.seq), 1)
 
     def test_get_index(self):
+        """Check that getting a single batch will return data of the correct shape."""
         xdata, ydata = self.seq[0]  # pylint: disable=unbalanced-tuple-unpacking
         self.assertEqual(xdata[0].shape, (10, 400, 36))
         self.assertEqual(xdata[1].shape, (10, 100, ))
