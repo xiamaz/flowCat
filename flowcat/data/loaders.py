@@ -39,17 +39,25 @@ def disk_cache(fun):
     cachepath = pathlib.Path(CACHEDIR) / fun.__name__
     cachepath.mkdir(parents=True, exist_ok=True)
 
+    # all hashes that have been saved this time can be skipped later
+    prev_hashed = []
+
     @functools.wraps(fun)
     def wrapper(*args, **kwargs):
         hashed = args_hasher(*args, **kwargs)
         filepath = cachepath / hashed
-        if filepath.exists():
+        if hashed in prev_hashed:
             with open(str(filepath), "rb") as f:
                 result = pickle.load(f)
+        elif filepath.exists():
+            with open(str(filepath), "rb") as f:
+                result = pickle.load(f)
+            prev_hashed.append(hashed)
         else:
             result = fun(*args, **kwargs)
             with open(str(filepath), "wb") as f:
                 pickle.dump(result, f)
+            prev_hashed.append(hashed)
         return result
 
     return wrapper
@@ -63,10 +71,10 @@ def mem_cache(fun):
     @functools.wraps(fun)
     def wrapper(*args, **kwargs):
         hashed = args_hasher(*args, **kwargs)
-        # print(f"{fun.__name__}: Size cache: ", len(cache))
         if hashed in cache:
             result = cache[hashed]
         else:
+            # LOGGER.debug("Cache miss: %s size: %d", fun.__name__, len(cache))
             result = fun(*args, **kwargs)
             cache[hashed] = result
         return result
@@ -136,7 +144,6 @@ def loader_builder(constructor, *args, **kwargs):
 
 class LoaderMixin:
     @staticmethod
-    @disk_cache
     def read_som(path, tube, sel_count=None, gridsize=None, pad_width=None):
         """Load the data associated with the given tube."""
         mapdata = utils.load_csv(utils.URLPath(str(path).format(tube=tube)))
@@ -509,6 +516,7 @@ class DatasetSequence(LoaderMixin, Sequence):
         """Return the number of batches generated."""
         return int(np.ceil(self.epoch_size / float(self.batch_size)))
 
+    @mem_cache
     def __getitem__(self, idx):
         """Get a single batch by id."""
         batch_data = self.label_groups[idx * self.batch_size: (idx + 1) * self.batch_size]
@@ -523,8 +531,3 @@ class DatasetSequence(LoaderMixin, Sequence):
             sample_weights = np.array(self._data.get_sample_weights(batch_data)) / self.avg_sample_weight * 5
             return xdata, ybinary, sample_weights
         return xdata, ybinary
-
-    def on_epoch_end(self):
-        """Resample data after end of epoch."""
-        self.label_groups = self._sample_data(
-            self._data, self.epoch_size, self.number_per_group)
