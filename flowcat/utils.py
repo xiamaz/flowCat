@@ -6,6 +6,8 @@ import json
 import pickle
 from urllib.parse import urlparse
 import logging
+import contextlib
+import time
 import datetime
 import fnmatch
 from functools import wraps
@@ -378,3 +380,14 @@ def create_stamp():
     """Create timestamp usable for filepaths"""
     stamp = datetime.datetime.now()
     return stamp.strftime(TIMESTAMP_FORMAT)
+
+
+@contextlib.contextmanager
+def timer(title):
+    """Take the time for the enclosed block."""
+    time_a = time.time()
+    yield
+    time_b = time.time()
+
+    time_diff = time_b - time_a
+    print(f"{title}: {time_diff:.3}s")

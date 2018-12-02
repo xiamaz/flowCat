@@ -3,7 +3,6 @@ Create SOM maps to be used as references and individual maps to be used for
 visualization and classification.
 """
 import time
-import contextlib
 import collections
 import argparse
 
@@ -16,17 +15,6 @@ from flowcat.models import tfsom
 from flowcat.data.case_dataset import CaseCollection, TubeView
 from flowcat.configuration import Configuration, compare_configurations
 from flowcat import utils, mappings
-
-
-@contextlib.contextmanager
-def timer(title):
-    """Take the time for the enclosed block."""
-    time_a = time.time()
-    yield
-    time_b = time.time()
-
-    time_diff = time_b - time_a
-    print(f"{title}: {time_diff:.3}s")
 
 
 def configure_print_logging(rootname="flowcat"):
@@ -92,7 +80,7 @@ def generate_reference(args, all_config):
         datagen, length = tfsom.create_z_score_generator(tubedata.data, randnums=None)
 
         # train the network
-        with timer("Training time"):
+        with utils.timer("Training time"):
             model.train(datagen(), num_inputs=length)
 
         reference_map = pd.DataFrame(model.output_weights, columns=marker_list)
