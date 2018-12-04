@@ -12,7 +12,7 @@ def get_args():
 
 def suite(pattern="test*.py"):
     """Create a testsuite."""
-    return unittest.TestLoader().discover("tests", pattern=pattern)
+    return unittest.TestLoader().discover("tests", pattern=pattern, top_level_dir=".")
 
 
 def run_unit():

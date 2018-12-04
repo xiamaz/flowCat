@@ -6,7 +6,7 @@ import pathlib
 import pandas as pd
 from pandas.testing import assert_series_equal
 
-from shared import *
+from .shared import *
 
 from flowcat.data import case_dataset
 

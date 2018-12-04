@@ -6,6 +6,8 @@ import json
 import pickle
 from urllib.parse import urlparse
 import logging
+import contextlib
+import time
 import datetime
 import fnmatch
 from functools import wraps
@@ -178,7 +180,17 @@ class LocalBackend(FileBackend):
         return pathlib.Path(path).glob(pattern)
 
 
-class URLPath(object):
+def get_backend(scheme):
+    if not scheme:
+        backend = LocalBackend()
+    elif scheme == "s3":
+        backend = S3Backend()
+    else:
+        raise TypeError(f"Unknown scheme {self.scheme}")
+    return backend
+
+
+class URLPath:
     """Combines url and pathlib.
     Manages two representations, one remote and one local. If the given
     path is local, both will be equivalent.
@@ -186,17 +198,17 @@ class URLPath(object):
     __slots__ = ("scheme", "netloc", "path", "_local", "_backend")
 
     def __init__(self, path, *args):
-        urlpath = urlparse(str(path))
-        self.scheme = urlpath.scheme
-        self.netloc = urlpath.netloc
-        self.path = urlpath.path
-
-        if not self.scheme:
-            self._backend = LocalBackend()
-        elif self.scheme == "s3":
-            self._backend = S3Backend()
+        if isinstance(path, URLPath):
+            self.scheme = path.scheme
+            self.netloc = path.netloc
+            self.path = path.path
         else:
-            raise TypeError(f"Unknown scheme {self.scheme}")
+            urlpath = urlparse(str(path))
+            self.scheme = urlpath.scheme
+            self.netloc = urlpath.netloc
+            self.path = urlpath.path
+
+        self._backend = get_backend(self.scheme)
 
         # add args
         if args:
@@ -268,6 +280,15 @@ class URLPath(object):
 
     def __lt__(self, other):
         return str(self) < str(other)
+
+    def __getstate__(self):
+        """Override default pickling behaviour of getting the dict."""
+        return (self.scheme, self.netloc, self.path)
+
+    def __setstate__(self, state):
+        """Retore instance attributes."""
+        self.scheme, self.netloc, self.path = state
+        self._backend = get_backend(self.scheme)
 
 
 def get_urlpath(fun):
@@ -378,3 +399,14 @@ def create_stamp():
     """Create timestamp usable for filepaths"""
     stamp = datetime.datetime.now()
     return stamp.strftime(TIMESTAMP_FORMAT)
+
+
+@contextlib.contextmanager
+def timer(title):
+    """Take the time for the enclosed block."""
+    time_a = time.time()
+    yield
+    time_b = time.time()
+
+    time_diff = time_b - time_a
+    print(f"{title}: {time_diff:.3}s")
