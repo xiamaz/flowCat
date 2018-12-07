@@ -481,6 +481,7 @@ class DatasetSequence(LoaderMixin, Sequence):
                 sample_num = number_per_group[group]
                 LOGGER.debug("Taking %d from %s.", sample_num, group)
                 selection += random.choices(labels, k=sample_num)
+            selection = random.sample(selection, k=len(selection))
         else:
             raise RuntimeError(
                 f"Unknown draw method: {self.draw_method}. "
