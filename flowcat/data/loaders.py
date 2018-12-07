@@ -121,6 +121,7 @@ def select_drop_counts(data, sel_count=None):
     """
     countnames = ["counts", "count_prev"]
     if sel_count is not None:
+        assert sel_count in countnames, f"{sel_count} has to be either counts or count_prev"
         data[sel_count] = np.sqrt(data[sel_count])
         # rescale 0-1
         data[sel_count] = data[sel_count] / max(data[sel_count])
@@ -152,8 +153,9 @@ class LoaderMixin:
     @staticmethod
     def read_som(path, tube, sel_count=None, gridsize=None, pad_width=None):
         """Load the data associated with the given tube."""
-        mapdata = utils.load_csv(utils.URLPath(str(path).format(tube=tube)))
-        mapdata = select_drop_counts(mapdata, sel_count)
+        csv_path = utils.URLPath(str(path).format(tube=tube))
+        mapdata = utils.load_csv(csv_path)
+        mapdata = select_drop_counts(mapdata, sel_count=sel_count)
         if gridsize is not None:
             mapdata = reshape_dataframe(mapdata, m=gridsize, n=gridsize, pad_width=pad_width)
         return mapdata

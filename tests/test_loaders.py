@@ -133,3 +133,64 @@ class TestLoaders(unittest.TestCase):
                     self.assertShape(r, batch_size=2)
                 self.assertEqual(len(res), len(shuffled))
                 self.assertShape(shuffled[0], batch_size=2)
+
+
+class TestDataReaders(unittest.TestCase):
+    """Test functionality of basic data readers."""
+
+    def setUp(self):
+        loaders._utils = loaders.utils
+        loaders.utils = MockLoader()
+
+    def tearDown(self):
+        loaders.utils = loaders._utils
+
+    def test_read_som(self):
+        """Processing of a csv file or pandas dataframe into a 2d-SOM."""
+        tests = {
+            ("som", 9, None, None, None): np.arange(90).reshape(9, 10),
+            ("som", 9, 3, None, None): np.arange(90).reshape(3, 3, 10),
+            ("som", 4, None, None, None): np.array(
+                [[1, 1, 1, 1], [2, 2, 2, 2], [3, 3, 3, 3], [4, 4, 4, 4]]
+            ),
+            ("som", 4, 2, None, None): np.array(
+                [[[1, 1, 1, 1], [2, 2, 2, 2]], [[3, 3, 3, 3], [4, 4, 4, 4]]]
+            ),
+            ("som", 4, 2, 1, None): np.array(
+                [
+                    [[4, 4, 4, 4], [3, 3, 3, 3], [4, 4, 4, 4], [3, 3, 3, 3]],
+                    [[2, 2, 2, 2], [1, 1, 1, 1], [2, 2, 2, 2], [1, 1, 1, 1]],
+                    [[4, 4, 4, 4], [3, 3, 3, 3], [4, 4, 4, 4], [3, 3, 3, 3]],
+                    [[2, 2, 2, 2], [1, 1, 1, 1], [2, 2, 2, 2], [1, 1, 1, 1]],
+                ]
+            ),
+            ("somcount", 4, 2, None, None): np.array(
+                [[[1, 1, 1, 1], [2, 2, 2, 2]], [[3, 3, 3, 3], [4, 4, 4, 4]]]
+            ),
+            ("sombothcount", 4, 2, None, None): np.array(
+                [[[1, 1, 1, 1], [2, 2, 2, 2]], [[3, 3, 3, 3], [4, 4, 4, 4]]]
+            ),
+            ("somprevcount", 4, 2, None, None): np.array(
+                [[[1, 1, 1, 1], [2, 2, 2, 2]], [[3, 3, 3, 3], [4, 4, 4, 4]]]
+            ),
+            ("somcount", 4, 2, None, "counts"): np.array(
+                [[[1, 1, 1, 1, 1], [2, 2, 2, 2, 1]], [[3, 3, 3, 3, 1], [4, 4, 4, 4, 1]]]
+            ),
+            ("somprevcount", 4, 2, None, "count_prev"): np.array(
+                [[[1, 1, 1, 1, 1], [2, 2, 2, 2, 1]], [[3, 3, 3, 3, 1], [4, 4, 4, 4, 1]]]
+            ),
+            ("sombothcount", 4, 2, None, "counts"): np.array(
+                [[[1, 1, 1, 1, 1], [2, 2, 2, 2, 1]], [[3, 3, 3, 3, 1], [4, 4, 4, 4, 1]]]
+            ),
+            ("sombothcount", 4, 2, None, "count_prev"): np.array(
+                [[[1, 1, 1, 1, 1], [2, 2, 2, 2, 1]], [[3, 3, 3, 3, 1], [4, 4, 4, 4, 1]]]
+            ),
+        }
+        for (name, rows, gridsize, pad_width, sel_count), correct in tests.items():
+            csvname = f"{name}{{tube}}"
+            with self.subTest(
+                    csvname=csvname, rows=rows, gridsize=gridsize, pad_width=pad_width, sel_count=sel_count
+            ):
+                result = loaders.LoaderMixin.read_som(
+                   csvname , tube=rows, gridsize=gridsize, pad_width=pad_width, sel_count=sel_count)
+                np.testing.assert_array_equal(result, correct)
