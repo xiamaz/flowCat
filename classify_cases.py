@@ -31,7 +31,6 @@ from flowcat.mappings import NAME_MAP, GROUP_MAPS
 
 COLS = "grcmyk"
 LOGGER = logging.getLogger(__name__)
-GLOBAL_DECAY = 0.001 / 2  # division by two for usage in l2 regularization
 MODEL_CONSTRUCTORS = {
     "histogram": histo_nn.create_model_histo,
     "som": som_cnn.create_model_cnn,
@@ -640,7 +639,6 @@ def main():
     rparser.add_argument("--model", help="Use an existing model", type=utils.URLPath) # TODO
     rparser.add_argument("--pathconfig", help="Config file containing paths.", type=utils.URLPath, default="paths.toml")
     rparser.add_argument("--config", help="Path to configuration file.", type=utils.URLPath)
-    rparser.add_argument("--recreate", help="Recreate existing files.", action="store_true")
     rparser.add_argument("--name", help="Set an alternative output name.")
     rparser.add_argument("-v", "--verbose", help="Control verbosity. -v is info, -vv is debug", action="count")
     rparser.set_defaults(fun=run)
