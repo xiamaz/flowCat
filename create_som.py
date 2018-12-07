@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Create SOM maps to be used as references and individual maps to be used for
 visualization and classification.
