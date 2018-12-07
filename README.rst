@@ -3,7 +3,11 @@ flowCat: Automated classification of MFC data
 
 Organization and general discussion at: Trello_.
 
+Discussion channel: Mattermost_.
+
 .. _Trello: https://trello.com/b/Krk9nkPg/flowcat
+
+.. _Mattermost: https://mm.meb.uni-bonn.de
 
 Module structure
 ----------------
