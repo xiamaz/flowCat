@@ -1,19 +1,11 @@
-## Paths configuration
-
-# This file should be adapted to where these folders can be found on the local
-# computer
-
-# settings prefix, this is used as a first level section identifier
-# do not change this
 section = "p"
 
-[input]
-# list datasets to be used for classification
-# possible options are: FCS, HISTO, SOM
-datasets = [[ "FCS", "s3://mll-flowdata/fixedCLL-9F",], [ "SOM", "s3://mll-sommaps/sample_maps/selected1_toroid_s32",],]
-# dataset containing metadata used for filtering
-cases = "s3://mll-flowdata/fixedCLL-9F"
+[output.paths]
+classification = "output/mll-sommaps/classification"
+som-reference = "output/mll-sommaps/reference_maps"
+som-sample = "output/mll-sommaps/sample_maps"
 
-[output]
-# model files, predictions and other data will be saved to this path
-path = "output/mll-sommaps/classification"
+[input.paths]
+FCS = [ "/data/flowcat-data/mll-flowdata", "s3://mll-flowdata",]
+SOM = [ "output/mll-sommaps/sample_maps", "s3://mll-sommaps/sample_maps",]
+HISTO = [ "s3://mll-flow-classification/clustering",]

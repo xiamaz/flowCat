@@ -16,10 +16,9 @@ from matplotlib import cm
 import keras
 import vis
 
-import seaborn
 from scipy.cluster import hierarchy
 
-from ..data.case import FCSData
+from ..dataset import case as ccase
 from ..models import tfsom
 
 
@@ -198,7 +197,7 @@ def plot_scatterplot(data, tube, selections=None, selected_views=None, horiz_wid
     if selected_views is None:
         selected_views = ALL_VIEWS[tube]
 
-    if isinstance(data, FCSData):
+    if isinstance(data, ccase.FCSData):
         ranges = data.ranges
         data = data.data
     else:

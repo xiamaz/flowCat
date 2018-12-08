@@ -1,5 +1,6 @@
 """Manage configuration for different systems."""
 import collections
+import copy
 
 from . import utils
 
@@ -130,7 +131,7 @@ class Configuration:
 
     @property
     def tomldict(self):
-        tomldata = self._data.copy()
+        tomldata = copy.deepcopy(self._data)
         tomldata["section"] = self.section
         # transform sections with int keys to strings to avoid TOML errors
         for subsec in tomldata:
@@ -209,6 +210,9 @@ class Configuration:
         else:
             raise TypeError(f"Unknown filetype: {path}")
 
+    def copy(self):
+        return self.__class__(copy.deepcopy(self._data), self.section)
+
     def __getitem__(self, index):
         """Get data with the given index. Either return another configuration
         instance or return the single key."""
@@ -225,3 +229,49 @@ class Configuration:
 
     def __repr__(self):
         return f"<{self.section}: {len(self._data)} subsections>"
+
+
+def create_pathconfig():
+    """Create a sample path configuration."""
+    # CONFIGURATION VARIABLES
+    # Input paths
+    p_input_paths = {
+        "FCS": [
+            "/data/flowcat-data/mll-flowdata",
+            "s3://mll-flowdata",
+        ],
+        "SOM": [
+            "output/mll-sommaps/sample_maps",
+            "s3://mll-sommaps/sample_maps",
+        ],
+        "HISTO": [
+            "s3://mll-flow-classification/clustering"
+        ],
+    }
+
+    # Output paths
+    p_output_paths = {
+        "classification": "output/mll-sommaps/classification",
+        "som-reference": "output/mll-sommaps/reference_maps",
+        "som-sample": "output/mll-sommaps/sample_maps",
+    }
+    config = Configuration.from_localsdict(locals())
+    return config
+
+
+def configuration_builder(default=None):
+    """Return a partial function, that can be used to instantiate configuration
+    objects.
+
+    Args:
+        default: Called if no path has been provided.
+    """
+
+    def create_config(patharg):
+        if not patharg:
+            if default is None:
+                raise RuntimeError("No default function provided for missing configuration.")
+            return default()
+        return Configuration.from_file(utils.URLPath(patharg))
+
+    return create_config

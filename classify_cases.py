@@ -17,16 +17,13 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib import cm
 
+from flowcat import utils, configuration, loaders
+from flowcat.dataset import combined_dataset
+from flowcat.mappings import NAME_MAP, GROUP_MAPS
 from flowcat.visual import plotting
-from flowcat.data import case_dataset as cc
-from flowcat.data import loaders, all_dataset
 
 from flowcat.models import weighted_crossentropy
 from flowcat.models import fcs_cnn, histo_nn, som_cnn
-
-from flowcat import utils
-from flowcat.configuration import Configuration
-from flowcat.mappings import NAME_MAP, GROUP_MAPS
 
 
 COLS = "grcmyk"
@@ -388,7 +385,7 @@ def load_dataset(pathconfig, config):
     mapping = config["dataset"]["mapping"]
     tubes = config["dataset"]["filters"]["tubes"]
 
-    dataset = all_dataset.CombinedDataset.from_paths(
+    dataset = combined_dataset.CombinedDataset.from_paths(
         casepath, datasets, group_names=filters["groups"], tubes=tubes)
     dataset.filter(**filters)
     dataset.set_mapping(GROUP_MAPS[mapping])
@@ -460,27 +457,15 @@ def setup_logging(filelog=None, filelevel=logging.DEBUG, printlevel=logging.WARN
     add_logger(LOGGER, handlers, level=logging.DEBUG)
 
 
-def create_pathconfig():
-    # CONFIGURATION VARIABLES
-    # Input paths
-    p_input_cases = "s3://mll-flowdata/fixedCLL-9F"
-    p_input_datasets = [
-        ("FCS", p_input_cases),
-        ("SOM", "s3://mll-sommaps/sample_maps/selected1_toroid_s32"),
-        # ("HISTO", "s3://mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"),
-    ]
-
-    # Output paths
-    p_output_path = "output/mll-sommaps/classification"
-    config = Configuration.from_localsdict(locals())
-    return config
-
-
 def create_config():
     # CONFIGURATION VARIABLES
     c_general_name = "som_testepoch"
 
     # Dataset filter options
+    c_dataset_names = {
+        "FCS": "fixedCLL-9F",
+        "SOM": "selected1_toroid_s32",
+    }
     c_dataset_filters = {
         "tubes": [1, 2],
         "counts": 10000,
@@ -539,7 +524,7 @@ def create_config():
     c_stat_confusion_sizes = True
     # END CONFIGURATION VARIABLES
     # save configuration variables
-    config = Configuration.from_localsdict(locals())
+    config = configuration.Configuration.from_localsdict(locals())
     return config
 
 
@@ -552,22 +537,14 @@ def args_loglevel(vlevel):
     return logging.DEBUG
 
 
-def get_config(args, attr, alt):
-    if getattr(args, attr):
-        config = Configuration.from_file(getattr(args, attr))
-    else:
-        config = alt()
-    return config
-
-
 def run(args):
-    config = get_config(args, "config", create_config)
-    pathconfig = get_config(args, "pathconfig", create_pathconfig)
+    config = args.modelconfig
+    pathconfig = args.pathconfig
 
     if args.name:
         config["general"]["name"] = args.name
-
-    outpath = utils.URLPath(f"{pathconfig['output']['path']}/{config['general']['name']}")
+    classification_path = pathconfig['output']['paths']['classification']
+    outpath = utils.URLPath(f"{classification_path}/{config['general']['name']}")
 
     # Create logfiles
     logpath = outpath / f"classification.log"
@@ -577,11 +554,11 @@ def run(args):
     # save configuration
     config.to_toml(outpath / "config.toml")
 
-    dataset = load_dataset(pathconfig, config)
+    dataset = combined_dataset.CombinedDataset.from_config(pathconfig, config)
 
     # split into train and test set
     LOGGER.info("Splitting dataset")
-    train, test = all_dataset.split_dataset(dataset, **config["split"], seed=args.seed)
+    train, test = combined_dataset.split_dataset(dataset, **config["split"], seed=args.seed)
     utils.save_json(train.labels, outpath / "train_labels.json")
     utils.save_json(test.labels, outpath / "test_labels.json")
 
@@ -604,10 +581,7 @@ def run(args):
 
 def config(args):
     setup_logging(filelog=None, printlevel=logging.ERROR)
-    if args.pathconfig:
-        config = create_pathconfig()
-    else:
-        config = create_config()
+    config = getattr(args, args.type)
 
     if args.output is None:
         print("HINT: Redirect stderr to get config output suitable for piping.", file=sys.stderr)
@@ -619,28 +593,56 @@ def config(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Classify samples")
+    parser.add_argument(
+        "--pathconfig",
+        help="Config file containing paths.",
+        type=configuration.configuration_builder(configuration.create_pathconfig),
+        default="paths.toml")
+    parser.add_argument(
+        "--modelconfig",
+        help="Path to configuration file.",
+        type=configuration.configuration_builder(create_config),
+        default="")
     subparsers = parser.add_subparsers()
 
     # Save configuration files in specified in the create configuration file
-    cparser = subparsers.add_parser("config", help="Output the current configuration. Hint: Get rid of import messages by eg piping stderr to /dev/null")
-    cparser.add_argument("-o", "--output", help="Write configuration to output file.", type=utils.URLPath)
+    cparser = subparsers.add_parser(
+        "config",
+        help="Output the current configuration. Hint: Get rid of import messages by eg piping stderr to /dev/null")
+    cparser.add_argument(
+        "-o", "--output",
+        help="Write configuration to output file.",
+        type=utils.URLPath)
     cparser.add_argument(
         "--format",
         help="Format of configuration. Either json or toml.",
         choices=["json", "toml"],
         default="toml",)
     cparser.add_argument(
-        "--pathconfig", help="Output pathconfig instead of model configuration.", action="store_true")
+        "--type",
+        help="Output pathconfig instead of model configuration.",
+        choices=["pathconfig", "modelconfig"],
+        default="modelconfig",
+    )
     cparser.set_defaults(fun=config)
 
     # Run the classification process
     rparser = subparsers.add_parser("run", help="Run classification")
-    rparser.add_argument("--seed", help="Seed for random number generator", type=int)
-    rparser.add_argument("--model", help="Use an existing model", type=utils.URLPath) # TODO
-    rparser.add_argument("--pathconfig", help="Config file containing paths.", type=utils.URLPath, default="paths.toml")
-    rparser.add_argument("--config", help="Path to configuration file.", type=utils.URLPath)
-    rparser.add_argument("--name", help="Set an alternative output name.")
-    rparser.add_argument("-v", "--verbose", help="Control verbosity. -v is info, -vv is debug", action="count")
+    rparser.add_argument(
+        "--seed",
+        help="Seed for random number generator",
+        type=int)
+    rparser.add_argument(
+        "--model",
+        help="Use an existing model",
+        type=utils.URLPath) # TODO
+    rparser.add_argument(
+        "--name",
+        help="Set an alternative output name.")
+    rparser.add_argument(
+        "-v", "--verbose",
+        help="Control verbosity. -v is info, -vv is debug",
+        action="count")
     rparser.set_defaults(fun=run)
 
     args = parser.parse_args()

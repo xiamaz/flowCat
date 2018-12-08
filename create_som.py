@@ -12,10 +12,9 @@ import logging
 import numpy as np
 import pandas as pd
 
+from flowcat import utils, mappings, configuration
 from flowcat.models import tfsom
-from flowcat.data.case_dataset import CaseCollection, TubeView
-from flowcat.configuration import Configuration, compare_configurations
-from flowcat import utils, mappings
+from flowcat.dataset import case_dataset
 
 
 def configure_print_logging(rootname="flowcat"):
@@ -47,30 +46,56 @@ def load_labels(path):
     return labels
 
 
-def generate_reference(args, all_config):
-    """Generate a reference SOMmap using the given configuration."""
-    config = all_config["reference"]
+def get_filtered_data(config):
+    """Create a filtered case view from the given configuration."""
+    return data
 
-    reference_path = utils.URLPath(config["path"])
-    reference_config = reference_path / "config.toml"
 
-    # load existing if it already exists
-    if reference_config.exists() and not args.recreate:
-        old_config = Configuration.from_toml(reference_config)
-        assert compare_configurations(config, old_config["reference"], section=None, method="left")
-        reference_data = {
-            t: utils.load_csv(reference_path / f"t{t}.csv") for t in config["view"]["tubes"]
-        }
-        return reference_data
+def get_config_path(path):
+    """Get configuration for the given dataset."""
+    return path / "config.toml"
 
-    cases = CaseCollection.from_dir(config["cases"])
+
+def get_config(path, section=None):
+    """Load configuration in the given dataset and return the given section."""
+    config = Configuration.from_file(get_config_path(path))
+    return config if section is None else config[section]
+
+
+def load_reference_if_same(path, new_config):
+    """Check whether the given path contains a dataset generated with the same
+    configuration. Return the reference dict if yes, otherwise return None."""
+
+    # skip if dataset folder does not exist
+    if not path.exists():
+        return None
+
+    # check if configuration is the same
+    ref_config = get_config(path)
+    if not configuration.compare_configurations(
+            new_config["reference"],
+            ref_config["reference"],
+            section=None, method="left"
+    ):
+        if not utils.CLOBBER:
+            raise RuntimeError(f"{path} exists and will not be overwritten because CLOBBER is {utils.CLOBBER}")
+        return None
+
+    return {
+        t: utils.load_csv(path / f"t{t}.csv") for t in config["reference"]["view"]["tubes"]
+    }
+
+
+def create_new_reference(path, config):
+    output_dir = utils.URLPath(config["path"])
+    reference_data = {}
+
+    cases = case_dataset.CaseCollection.from_path(config["cases"])
     labels = load_labels(config["labels"])
     data = cases.filter(labels=labels, **config["view"])
 
     config["selected_markers"] = data.selected_markers
 
-    output_dir = utils.URLPath(config["path"])
-    reference_data = {}
     for tube in data.selected_tubes:
         tubedata = data.get_tube(tube)
         marker_list = tubedata.markers
@@ -87,13 +112,35 @@ def generate_reference(args, all_config):
         reference_map = pd.DataFrame(model.output_weights, columns=marker_list)
 
         # get the results and save them to files
-        utils.save_csv(reference_map, output_dir / f"t{tube}.csv")
         reference_data[tube] = reference_map
 
-    # Save the configuration if regenerated
-    all_config.to_toml(reference_config)
+    return reference_data
 
-    # return reference maps as dict of tubes
+
+def save_reference(config, data, path):
+    # Save reference data
+    for tube, reference_map in data.items():
+        utils.save_csv(reference_map, path / f"t{tube}.csv")
+
+    # Save reference configuration
+    ref_only = all_config.copy()
+    del ref_only["som"]
+    ref_only.to_toml(get_config_path(path))
+
+
+def generate_reference(args):
+    """Generate a reference SOMmap using the given configuration."""
+    all_config = args.refconfig
+    config = all_config["reference"]
+    reference_path = utils.URLPath(config["path"])
+
+    # load existing if it already exists
+    reference_data = load_reference_if_same(reference_path, all_config)
+    # create new reference
+    if not reference_data:
+        reference_data = create_new_reference(reference_path, config)
+        save_reference(all_config, reference_data, reference_path)
+
     return reference_data
 
 
@@ -106,24 +153,24 @@ def filter_tubedata_existing(tubedata, outdir):
         if not filepath.exists():
             not_existing.append(tcase)
 
-    ne_tcases = TubeView(not_existing, markers=tubedata.markers, tube=tubedata.tube)
+    ne_tcases = case_dataset.TubeView(not_existing, markers=tubedata.markers, tube=tubedata.tube)
     return ne_tcases
 
 
-def generate_soms(args, all_config, recreate=True):
+def generate_soms(args):
     """Generate sommaps using the given configuration.
     Args:
         all_coufig: Configuration object
         references: Reference SOM dict.
-        recreate: If true, existing files will be overwritten.
     """
+    all_config = args.somconfig
     config = all_config["soms"]
 
     output_dir = utils.URLPath(config["path"])
 
-    all_config.to_toml(output_dir + "_config.toml")
+    all_config.to_toml(output_dir / "config.toml")
 
-    cases = CaseCollection.from_dir(config["cases"])
+    cases = case_dataset.CaseCollection.from_path(config["cases"])
     labels = load_labels(config["labels"])
 
     selected_markers = None
@@ -148,7 +195,7 @@ def generate_soms(args, all_config, recreate=True):
         # get the correct data from cases with the correct view
         tubedata = data.get_tube(tube)
 
-        if not recreate:
+        if not args.no_recreate_samples:
             tubedata = filter_tubedata_existing(tubedata, output_dir)
 
         # get the referece if using reference initialization or sample based
@@ -187,41 +234,25 @@ def generate_soms(args, all_config, recreate=True):
     return metadata
 
 
-def create_config(name="testrun"):
-    """Create a configuration object by creating a dictionary from
-    local variables. Only variables with a c_ prefix will be included.
-
-    Creating configuration inside a python function function has the added
-    flexibility to add programmatic calculations and references, which will be
-    encded as easily accessible plaintext in the output configuration file.
-
-    Args:
-        name: Name of the current experiment run.
-    """
-    # START Configuration
-    # General SOMmap
-    c_general_gridsize = 32
-    c_general_map_type = "toroid"
-    # Data Configuration options
-    c_general_cases = "s3://mll-flowdata/newCLL-9F"
-    c_general_tubes = [1, 2]
-
+def create_reference_config():
+    """Create a reference configuration."""
     # Reference SOMmap options
-    c_reference_name = name
-    c_reference_path = f"output/mll-sommaps/reference_maps/{c_reference_name}"
-    c_reference_cases = c_general_cases
-    c_reference_labels = "data/selected_cases.txt"
-    c_reference_view = {
-        "tubes": c_general_tubes,
+    c_general_name = "testrun"
+    c_dataset_labels = "data/selected_cases.txt"
+    c_dataset_names = {
+        "FCS": "fixedCLL-9F",
+    }
+    c_dataset_filters = {
+        "tubes": [1, 2],
         "num": 1,
         "groups": None,
         "infiltration": None,
         "counts": 8192,
     }
-    c_reference_tfsom = {
-        "model_name": c_reference_name,
-        "m": c_general_gridsize, "n": c_general_gridsize,
-        "map_type": c_general_map_type,
+    c_model_tfsom = {
+        "model_name": c_general_name,
+        "m": 32, "n": 32,
+        "map_type": "toroid",
         "max_epochs": 10,
         "batch_size": 1,
         "subsample_size": 8192,
@@ -234,22 +265,30 @@ def create_config(name="testrun"):
         "node_distance": "euclidean",
         "initialization_method": "random",
     }
+    config = configuration.Configuration.from_localsdict(locals(), section="c")
+    return config
 
-    # Individual SOMmap configuration
-    c_soms_name = f"{name}_s{c_general_gridsize}_t{c_general_map_type}"
-    c_soms_cases = c_general_cases
-    c_soms_path = f"output/mll-sommaps/sample_maps/{c_soms_name}"
-    c_soms_labels = "data/selected_cases.txt"
-    c_soms_view = {
-        "tubes": c_general_tubes,
+
+def create_som_config():
+    # START Configuration
+    # General SOMmap
+    c_general_name = "testrun"
+    # Data Configuration options
+    c_dataset_labels = None
+    c_dataset_names = {
+        "FCS": "fixedCLL-9F",
+    }
+    c_dataset_filters = {
+        "tubes": [1, 2],
         "num": None,
         "groups": None,
         "infiltration": None,
         "counts": 8192,
     }
+    # Individual SOMmap configuration
     c_soms_somnodes = {
-        "m": c_general_gridsize, "n": c_general_gridsize,
-        "map_type": c_general_map_type,
+        "m": 32, "n": 32,
+        "map_type": "toroid",
         "max_epochs": 10,
         "initialization_method": "random",
         "counts": True,
@@ -265,59 +304,63 @@ def create_config(name="testrun"):
             "initial_radius": 16,
             "end_radius": 1,
         },
-        "model_name": c_soms_name,
+        "model_name": c_general_name,
     }
-
     # Output Configurations
     # END Configuration
 
     # Only use c_ prefixed variables for configuration generation
-    config = Configuration.from_localsdict(locals(), section="c")
+    config = configuration.Configuration.from_localsdict(locals(), section="c")
     return config
-
-
-def create_group_maps(tensorboard):
-    """Create SOM maps for each group from selected cases."""
-    class DummyArgs:
-        pass
-    args = DummyArgs()
-    args.config = None
-    args.recreate = True
-    args.tensorboard = tensorboard
-    for group in mappings.GROUPS:
-        print(f"Creating config for {group}")
-        config = create_config(name=f"gsel_{group}")
-        config["soms"]["view"]["groups"] = group
-        generate_soms(args, config)
 
 
 def main():
     configure_print_logging()
 
     parser = argparse.ArgumentParser(usage="Generate references and individual SOMs.")
-    parser.add_argument("--config", help="Configuration file to load from.", type=utils.URLPath)
-    parser.add_argument("--recreate", help="Recreate existing maps.", action="store_true")
-    parser.add_argument("--tensorboard", help="Tensorboard directory", type=utils.URLPath)
-    parser.add_argument("--name", help="Name of the current run. Will be used as output folder name.", type=str)
+    parser.add_argument(
+        "--somconfig",
+        help="Individual SOM config file.",
+        type=configuration.configuration_builder(create_som_config),
+        default="")
+    parser.add_argument(
+        "--refconfig",
+        help="Reference SOM config file.",
+        type=configuration.configuration_builder(create_reference_config),
+        default="")
+    parser.add_argument(
+        "--tensorboard",
+        help="Tensorboard directory",
+        type=utils.URLPath)
+    parser.add_argument(
+        "--name",
+        help="Name of the current run. Will be used as output folder name.",
+        type=str)
     subparsers = parser.add_subparsers()
 
     parser_conf = subparsers.add_parser("config", help="Generate the config to a specified directory")
-    parser_conf.add_argument("path", help="Output path to save configuration", type=utils.URLPath)
-    parser_conf.set_defaults(fun=lambda args, config: config.to_file(args.path))
+    parser_conf.add_argument(
+        "--type",
+        choices=["refconfig", "somconfig"],
+        help="Generate reference or individual SOM config")
+    parser_conf.add_argument(
+        "path",
+        help="Output path to save configuration",
+        type=utils.URLPath)
+    parser_conf.set_defaults(
+        fun=lambda args: getattr(args, args.type).to_file(args.path))
 
     parser_create = subparsers.add_parser("som", help="Generate individual SOM, will also create reference if missing")
+    parser_create.add_argument(
+        "--no-recreate-samples", help="Do not regenerate already created individual samples", action="store_true")
     parser_create.set_defaults(fun=generate_soms)
 
     parser_ref = subparsers.add_parser("reference", help="Generate reference SOM")
     parser_ref.set_defaults(fun=generate_reference)
 
     args = parser.parse_args()
-    if args.config:
-        config = Configuration.from_file(args.config)
-    else:
-        config = create_config(name=args.name)
     if hasattr(args, "fun"):
-        args.fun(args, config)
+        args.fun(args)
     else:
         parser.print_help()
 

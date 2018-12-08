@@ -15,10 +15,9 @@ import pandas as pd
 from sklearn import preprocessing
 from keras.utils import Sequence
 
-from ..mappings import NAME_MAP, GROUP_MAPS
-from . import case as ccase
-from . import case_dataset as cc
-from .. import utils
+from . import utils
+from .mappings import NAME_MAP, GROUP_MAPS
+from .dataset import case as ccase
 
 
 LOGGER = logging.getLogger(__name__)

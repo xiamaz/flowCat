@@ -3,7 +3,7 @@ import pathlib
 
 from .shared import *
 
-from flowcat.data import all_dataset
+from flowcat.dataset import combined_dataset
 from flowcat.mappings import GROUP_MAPS
 
 
@@ -20,8 +20,8 @@ def invert_dict(d):
 class TestCombinedDataset(unittest.TestCase):
 
     def setUp(self):
-        self.data = all_dataset.CombinedDataset.from_paths(
-            casepath=FCS_PATH, paths=[("FCS", FCS_PATH), ("HISTO", HISTO_PATH), ("SOM", SOM_PATH)],
+        self.data = combined_dataset.CombinedDataset.from_paths(
+            paths={"FCS": FCS_PATH, "HISTO": HISTO_PATH, "SOM": SOM_PATH},
             group_names=["CLL", "LPL", "PL", "normal"],
         )
 
@@ -129,21 +129,21 @@ class TestCombinedDataset(unittest.TestCase):
         test_splits = [0.5, 0.75, 0.8, 0.9, 1]
         for split in test_splits:
             with self.subTest(split=split):
-                train, test = all_dataset.split_dataset(self.data, train_num=split)
+                train, test = combined_dataset.split_dataset(self.data, train_num=split)
                 valid_split(self.data, train, test, split)
 
     def test_split_dataset_too_large(self):
         """Check that we return a value error if we try to use an absolute
         train number, which is larger than the cohort."""
         with self.assertRaises(ValueError):
-            all_dataset.split_dataset(self.data, train_num=1000)
+            combined_dataset.split_dataset(self.data, train_num=1000)
 
 
     def test_split_dataset_seed(self):
         """Check that using a seed will always return the same split of the
         input data."""
         with self.subTest("Same seed returns same"):
-            tr1, t1 = all_dataset.split_dataset(self.data, train_num=0.5, seed=42)
+            tr1, t1 = combined_dataset.split_dataset(self.data, train_num=0.5, seed=42)
             train = [
                 'a027a84b1b80e1f10666f9915ec8d5cb147fe2ac',
                 '70d3d6cc1d4bbd6f942164fccdfeff7ba2cf685d',
@@ -163,7 +163,7 @@ class TestCombinedDataset(unittest.TestCase):
 
 
         with self.subTest("Different seeds will return different splits on the same data."):
-            tr1, t1 = all_dataset.split_dataset(self.data, train_num=0.5, seed=42)
-            tr2, t2 = all_dataset.split_dataset(self.data, train_num=0.5, seed=24)
+            tr1, t1 = combined_dataset.split_dataset(self.data, train_num=0.5, seed=42)
+            tr2, t2 = combined_dataset.split_dataset(self.data, train_num=0.5, seed=24)
             self.assertTrue(any(t not in tr2.labels for t in tr1.labels))
             self.assertTrue(any(t not in t2.labels for t in t1.labels))
