@@ -30,7 +30,7 @@ import pandas as pd
 
 import tensorflow as tf
 from ..utils import create_stamp
-from ..data import case as ccase
+from ..dataset import case as ccase
 
 """
 Adapted from code by Chris Gorman.

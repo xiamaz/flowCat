@@ -4,8 +4,8 @@ import pathlib
 
 from .shared import *
 
-from flowcat.data import loaders
-from flowcat.data import all_dataset
+from flowcat import loaders
+from flowcat.dataset import combined_dataset
 from tests.test_dataset import TestCombinedDataset
 
 
@@ -13,8 +13,8 @@ class TestLoaders(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.data = all_dataset.CombinedDataset.from_paths(
-            casepath=FCS_PATH, paths=[("FCS", FCS_PATH), ("HISTO", HISTO_PATH), ("SOM", SOM_PATH)],
+        cls.data = combined_dataset.CombinedDataset.from_paths(
+            paths={"FCS": FCS_PATH, "HISTO": HISTO_PATH, "SOM": SOM_PATH},
             group_names=["CLL", "LPL", "PL", "normal"],
         )
         cls.output_spec = [

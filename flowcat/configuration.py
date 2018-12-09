@@ -1,227 +1,248 @@
 """Manage configuration for different systems."""
-import collections
+import copy
 
 from . import utils
 
 
-def infer_sections(data):
-    """Infer section names from first level in data name.
-    Will return a set of section names.
-    """
-    first_level = [k.split("_", 1)[0] for k in data]
-    names = set(first_level)
-    return names
-
-
-def filter_section(data, section):
-    """Only keep keys, which have the given section as a prefix."""
-    return {k: v for k, v in data.items() if str(k).startswith(section)}
-
-
-def strip_section(data, section):
-    """Strip the section name from all keys in data."""
-    return {
-        k[len(section) + 1:] if k.startswith(f"{section}_") else k: v
-        for k, v in data.items()
-    }
-
-
-def build_sections(data, sections):
-    """Build a mapping to sections to dicts containing the subkeys."""
-    mapping = {}
-    for section in sections:
-        section_dict = {k: v for k, v in data.items() if k.startswith(f"{section}_")}
-        mapping[section] = strip_section(section_dict, section)
-    return mapping
-
-
-def list_a_eq_b(list_a, list_b):
-    if not isinstance(list_b, list):
-        return False
-    return str(sorted(list_a)) == str(sorted(list_b))
-
-
-def dict_a_in_b(dict_a, dict_b):
-    """Check that all keys in dictionary A are contained in dictionary B and
-    all contained keys have the same value in both dictionaries."""
-    for k, val in dict_a.items():
-        val_b = dict_b.get(k, None)
-        if isinstance(val, dict):
-            if not dict_a_in_b(val, val_b):
-                return False
-        elif isinstance(val, list):
-            if not list_a_eq_b(val, val_b):
-                return False
-        else:
-            if val != val_b:
-                return False
-    return True
-
-
-def compare_configurations(conf_a, conf_b, section="", method="left"):
-    """Compare a section of the given configurations. Check that
-    config a is the same as b in the given section.
-    Args:
-        conf_a: Config object.
-        conf_b: Another config object.
-        section: Section to be compared. If falsy, will use entire config.
-        method: Comparison method.
-            left - All keys in a must be same in b
-            right - All keys in b must be same in a
-            both - All keys from both must be same
-    Return:
-        Boolean whether equality check has been passed.
-    """
-    if section:
-        section_a = conf_a[section]
-        section_b = conf_b[section]
+def isinstance_more(obj, otype):
+    if otype is None or obj is None:
+        return obj is otype
+    if isinstance(otype, list) and isinstance(obj, list):
+        # check all list members if type is a list
+        return all(isinstance(o, otype[0]) for o in obj)
+    if isinstance(otype, dict) and isinstance(obj, dict):
+        k, v = next(iter(otype.items()))
+        return all(isinstance(kk, k) and isinstance(vv, v) for kk, vv in obj.items())
     else:
-        if isinstance(conf_a, Configuration):
-            section_a = conf_a.dict
-            section_b = conf_b.dict
-        else:
-            section_a = conf_a
-            section_b = conf_b
-
-    if method == "left":
-        return dict_a_in_b(section_a, section_b)
-    if method == "right":
-        return dict_a_in_b(section_b, section_a)
-    if method == "both":
-        return dict_a_in_b(section_a, section_b) and dict_a_in_b(section_b, section_a)
-    raise TypeError(f"Unknown method {method}")
+        return isinstance(obj, otype)
 
 
-def to_int_naming(data, key, tag):
-    """Convert dict keys from strings to ints. This operation is done in-place.
-    Args:
-        data: Dict containing key values as parameters.
-        key: Key of the data to be modified.
-        tag: Tag on the string that will be replaced.
-    Returns:
-        Modified sectiondata dict.
-    """
-    if key in data:
-        data[key] = {int(k.replace(tag, "")): v for k, v in data[key].items()}
+def check_schema(schema, data):
+    """Recursively follow dictionaries to check schema.
+    Schema mismatches cause errors."""
+    if not isinstance(data, dict):
+        raise TypeError(f"Expected data to be of dict type")
+    data_only_keys = set(data.keys()) - set(schema.keys())
+    if data_only_keys:
+        raise KeyError(f"Unknown keys {data_only_keys}")
+
+    for key, value in schema.items():
+        if isinstance(value, dict):
+            # recurse into another schema level
+            subdata = data.get(key, {})
+            data[key] = check_schema(schema[key], subdata)
+        elif isinstance(value, tuple):
+            # check type
+            valid_types, default = value
+            dval = data.get(key, default)
+            # None not ok if default None and None not in types
+            if not any(isinstance_more(dval, d) for d in valid_types):
+                raise TypeError(f"{key} got {type(dval)} not in known types {valid_types}")
+            data[key] = dval
     return data
 
 
-def to_string_naming(data, key, tag):
-    """Convert dicts with int names to strings. Adding the given tag."""
-    if key in data:
-        data[key] = {f"{tag}{k}": v for k, v in data[key].items()}
-    return data
+class Config:
+    """Create configuration skeletons using provided schemas.
 
-
-class Configuration:
-    """Basic configuration class, allowing underline access to sectioned data."""
-
-    def __init__(self, data, section=""):
-        """Initialize from input data."""
-        self.section = section
-        self._data = {k: collections.defaultdict(lambda: None, v) for k, v in data.items()}
-
-    @property
-    def dict(self):
-        return {
-            f"{self.section}_{section}_{k}": v
-            for section, secdict in self._data.items() for k, v in secdict.items()
+    A schema is a nested dict of tuples with the following format:
+    {
+        key: ((multiple types, ), default),
+        key: ((int,), None), <- this denotes a field that must be specified
+        key: (([int],), None), <- this denotes a list of specific type
+        key {
+            further nestings are possible for dictionaries
         }
+    """
 
-    @property
-    def tomldict(self):
-        tomldata = self._data.copy()
-        tomldata["section"] = self.section
-        # transform sections with int keys to strings to avoid TOML errors
-        for subsec in tomldata:
-            tomldata[subsec] = to_string_naming(tomldata[subsec], "selected_markers", "tube")
-        return tomldata
+    _schema = None
 
-    @property
-    def toml(self):
-        return utils.to_toml(self.tomldict)
-
-    @property
-    def json(self):
-        """String containing json representation of configuration."""
-        return utils.to_json(self.dict)
+    def __init__(self, data):
+        self._data = self._check_schema(data)
 
     @classmethod
-    def from_json(cls, path):
-        """Get from json file containing local variables."""
-        data = utils.load_json(path)
-        return cls.from_localsdict(data)
-
-    @classmethod
-    def from_localsdict(cls, data, section=None):
-        """Get from local vars dictionary.
-        Args:
-            data: Dictionary containing variables, such as obtained with a locals() call.
-            section: Prefix required. Will be used to filter the input dictionary.
-        """
-        if section is None:
-            first_sections = infer_sections(data)
-            assert len(first_sections) == 1
-            section = first_sections.pop()
-        else:
-            data = filter_section(data, section)
-
-        data = strip_section(data, section)
-        sections = infer_sections(data)
-        data = build_sections(data, sections)
-        return cls(data, section=section)
-
-    @classmethod
-    def from_toml(cls, path):
-        """Load configuration from an existing toml configuration file."""
-        data = utils.load_toml(path)
-        section = data.pop("section")
-        # transform each section
-        for subsec in data:
-            data[subsec] = to_int_naming(data[subsec], "selected_markers", "tube")
-        return cls(data, section=section)
+    def generate_config(cls):
+        """Create configuration from args and kwargs"""
+        raise NotImplementedError
 
     @classmethod
     def from_file(cls, path):
-        """Load configuration from an existing file. Will infer the correct
-        format from the file-ending."""
+        """Read configuration from file."""
         if str(path).endswith(".json"):
-            return cls.from_json(path)
-        if str(path).endswith(".toml"):
-            return cls.from_toml(path)
-        raise TypeError(f"Unknown filetype: {path}")
+            data = utils.load_json(path)
+        elif str(path).endswith(".toml"):
+            data = utils.load_toml(path)
+        else:
+            raise TypeError(f"Unknown filetype: {path}")
+        return cls(data)
 
-    def to_json(self, path):
-        """Save configuration data into json file."""
-        utils.save_json(self.dict, path)
+    @property
+    def data(self):
+        return self._data
 
-    def to_toml(self, path):
-        """Save configuration data into a toml file.
-        """
-        utils.save_toml(self.tomldict, path)
+    def copy(self):
+        return self.__class__(copy.deepcopy(self.data))
+
+    def _check_schema(self, data):
+        """Check data against the given class schema."""
+        if self._schema is None:
+            raise NotImplementedError("Config should be created from inherited class with schema.")
+        return check_schema(self._schema, data)
 
     def to_file(self, path):
         """Save configuration to file. Infer format from file ending."""
         if str(path).endswith(".json"):
-            self.to_json(path)
+            utils.save_json(self.data, path)
         elif str(path).endswith(".toml"):
-            self.to_toml(path)
+            utils.save_toml(self.data, path)
         else:
             raise TypeError(f"Unknown filetype: {path}")
 
-    def __getitem__(self, index):
-        """Get data with the given index. Either return another configuration
-        instance or return the single key."""
-        if index in self._data:
-            return self._data[index]
-        if index.startswith(self.section):
-            index = index[len(self.section) + 1:]
-        section, key = index.split("_", 1)
-        return self._data[section][key]
+    def __call__(self, *args):
+        """Get data. Provide a variable number of arguments, which will be used
+        to traverse the schema correctly."""
+        data = self.data
+        for arg in args:
+            data = data[arg]
+        return data
 
-    def __setitem__(self, index, value):
-        """Get the given section with the newly provided value."""
-        self._data[index] = value
+    def __str__(self):
+        """Convert to string representation."""
+        return utils.to_toml(self.data)
 
-    def __repr__(self):
-        return f"<{self.section}: {len(self._data)} subsections>"
+    def __eq__(self, other):
+        """Compare if two configurations are equal."""
+        return str(self) == str(other)
+
+
+class PathConfig(Config):
+
+    _schema = {
+        "input": (
+            ({str: list},), {
+                "FCS": [
+                    "/data/flowcat-data/mll-flowdata",
+                    "s3://mll-flowdata",
+                ],
+                "SOM": [
+                    "output/mll-sommaps/sample_maps",
+                    "s3://mll-sommaps/sample_maps",
+                ],
+                "HISTO": [
+                    "s3://mll-flow-classification/clustering"
+                ],
+            }
+        ),
+        "output": (
+            ({str: str},), {
+                "classification": "output/mll-sommaps/classification",
+                "som-reference": "output/mll-sommaps/reference_maps",
+                "som-sample": "output/mll-sommaps/sample_maps",
+            }
+        ),
+    }
+
+
+class SOMConfig(Config):
+
+    _schema = {
+        "name": ((str,), None),
+        "dataset": {
+            "labels": ((str, None), None),
+            "names": (({str: str},), {"FCS": "fixedCLL-9F"}),
+            "filters": {
+                "tubes": (([int],), [1, 2]),
+                "num": ((int, None), 1),
+                "groups": (([str], None), None),
+                "infiltration": ((float, int, None), None),
+                "counts": ((int, None), 8192),
+            },
+            "selected_markers": ((dict, None), None),
+        },
+        "reference": ((str, None), None),
+        "randnums": ((dict,), {}),
+        "tfsom": {
+            "model_name": ((str,), None),
+            "m": ((int,), 32),
+            "n": ((int,), 32),
+            "map_type": ((str,), "toroid"),
+            "max_epochs": ((int,), 10),
+            "batch_size": ((int,), 1),
+            "subsample_size": ((int,), 8192),
+            "initial_learning_rate": ((float,), 0.5),
+            "end_learning_rate": ((float,), 0.1),
+            "learning_cooling": ((str,), "exponential"),
+            "initial_radius": ((int,), 16),
+            "end_radius": ((int,), 1),
+            "radius_cooling": ((str,), "exponential"),
+            "node_distance": ((str,), "euclidean"),
+            "initialization_method": ((str,), "random"),
+        },
+        "somnodes" : {
+            "fitmap_args": ((dict, None), None),
+        }
+    }
+
+
+class ClassificationConfig(Config):
+
+    _schema = {
+        "name": ((str,), None),
+        "dataset": {
+            "names": (({str: str},), {"FCS": "fixedCLL-9F"}),
+            "filters": {
+                "tubes": (([int],), [1, 2]),
+                "counts": ((int, None), None),
+                "groups": (([str], None), None),
+                "num": ((int, None), None),
+            },
+            "mapping": ((str, None), None),
+        },
+        "split": {
+            "train_num": ((int, float, None), 0.9),
+            "train_labels": ((str, None), None),
+            "test_labels": ((str, None), None),
+        },
+        "model": {
+            "type": ((str,), None),
+            "loader": {
+                "FCSLoader": {
+                    "subsample": ((int,), 200),
+                    "randomize": ((bool,), False),  # always change subsample in different epochs
+                },
+                "CountLoader": {
+                    "datatype": ((str,), "dataframe"),  # alternative SOM will load counts from 2d maps
+                },
+                "Map2DLoader": {
+                    "sel_count": ((str, None), None),  # whether counts will be included in 2d map
+                    "pad_width": ((int,), 0),  # whether map will be padded
+                }
+            },
+            "train_args": {
+                "batch_size": ((int,), None),
+                "draw_method": ((str,), "random"),  # possible: sequential, shuffle, balanced, groupnum
+                "epoch_size": ((int, None), None),
+                "sample_weights": ((bool,), False),
+            },
+            "test_args": ((dict,), {
+                "batch_size": ((int,), None),
+                "draw_method": ((str,), "sequential"),
+                "epoch_size": ((int, None), None),
+                "sample_weights": ((bool,), False),
+            }),
+        },
+        "run": {
+            "weights": ((str, None), None),
+            "train_epochs": ((int,), 100),
+            "initial_rate": ((float,), 1e-4),
+            "drop": ((float,), 0.5),
+            "epochs_drop": ((int,), 50),
+            "epsilon": ((float,), 1e-8),
+            "num_workers": ((int,), 8),
+            "validation": ((bool,), False),
+            "pregenerate": ((bool,), True),
+        },
+        "stat": {
+            "confusion_sizes": ((bool,), True),
+        },
+    }

@@ -52,7 +52,7 @@ def plot_expression_series(dataset, marker, tube, title, filename):
 
 
 def main():
-    cases = case_dataset.CaseCollection.from_dir("/data/users/Max/MLL/data/newCLL-9F")
+    cases = case_dataset.CaseCollection.from_path("/data/users/Max/MLL/data/newCLL-9F")
 
     def create_plot(marker, group, tube):
         test = cases.filter(groups=[group])

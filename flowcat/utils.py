@@ -36,6 +36,15 @@ else:
     CLOBBER = False
 
 
+def get_path(dname, dpaths):
+    """Get an existing dataset name from a list of paths."""
+    for path in dpaths:
+        dpath = URLPath(path, dname)
+        if dpath.exists():
+            return dpath
+    raise RuntimeError(f"Could not find {dname} in {dpaths}")
+
+
 class Singleton(abc.ABCMeta):
     _instances = {}
 
@@ -410,3 +419,26 @@ def timer(title):
 
     time_diff = time_b - time_a
     print(f"{title}: {time_diff:.3}s")
+
+
+def df_get_count(data, tubes):
+    """Get count information from the given dataframe with labels as index.
+    Args:
+        data: dict of dataframes. Index will be used in the returned count dataframe.
+        tubes: List of tubes as integers.
+    Returns:
+        Dataframe with labels as index and ratio of availability in the given tubes as value.
+    """
+    counts = None
+    for tube in tubes:
+        count = pd.DataFrame(
+            1, index=data[tube].index, columns=["count"])
+        count.reset_index(inplace=True)
+        count.set_index(["label", "group"], inplace=True)
+        count = count.loc[~count.index.duplicated(keep='first')]
+        if counts is None:
+            counts = count
+        else:
+            counts = counts.add(count, fill_value=0)
+    counts = counts / len(tubes)
+    return counts

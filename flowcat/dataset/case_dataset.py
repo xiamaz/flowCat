@@ -1,16 +1,14 @@
 """
 Classes for managing collections of case and tubecase objects.
 """
-import os
 import random
 import logging
-from functools import reduce
 import collections
 
 import pandas as pd
 from sklearn import model_selection
 
-from .case import Case, TubeSample, Material
+from .case import Case, Material
 from ..utils import load_json, URLPath
 
 
@@ -19,21 +17,17 @@ from ..utils import load_json, URLPath
 # It cases do not possess a marker required for the consensus SOM
 # they will be ignored.
 MARKER_THRESHOLD = 0.9
-EMPTY_TAG = "nix"  # Part of channel name if no antibodies have been loaded
 
 # materials allowed in processing
 ALLOWED_MATERIALS = [Material.BONE_MARROW, Material.PERIPHERAL_BLOOD]
-
-COLNAMES = ["label", "group", "infiltration"]
 
 NO_INFILTRATION = ["normal"]
 
 LOGGER = logging.getLogger(__name__)
 
-INFONAME = "case_info.json"
 
-
-def get_meta(path, how="latest"):
+def get_meta(path, how):
+    """Choose strategy on how to select for metadata."""
     if how == "latest":
         case_info = sorted(path.glob("*.json"))[-1]
     elif how == "oldest":
@@ -297,18 +291,18 @@ class CaseCollection(CaseIterable):
         try:
             super().__init__(data, *args, **kwargs)
         except ValueError:
-            raise ValueError(f"Paths to directories should be instantiated with {self.__class__.__name__}.from_dir")
+            raise ValueError(f"Paths to directories should be instantiated with {self.__class__.__name__}.from_path")
         self.path = path
 
     @classmethod
-    def from_dir(cls, inputpath, **kwargs):
+    def from_path(cls, inputpath, how="latest", **kwargs):
         """
         Initialize on datadir with info json.
         Args:
             inputpath: Input directory containing cohorts and a info file.
         """
         inputpath = URLPath(inputpath)
-        metapath = get_meta(inputpath, **kwargs)
+        metapath = get_meta(inputpath, how=how)
         data = [
             Case(d, path=inputpath) for d in load_json(metapath.get())
         ]

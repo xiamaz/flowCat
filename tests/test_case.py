@@ -8,7 +8,7 @@ from pandas.testing import assert_series_equal
 
 from .shared import *
 
-from flowcat.data import case_dataset
+from flowcat.dataset import case_dataset
 
 
 class TestBasicCase(unittest.TestCase):
@@ -17,7 +17,7 @@ class TestBasicCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.cases = case_dataset.CaseCollection.from_dir(cls.small_dataset)
+        cls.cases = case_dataset.CaseCollection.from_path(cls.small_dataset)
 
     def test_wrong_constructor(self):
         """Exception should be thrown if we try to instantiate the CaseCollection using a string or pathlike object."""

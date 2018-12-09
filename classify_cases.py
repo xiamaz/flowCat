@@ -17,37 +17,17 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib import cm
 
+from flowcat import utils, configuration, loaders
+from flowcat.dataset import combined_dataset
+from flowcat.mappings import NAME_MAP, GROUP_MAPS
 from flowcat.visual import plotting
-from flowcat.data import case_dataset as cc
-from flowcat.data import loaders, all_dataset
 
 from flowcat.models import weighted_crossentropy
 from flowcat.models import fcs_cnn, histo_nn, som_cnn
 
-from flowcat import utils
-from flowcat.configuration import Configuration
-from flowcat.mappings import NAME_MAP, GROUP_MAPS
-
 
 COLS = "grcmyk"
 LOGGER = logging.getLogger(__name__)
-MODEL_CONSTRUCTORS = {
-    "histogram": histo_nn.create_model_histo,
-    "som": som_cnn.create_model_cnn,
-    "etefcs": fcs_cnn.create_model_fcs,
-}
-MODEL_BATCH_SIZES = {
-    "train": {
-        "histogram": 64,
-        "som": 64,
-        "etefcs": 64,
-    },
-    "test": {
-        "histogram": 128,
-        "som": 128,
-        "etefcs": 128,
-    }
-}
 
 
 def inverse_binarize(y, classes):
@@ -357,43 +337,34 @@ def create_output_spec(modelname, dataoptions):
 
 
 def generate_model_inputs(
-        train_data, test_data, name, loader_options, traindata_args, testdata_args, path=None):
+        train_data, test_data, config, path=None):
     """Create model and associated inputs.
     Args:
         train_data, test_data: Dataset used to infer sizes.
         name: String name of model.
-        loader_options: Options for specific file loader types.
-        traindata_args: Options for training dataset.
-        testdata_args: Options for test dataset.
+        config: Configuration object.
         path: Optional path to load previous model from.
     Returns:
         Tuple of model and partial dataset constructor functions.
     """
-    output_spec = create_output_spec(name, loader_options)
+    mtype = config["type"]
+    loader_options = config["loader"]
+    traindata_args = config["train_args"]
+    testdata_args = config["test_args"]
+    output_spec = create_output_spec(mtype, loader_options)
     train = loaders.DatasetSequence(train_data, output_spec, **traindata_args)
     test = loaders.DatasetSequence(test_data, output_spec, **testdata_args)
     if path is not None:
         model = keras.models.load_model(path, compile=False)
     else:
-        model = MODEL_CONSTRUCTORS[name](*train.shape)
+        constructors = {
+            "histogram": histo_nn.create_model_histo,
+            "som": som_cnn.create_model_cnn,
+            "etefcs": fcs_cnn.create_model_fcs,
+        }
+        model = constructors[mtype](*train.shape)
 
     return model, train, test
-
-
-def load_dataset(pathconfig, config):
-    LOGGER.info("Loading combined dataset")
-    casepath = pathconfig["input"]["cases"]
-    datasets = pathconfig["input"]["datasets"]
-    filters = config["dataset"]["filters"]
-    mapping = config["dataset"]["mapping"]
-    tubes = config["dataset"]["filters"]["tubes"]
-
-    dataset = all_dataset.CombinedDataset.from_paths(
-        casepath, datasets, group_names=filters["groups"], tubes=tubes)
-    dataset.filter(**filters)
-    dataset.set_mapping(GROUP_MAPS[mapping])
-    dataset.set_available([n for n, _ in datasets])
-    return dataset
 
 
 def create_stats(outpath, dataset, pred_df, confusion_sizes):
@@ -460,87 +431,64 @@ def setup_logging(filelog=None, filelevel=logging.DEBUG, printlevel=logging.WARN
     add_logger(LOGGER, handlers, level=logging.DEBUG)
 
 
-def create_pathconfig():
-    # CONFIGURATION VARIABLES
-    # Input paths
-    p_input_cases = "s3://mll-flowdata/fixedCLL-9F"
-    p_input_datasets = [
-        ("FCS", p_input_cases),
-        ("SOM", "s3://mll-sommaps/sample_maps/selected1_toroid_s32"),
-        # ("HISTO", "s3://mll-flow-classification/clustering/abstract/abstract_somgated_1_20180723_1217"),
-    ]
+class SOMClassifierConfig(configuration.ClassificationConfig):
+    """Generate configuration for SOM classification"""
 
-    # Output paths
-    p_output_path = "output/mll-sommaps/classification"
-    config = Configuration.from_localsdict(locals())
-    return config
+    @classmethod
+    def generate_config(cls):
 
+        name = "test"
+        dataset_name = "selected1_toroid_s32"
+        is_toroid = "toroid" in dataset_name
+        train_size = 64
+        test_size = 32
 
-def create_config():
-    # CONFIGURATION VARIABLES
-    c_general_name = "som_testepoch"
-
-    # Dataset filter options
-    c_dataset_filters = {
-        "tubes": [1, 2],
-        "counts": 10000,
-        "groups": ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
-        "num": None,
-    }
-    # available: 8class 6class 5class 3class 2class
-    # see flowcat.mappings for details
-    c_dataset_mapping = "8class"
-
-    # specific train test splitting
-    c_split_train_num = 0.9
-    c_split_train_labels = None
-    c_split_test_labels = None
-
-    # load existing model and use different parameters for retraining
-    # available models: histogram, som, etefcs
-    c_model_name = "som"
-    c_model_loader_options = {
-        loaders.FCSLoader.__name__: {
-            "subsample": 200,
-            "randomize": False,  # Always change the subsample in different epochs, MUCH SLOWER!
-        },
-        loaders.CountLoader.__name__: {
-            "datatype": "dataframe",
-        },
-        loaders.Map2DLoader.__name__: {
-            "sel_count": "counts",  # use count in SOM map as just another channel
-            "pad_width": 1,  # TODO: infer from dataset paths
-        },
-    }
-    c_model_traindata_args = {
-        "batch_size": MODEL_BATCH_SIZES["train"][c_model_name],
-        "draw_method": "balanced",  # possible: sequential, shuffle, balanced, groupnum
-        "epoch_size": 16000,
-        "sample_weights": False,
-    }
-    c_model_testdata_args = {
-        "batch_size": MODEL_BATCH_SIZES["test"][c_model_name],
-        "draw_method": "sequential",
-        "epoch_size": None,
-    }
-
-    # Run options
-    c_run_weights = None
-    c_run_train_epochs = 100
-    c_run_initial_rate = 1e-4
-    c_run_drop = 0.5
-    c_run_epochs_drop = 50
-    c_run_epsilon = 1e-8
-    c_run_num_workers = 8
-    c_run_validation = False
-    c_run_pregenerate = True
-
-    # Stat output
-    c_stat_confusion_sizes = True
-    # END CONFIGURATION VARIABLES
-    # save configuration variables
-    config = Configuration.from_localsdict(locals())
-    return config
+        data = {
+            "name": name,
+            "dataset": {
+                "names": {
+                    "FCS": "fixedCLL-9F",
+                    "SOM": dataset_name,
+                },
+                "filters": {
+                    "counts": 10000,
+                    "groups": ["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],
+                    "num": None,
+                },
+                "mapping": "8class",
+            },
+            "split": {
+                "train_num": 0.9,
+                "train_labels": None,
+                "test_labels": None,
+            },
+            "model": {
+                "type": "som",
+                "loader": {
+                    "Map2DLoader": {
+                        "sel_count": None,  # use count in SOM map as just another channel
+                        "pad_width": 1 if is_toroid else 0,
+                    },
+                },
+                "train_args": {
+                    "batch_size": train_size,
+                    "draw_method": "balanced",
+                    "epoch_size": 16000,
+                    "sample_weights": False,
+                },
+                "test_args": {
+                    "batch_size": test_size,
+                    "draw_method": "sequential",
+                    "epoch_size": None,
+                },
+            },
+            "run": {
+                "train_epochs": 100,
+                "validation": False,
+                "pregenerate": True,
+            }
+        }
+        return cls(data)
 
 
 def args_loglevel(vlevel):
@@ -552,22 +500,14 @@ def args_loglevel(vlevel):
     return logging.DEBUG
 
 
-def get_config(args, attr, alt):
-    if getattr(args, attr):
-        config = Configuration.from_file(getattr(args, attr))
-    else:
-        config = alt()
-    return config
-
-
 def run(args):
-    config = get_config(args, "config", create_config)
-    pathconfig = get_config(args, "pathconfig", create_pathconfig)
+    config = args.modelconfig
+    pathconfig = args.pathconfig
 
     if args.name:
-        config["general"]["name"] = args.name
-
-    outpath = utils.URLPath(f"{pathconfig['output']['path']}/{config['general']['name']}")
+        config.data["name"] = args.name
+    classification_path = pathconfig("output", "classification")
+    outpath = utils.URLPath(f"{classification_path}/{config('name')}")
 
     # Create logfiles
     logpath = outpath / f"classification.log"
@@ -575,23 +515,23 @@ def run(args):
     setup_logging(logpath, printlevel=args_loglevel(args.verbose))
 
     # save configuration
-    config.to_toml(outpath / "config.toml")
+    config.to_file(outpath / "config.toml")
 
-    dataset = load_dataset(pathconfig, config)
+    dataset = combined_dataset.CombinedDataset.from_config(pathconfig, config)
 
     # split into train and test set
     LOGGER.info("Splitting dataset")
-    train, test = all_dataset.split_dataset(dataset, **config["split"], seed=args.seed)
+    train, test = combined_dataset.split_dataset(dataset, **config("split"), seed=args.seed)
     utils.save_json(train.labels, outpath / "train_labels.json")
     utils.save_json(test.labels, outpath / "test_labels.json")
 
     LOGGER.info("Getting models")
-    model, trainseq, testseq = generate_model_inputs(train, test, **config["model"])
+    model, trainseq, testseq = generate_model_inputs(train, test, config("model"))
 
     LOGGER.info("Running model")
-    weights = load_weights(config["run"]["weights"])
+    weights = load_weights(config("run", "weights"))
     model, pred_df, history = run_model(
-        model, trainseq, testseq, **{**config["run"], "weights": weights})
+        model, trainseq, testseq, **{**config("run"), "weights": weights})
     save_model(model, outpath, name="0")
     save_history(history, outpath, name="0")
     save_weights(weights, outpath, name="0")
@@ -599,48 +539,68 @@ def run(args):
 
     LOGGER.info("Creating statistics")
     create_stats(
-        outpath=outpath, dataset=dataset, pred_df=pred_df, **config["stat"])
+        outpath=outpath, dataset=dataset, pred_df=pred_df, **config("stat"))
 
 
 def config(args):
     setup_logging(filelog=None, printlevel=logging.ERROR)
-    if args.pathconfig:
-        config = create_pathconfig()
-    else:
-        config = create_config()
+    config = getattr(args, args.type)
 
     if args.output is None:
         print("HINT: Redirect stderr to get config output suitable for piping.", file=sys.stderr)
-        print(getattr(config, args.format))
+        print(config)
     else:
         print(f"Writing configuration to {args.output}")
-        getattr(config, f"to_{args.format}")(args.output)
+        config.to_file(args.output)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Classify samples")
+    parser.add_argument(
+        "--pathconfig",
+        help="Config file containing paths.",
+        type=lambda p: configuration.PathConfig.from_file(p) if p else configuration.PathConfig({}),
+        default="paths.toml")
+    parser.add_argument(
+        "--modelconfig",
+        help="Path to configuration file.",
+        type=lambda p: SOMClassifierConfig.from_file(p) if p else SOMClassifierConfig.generate_config(),
+        default="")
     subparsers = parser.add_subparsers()
 
     # Save configuration files in specified in the create configuration file
-    cparser = subparsers.add_parser("config", help="Output the current configuration. Hint: Get rid of import messages by eg piping stderr to /dev/null")
-    cparser.add_argument("-o", "--output", help="Write configuration to output file.", type=utils.URLPath)
+    cparser = subparsers.add_parser(
+        "config",
+        help="Output the current configuration. Hint: Get rid of import messages by eg piping stderr to /dev/null")
     cparser.add_argument(
-        "--format",
-        help="Format of configuration. Either json or toml.",
-        choices=["json", "toml"],
-        default="toml",)
+        "-o", "--output",
+        help="Write configuration to output file.",
+        type=utils.URLPath)
     cparser.add_argument(
-        "--pathconfig", help="Output pathconfig instead of model configuration.", action="store_true")
+        "--type",
+        help="Output pathconfig instead of model configuration.",
+        choices=["pathconfig", "modelconfig"],
+        default="modelconfig",
+    )
     cparser.set_defaults(fun=config)
 
     # Run the classification process
     rparser = subparsers.add_parser("run", help="Run classification")
-    rparser.add_argument("--seed", help="Seed for random number generator", type=int)
-    rparser.add_argument("--model", help="Use an existing model", type=utils.URLPath) # TODO
-    rparser.add_argument("--pathconfig", help="Config file containing paths.", type=utils.URLPath, default="paths.toml")
-    rparser.add_argument("--config", help="Path to configuration file.", type=utils.URLPath)
-    rparser.add_argument("--name", help="Set an alternative output name.")
-    rparser.add_argument("-v", "--verbose", help="Control verbosity. -v is info, -vv is debug", action="count")
+    rparser.add_argument(
+        "--seed",
+        help="Seed for random number generator",
+        type=int)
+    rparser.add_argument(
+        "--model",
+        help="Use an existing model",
+        type=utils.URLPath) # TODO
+    rparser.add_argument(
+        "--name",
+        help="Set an alternative output name.")
+    rparser.add_argument(
+        "-v", "--verbose",
+        help="Control verbosity. -v is info, -vv is debug",
+        action="count")
     rparser.set_defaults(fun=run)
 
     args = parser.parse_args()

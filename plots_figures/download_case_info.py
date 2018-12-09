@@ -23,4 +23,4 @@ utils.TMP_PATH = args.output
 
 # Creating the CaseCollection object using an URL will ensure downloading of
 # remote metadata objects
-cases = CaseCollection.from_dir(args.path, how=args.how)
+cases = CaseCollection.from_path(args.path, how=args.how)

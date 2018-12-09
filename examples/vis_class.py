@@ -54,7 +54,7 @@ def main():
 
     # load datasets
     somdataset = ad.SOMDataset.from_path(c_sommaps)
-    cases = cc.CaseCollection.from_dir(c_cases)
+    cases = cc.CaseCollection.from_path(c_cases)
 
     # filter datasets
     test_labels = utils.load_json(c_labels)
