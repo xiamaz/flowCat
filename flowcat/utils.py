@@ -36,6 +36,15 @@ else:
     CLOBBER = False
 
 
+def get_path(dname, dpaths):
+    """Get an existing dataset name from a list of paths."""
+    for path in dpaths:
+        dpath = URLPath(path, dname)
+        if dpath.exists():
+            return dpath
+    raise RuntimeError(f"Could not find {dname} in {dpaths}")
+
+
 class Singleton(abc.ABCMeta):
     _instances = {}
 

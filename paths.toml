@@ -1,11 +1,9 @@
-section = "p"
-
-[output.paths]
-classification = "output/mll-sommaps/classification"
-som-reference = "output/mll-sommaps/reference_maps"
-som-sample = "output/mll-sommaps/sample_maps"
-
-[input.paths]
+[input]
 FCS = [ "/data/flowcat-data/mll-flowdata", "s3://mll-flowdata",]
 SOM = [ "output/mll-sommaps/sample_maps", "s3://mll-sommaps/sample_maps",]
 HISTO = [ "s3://mll-flow-classification/clustering",]
+
+[output]
+classification = "output/mll-sommaps/classification"
+som-reference = "output/mll-sommaps/reference_maps"
+som-sample = "output/mll-sommaps/sample_maps"

@@ -13,15 +13,6 @@ from .. import utils, loaders, mappings
 LOGGER = logging.getLogger(__name__)
 
 
-def get_path(dname, dpaths):
-    """Get an existing dataset name."""
-    for path in dpaths:
-        dpath = utils.URLPath(path, dname)
-        if dpath.exists():
-            return dpath
-    raise RuntimeError(f"Could not find {dname} in {dpaths}")
-
-
 class CombinedDataset:
     """Combines information from different data sources."""
 
@@ -56,22 +47,24 @@ class CombinedDataset:
     def from_config(cls, pathconfig, config):
         """Initialize dataset from configuration dicts."""
         # define search paths from pathconfig
-        datasets = pathconfig["input"]["paths"]
+        datasets = pathconfig("input")
 
         # select the specific dataset from config
-        dataset_names = config["dataset"]["names"]
-        tubes = config["dataset"]["filters"]["tubes"]
-        group_names = config["dataset"]["filters"]["groups"]
+        dataset_names = config("dataset", "names")
+        tubes = config("dataset", "filters", "tubes")
+        group_names = config("dataset", "filters", "groups")
+        filters = config("dataset", "filters")
+        mapping_name = config("dataset", "mapping")
 
         paths = {
-            dtype: get_path(name, datasets[dtype]) for dtype, name in dataset_names.items()
+            dtype: utils.get_path(name, datasets[dtype]) for dtype, name in dataset_names.items()
         }
 
-        mapping = mappings.GROUP_MAPS[config["dataset"]["mapping"]]
+        mapping = mappings.GROUP_MAPS[mapping_name]
 
         obj = cls.from_paths(paths, tubes=tubes, group_names=group_names, mapping=mapping)
         # filter using filters and only include cases available in all datasets
-        obj.filter(**config["dataset"]["filters"])
+        obj.filter(**filters)
         obj.set_available(dataset_names.keys())
         return obj
 
