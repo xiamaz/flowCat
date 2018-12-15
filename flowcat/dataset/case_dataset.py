@@ -210,6 +210,7 @@ class CaseIterable(IterableMixin):
             num=None,
             groups=None,
             infiltration=None,
+            infiltration_max=None,
             counts=None,
             materials=None,
             selected_markers=None,
@@ -227,19 +228,35 @@ class CaseIterable(IterableMixin):
         data = self._data
 
         if groups is not None:
+            LOGGER.debug(
+                "Filter Groups %s", ", ".join(groups))
             data = [case for case in data if case.group in groups]
 
         if labels is not None:
+            LOGGER.debug(
+                "Filter labels using %d labels", len(labels))
             data = [case for case in data if case.id in labels]
 
-        if infiltration:
-            data = [d for d in data if d.infiltration >= infiltration or d.group in NO_INFILTRATION]
+        if infiltration or infiltration_max:
+            if infiltration is None:
+                infiltration = 0
+            if infiltration_max is None:
+                infiltration_max = 100
+            LOGGER.debug(
+                "Filter Infiltration %d - %d", infiltration, infiltration_max)
+            data = [
+                d for d in data
+                if (d.infiltration >= infiltration
+                and d.infiltration <= infiltration_max)
+                or d.group in NO_INFILTRATION
+            ]
 
         # create copy since we will start modifying objects
         data = [d.copy() for d in data]
 
         ndata = []
         # filter cases by allowed materials and counts in fcs files
+        LOGGER.debug("Filter tubes %s", tubes)
         for case in data:
             ccase = case.copy()
             ccase.used_material = ccase.get_possible_material(tubes, materials)

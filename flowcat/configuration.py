@@ -155,6 +155,7 @@ class SOMConfig(Config):
                 "num": ((int, None), 1),
                 "groups": (([str], None), None),
                 "infiltration": ((float, int, None), None),
+                "infiltration_max": ((float, int, None), None),
                 "counts": ((int, None), 8192),
             },
             "selected_markers": ((dict, None), None),
