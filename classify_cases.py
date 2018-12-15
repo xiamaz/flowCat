@@ -390,28 +390,6 @@ def create_stats(outpath, dataset, pred_df, confusion_sizes):
         utils.save_json(stats, outpath / "stats_{gname}.json")
 
 
-LOGGING_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-
-
-def add_logger(log, handlers, level=logging.DEBUG):
-    if isinstance(log, str):
-        log = logging.getLogger(log)
-    elif not isinstance(log, logging.Logger):
-        raise TypeError("Wrong type for log")
-
-    log.setLevel(level)
-    for handler in handlers:
-        log.addHandler(handler)
-
-
-def create_handler(handler, fmt, level=logging.DEBUG):
-    handler.setLevel(level)
-    if not isinstance(fmt, logging.Formatter):
-        fmt = logging.Formatter(fmt)
-    handler.setFormatter(fmt)
-    return handler
-
-
 def setup_logging(filelog=None, filelevel=logging.DEBUG, printlevel=logging.WARNING):
     """Setup logging to both visible output and file output.
     Args:
@@ -420,11 +398,11 @@ def setup_logging(filelog=None, filelevel=logging.DEBUG, printlevel=logging.WARN
         printlevel: Logging level for visible output.
     """
     handlers = [
-        create_handler(logging.StreamHandler(), LOGGING_FORMAT, printlevel),
+        create_handler(logging.StreamHandler(), level=printlevel),
     ]
     if filelog is not None:
         handlers.append(
-            create_handler(logging.FileHandler(str(filelog)), LOGGING_FORMAT, filelevel)
+            create_handler(logging.FileHandler(str(filelog)), level=filelevel)
         )
 
     add_logger("flowcat", handlers, level=logging.DEBUG)

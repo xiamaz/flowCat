@@ -12,7 +12,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from flowcat import utils, mappings, configuration
+from flowcat import utils, configuration
 from flowcat.models import tfsom
 from flowcat.dataset import case_dataset
 
@@ -22,13 +22,12 @@ LOGGER = logging.getLogger(__name__)
 
 def configure_print_logging(rootname="flowcat"):
     """Configure default logging for visual output to stdout."""
-    rootlogger = logging.getLogger(rootname)
-    rootlogger.setLevel(logging.INFO)
-    formatter = logging.Formatter()
-    handler = logging.StreamHandler()
-    handler.setLevel(logging.DEBUG)
-    handler.setFormatter(formatter)
-    rootlogger.addHandler(handler)
+    handlers = [
+        utils.create_handler(logging.StreamHandler(), level=logging.INFO)
+    ]
+
+    utils.add_logger(rootname, handlers, level=logging.DEBUG)
+    utils.add_logger(LOGGER, handlers, level=logging.DEBUG)
 
 
 def load_labels(path):
@@ -95,11 +94,17 @@ def create_new_reference(args):
 
     config.data["dataset"]["selected_markers"] = {str(k): v for k, v in data.selected_markers.items()}
 
+    if args.tensorboard:
+        tensorboard_path = args.tensorboard / args.name
+        print(f"Creating tensorboard logs in {tensorboard_path}")
+    else:
+        tensorboard_path = None
+
     for tube in data.selected_tubes:
         tubedata = data.get_tube(tube)
         marker_list = tubedata.markers
 
-        model = tfsom.TFSom(channels=marker_list, tube=tube, **config("tfsom"), tensorboard_dir=args.tensorboard)
+        model = tfsom.TFSom(channels=marker_list, tube=tube, **config("tfsom"), tensorboard_dir=tensorboard_path)
 
         # create a data generator
         datagen, length = tfsom.create_z_score_generator(tubedata.data, randnums=None)

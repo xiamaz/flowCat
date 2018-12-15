@@ -19,6 +19,7 @@ import boto3
 
 LOGGER = logging.getLogger(__name__)
 TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
+LOGGING_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 
 if "flowCat_tmp" in os.environ:
@@ -442,3 +443,24 @@ def df_get_count(data, tubes):
             counts = counts.add(count, fill_value=0)
     counts = counts / len(tubes)
     return counts
+
+
+def add_logger(log, handlers, level=logging.DEBUG):
+    """Add logger or name of a logger to a list of handlers."""
+    if isinstance(log, str):
+        log = logging.getLogger(log)
+    elif not isinstance(log, logging.Logger):
+        raise TypeError("Wrong type for log")
+
+    log.setLevel(level)
+    for handler in handlers:
+        log.addHandler(handler)
+
+
+def create_handler(handler, fmt=LOGGING_FORMAT, level=logging.DEBUG):
+    """Add a logging formatter to the given Handler."""
+    handler.setLevel(level)
+    if not isinstance(fmt, logging.Formatter):
+        fmt = logging.Formatter(fmt)
+    handler.setFormatter(fmt)
+    return handler
