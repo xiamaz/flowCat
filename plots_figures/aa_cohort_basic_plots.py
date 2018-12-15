@@ -18,6 +18,7 @@ else:
 
 def get_args():
     parser = argparse.ArgumentParser(description="Basic overview plots of a cohort dataset. Enter two to compare them.")
+    parser.add_argument("--date", help="Cutoff date for testing.", type=fromisoformat)
     parser.add_argument("caseinfo", help="Json file containing case information", type=pathlib.Path, nargs="+")
     return parser.parse_args()
 
@@ -69,6 +70,27 @@ def print_stats(cpath, cinfo, pfun=print):
     for l in filter(lambda x: len(labels[x]) > 1, labels):
         pfun(f"{l}: {labels[l]}")
 
+
+def print_split(cinfo, timecutoff):
+    prev = collections.defaultdict(list)
+    after = collections.defaultdict(list)
+
+    for case in cinfo:
+        cdate = fromisoformat(case["date"])
+        if cdate <= timecutoff:
+            prev[case["cohort"]].append(case)
+        else:
+            after[case["cohort"]].append(case)
+
+    print("Previous")
+    print("\n".join(f"{k}: {len(v)}" for k, v in prev.items()))
+    print("After")
+    print("\n".join(f"{k}: {len(v)}" for k, v in after.items()))
+    print("Ratio")
+    for group in prev:
+        print(f"{group}: {len(after[group]) / (len(prev[group]) + len(after[group]))}")
+
+
 def print_diff(cpaths, cinfos, pfun=print):
     p1, p2 = cpaths
     c1, c2 = cinfos
@@ -95,12 +117,13 @@ def main():
     for cpath, cinfo in zip(args.caseinfo, cinfos):
         print_stats(cpath, cinfo)
         print("\n")
+        if args.date:
+            print_split(cinfo, args.date)
 
     if len(cinfos) == 2:
         print_diff(args.caseinfo, cinfos)
     elif len(cinfos) > 2:
         print("Diff with more than 2 caseinfos currently not supported.")
-
 
 if __name__ == "__main__":
     main()
