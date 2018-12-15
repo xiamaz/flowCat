@@ -12,7 +12,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from flowcat import utils, configuration
+from flowcat import utils, configuration, mappings
 from flowcat.models import tfsom
 from flowcat.dataset import case_dataset
 
@@ -244,6 +244,8 @@ class ReferenceConfig(configuration.SOMConfig):
                     "num": 1,
                     "groups": None,
                     "counts": subsample_size,
+                    "infiltration": None,
+                    "infiltration_max": None,
                 }
             },
             "tfsom": {
@@ -277,6 +279,8 @@ class IndivConfig(configuration.SOMConfig):
                     "num": None,
                     "groups": None,
                     "counts": subsample_size,
+                    "infiltration": None,
+                    "infiltration_max": None,
                 }
             },
             "tfsom": {
@@ -309,6 +313,30 @@ def run_config(args):
         config.to_file(utils.URLPath(args.output))
     else:
         print(config)
+
+
+def run_groups(args):
+    """Create stuff for each group."""
+    tbpath = args.tensorboard
+    for group in mappings.GROUPS:
+        args.refconfig.data["dataset"]["filters"]["groups"] = [group]
+        args.refconfig.data["name"] = f"single_{group}"
+        args.tensorboard = tbpath / group
+        generate_reference(args)
+
+
+def run_infiltration(args):
+    """Create single runs with cases with different levels of infiltration."""
+    tbpath = args.tensorboard
+    args.refconfig.data["dataset"]["labels"] = None
+    args.refconfig.data["dataset"]["filters"]["groups"] = [args.group]
+    for infiltration in range(10, 101, 10):
+        print(f"Creating a reference SOM using infiltration in range {infiltration - 10} to {infiltration}")
+        args.refconfig.data["name"] = f"{args.group}_i{infiltration}"
+        args.tensorboard = tbpath / f"{args.group}_i{infiltration}"
+        args.refconfig.data["dataset"]["filters"]["infiltration_max"] = infiltration
+        args.refconfig.data["dataset"]["filters"]["infiltration"] = infiltration - 10
+        generate_reference(args)
 
 
 def main():
@@ -351,6 +379,13 @@ def main():
 
     parser_ref = subparsers.add_parser("reference", help="Generate reference SOM")
     parser_ref.set_defaults(fun=generate_reference)
+
+    parser_each = subparsers.add_parser("group", help="Create ref for each group.")
+    parser_each.set_defaults(fun=run_groups)
+
+    parser_infil = subparsers.add_parser("infiltration", help="Create ref for infiltration steps.")
+    parser_infil.add_argument("--group", default="CLL")
+    parser_infil.set_defaults(fun=run_infiltration)
 
     args = parser.parse_args()
 
