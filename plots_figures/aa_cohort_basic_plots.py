@@ -1,3 +1,5 @@
+# pylint: skip-file
+# flake8: noqa
 """Overview plots to be generated for a given case_info file."""
 import json
 import argparse
@@ -6,8 +8,16 @@ import datetime
 import collections
 
 
+# patch datetime if fromisoformat does not exist
+if not hasattr(datetime.date, "fromisoformat"):
+    def fromisoformat(datestring):
+        return datetime.datetime.strptime(datestring, "%Y-%m-%d").date()
+else:
+    fromisoformat = datetime.date.fromisoformat
+
+
 def get_args():
-    parser = argparse.ArgumentParser(description="Basic overview plots of a cohort dataset.")
+    parser = argparse.ArgumentParser(description="Basic overview plots of a cohort dataset. Enter two to compare them.")
     parser.add_argument("caseinfo", help="Json file containing case information", type=pathlib.Path, nargs="+")
     return parser.parse_args()
 
@@ -24,7 +34,7 @@ def load_caseinfo(cpaths):
 
 def get_dataset_date(path):
     dataset = path.parent.name
-    date = datetime.date.fromisoformat(path.stem.split("_")[-1])
+    date = fromisoformat(path.stem.split("_")[-1])
     return dataset, date
 
 
@@ -44,7 +54,7 @@ def print_stats(cpath, cinfo, pfun=print):
     # by date
     dates = collections.defaultdict(lambda: collections.defaultdict(list))
     for c in cinfo:
-        d = datetime.date.fromisoformat(c["date"])
+        d = fromisoformat(c["date"])
         dates[d.year][d.month].append(c)
 
     for y in sorted(dates.keys()):
