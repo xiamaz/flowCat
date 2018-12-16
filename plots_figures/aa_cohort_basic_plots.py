@@ -7,6 +7,14 @@ import pathlib
 import datetime
 import collections
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# set some sane seaborn defaults
+sns.set()
+
 
 # patch datetime if fromisoformat does not exist
 if not hasattr(datetime.date, "fromisoformat"):
@@ -71,26 +79,6 @@ def print_stats(cpath, cinfo, pfun=print):
         pfun(f"{l}: {labels[l]}")
 
 
-def print_split(cinfo, timecutoff):
-    prev = collections.defaultdict(list)
-    after = collections.defaultdict(list)
-
-    for case in cinfo:
-        cdate = fromisoformat(case["date"])
-        if cdate <= timecutoff:
-            prev[case["cohort"]].append(case)
-        else:
-            after[case["cohort"]].append(case)
-
-    print("Previous")
-    print("\n".join(f"{k}: {len(v)}" for k, v in prev.items()))
-    print("After")
-    print("\n".join(f"{k}: {len(v)}" for k, v in after.items()))
-    print("Ratio")
-    for group in prev:
-        print(f"{group}: {len(after[group]) / (len(prev[group]) + len(after[group]))}")
-
-
 def print_diff(cpaths, cinfos, pfun=print):
     p1, p2 = cpaths
     c1, c2 = cinfos
@@ -110,6 +98,64 @@ def print_diff(cpaths, cinfos, pfun=print):
             print("\n".join(missing))
 
 
+def print_window(cinfo, start=None, end=None, less=None, more=None):
+
+    if less is None:
+        less = lambda x, y: x <= y
+    if more is None:
+        more = lambda x, y: x >= y
+
+    def inwindow(dstr):
+        d = fromisoformat(dstr)
+        if start and end:
+            return less(d, end) and more(d, start)
+        elif start:
+            return more(d, start)
+        elif end:
+            return less(d, end)
+        else:
+            return True
+
+    window = collections.Counter(
+        c["cohort"] for c in cinfo if inwindow(c["date"])
+    )
+    print(f"Window from {start} to {end}")
+    print("\n".join(f"{k}: {v}" for k, v in window.items()))
+    return window
+
+
+def plot_cohorts(data, title):
+    """Create a simple barchart for cohort numbers."""
+    fig, ax = plt.subplots()
+    sns.barplot(x=list(data.keys()), y=list(data.values()), ax=ax)
+    for i, (name, count) in enumerate(data.items()):
+        ax.text(i, count, count, color="black", ha="center")
+    # ax.set_title(title)
+    print(title)
+    plt.savefig("test.png", dpi=300)
+    plt.close("all")
+
+
+def print_ratio(num, den):
+    print(f"All: {sum(num.values())} / {sum(den.values())}")
+    print("\n".join(f"{k}: {num[k]} / {den[k]} ({num[k] / den[k]:.2f})" for k in den))
+
+
+def train_test_specification(cinfo):
+    test_start = fromisoformat("2018-04-01")
+    test_end = fromisoformat("2018-10-01")
+
+    all_num = collections.Counter(c["cohort"] for c in cinfo)
+
+    train_num = print_window(cinfo, end=test_start, less=lambda x, y: x < y)
+    test_num = print_window(cinfo, test_start, test_end)
+
+    print_ratio(test_num, train_num + test_num)
+    oldest = min(fromisoformat(c["date"]) for c in cinfo)
+    newest = max(fromisoformat(c["date"]) for c in cinfo)
+    plot_cohorts(all_num, f"All cohorts from {oldest} to {newest}")
+
+
 def main():
     args = get_args()
     cinfos = load_caseinfo(args.caseinfo)
@@ -117,8 +163,6 @@ def main():
     for cpath, cinfo in zip(args.caseinfo, cinfos):
         print_stats(cpath, cinfo)
         print("\n")
-        if args.date:
-            print_split(cinfo, args.date)
 
     if len(cinfos) == 2:
         print_diff(args.caseinfo, cinfos)
