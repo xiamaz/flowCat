@@ -35,6 +35,16 @@ Run availble unittests with:
    ./test.py
 
 
+Unittests require some data saved in a separate S3 bucket flowcat-test.
+
+There is a helper script to make syncing this bucket a bit easier.
+
+.. code-block:: sh
+
+   ./update_tests.sh  # will show usage
+   ./update_tests.sh down  # download all test data to tests/data
+
+
 Performance considerations
 --------------------------
 
