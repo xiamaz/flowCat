@@ -1,4 +1,6 @@
-import os
+"""
+Objects abstracting basic case information.
+"""
 import logging
 import enum
 import functools
@@ -41,12 +43,12 @@ class Material(enum.Enum):
 
     @staticmethod
     def from_str(label: str) -> "Material":
+        """Get material enum from string"""
         if label in ["1", "2", "3", "4", "5", "PB"]:
             return Material.PERIPHERAL_BLOOD
-        elif label == "KM":
+        if label == "KM":
             return Material.BONE_MARROW
-        else:
-            return Material.OTHER
+        return Material.OTHER
 
 
 ALLOWED_MATERIALS = [Material.PERIPHERAL_BLOOD, Material.BONE_MARROW]
@@ -109,6 +111,7 @@ class Case:
 
     @property
     def json(self):
+        """Get dict representation of data usable for saving to json."""
         cdict = {
             "id": self.id,
             "date": self.date.isoformat(),
@@ -129,7 +132,8 @@ class Case:
     def filepaths(self, value: list):
         """Set filepaths and clear all generated dicts on data.
         Args:
-            value: List of dictionaries with information to create case paths or case paths.
+            value: List of dictionaries with information to create case paths
+            or case paths.
         """
         self._filepaths = [TubeSample(v, self) for v in value]
 
@@ -178,7 +182,6 @@ class Case:
                 return False
         return True
 
-
     def get_possible_material(self, tubes, allowed_materials=None):
         """Get one possible material for the given case.
         """
@@ -196,8 +199,7 @@ class Case:
     def has_same_material(self, tubes, allowed_materials=None):
         if allowed_materials is None:
             return bool(self.get_same_materials(tubes))
-        else:
-            return bool(self.get_possible_material(tubes, allowed_materials))
+        return bool(self.get_possible_material(tubes, allowed_materials))
 
     def has_tubes(self, tubes):
         """Check whether case has the specified tube or tubes.
@@ -366,6 +368,8 @@ class TubeSample:
 
 
 class FCSData:
+    """Wrap FCS data with additional metadata"""
+
     __slots__ = (
         "_meta", "data", "ranges"
     )
@@ -445,6 +449,12 @@ class FCSData:
 
 
 class FCSMarkersTransform(TransformerMixin, BaseEstimator):
+    """Filter FCS files based on a list of markers.
+
+    This will drop markers not in the initial list and reorder the columns
+    to reflect the sequence in the original markers.
+    """
+
     def __init__(self, markers):
         self._markers = markers
 
@@ -475,10 +485,9 @@ class FCSLogTransform(BaseEstimator, TransformerMixin):
 class FCSScatterFilter(BaseEstimator, TransformerMixin):
     """Remove events with values below threshold in specified channels."""
 
-    def __init__(
-            self,
-            filters=[("SS INT LIN", 0), ("FS INT LIN", 0)],
-    ):
+    def __init__(self, filters=None):
+        if filters is None:
+            filters = [("SS INT LIN", 0), ("FS INT LIN", 0)]
         self._filters = filters
 
     def transform(self, X, *_):
@@ -503,6 +512,7 @@ class FCSMinMaxScaler(TransformerMixin, BaseEstimator):
         self._model = None
 
     def fit(self, X, *_):
+        """Fit min max range to the given data."""
         self._model = preprocessing.MinMaxScaler()
         if isinstance(X, FCSData):
             data = X.ranges
@@ -512,6 +522,7 @@ class FCSMinMaxScaler(TransformerMixin, BaseEstimator):
         return self
 
     def transform(self, X, *_):
+        """Transform data to be 0 min and 1 max using the fitted values."""
         if isinstance(X, FCSData):
             data = self._model.transform(X.data)
             X.data = pd.DataFrame(data, columns=X.data.columns, index=X.data.index)
@@ -532,6 +543,7 @@ class FCSStandardScaler(TransformerMixin, BaseEstimator):
         self._model = None
 
     def fit(self, X, *_):
+        """Fit standard deviation to the given data."""
         self._model = preprocessing.StandardScaler()
         if isinstance(X, FCSData):
             data = X.data
@@ -541,6 +553,7 @@ class FCSStandardScaler(TransformerMixin, BaseEstimator):
         return self
 
     def transform(self, X, *_):
+        """Transform data to be zero mean and unit standard deviation"""
         if isinstance(X, FCSData):
             data = self._model.transform(X.data)
             ranges = self._model.transform(X.ranges)
