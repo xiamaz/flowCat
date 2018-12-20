@@ -64,7 +64,7 @@ class Config:
         self._data = self._check_schema(data)
 
     @classmethod
-    def generate_config(cls, args):
+    def generate_config(cls, args=None):
         """Create configuration from args and kwargs"""
         raise NotImplementedError
 
@@ -112,7 +112,7 @@ class Config:
         """
         if conv is None:
             def conv_type(path):
-                return cls.from_file(path) if path else cls({})
+                return cls.from_file(path) if path else cls.generate_config()
         else:
             conv_type = conv
 
@@ -172,6 +172,10 @@ class PathConfig(Config):
         ),
     }
 
+    @classmethod
+    def generate_config(cls, args=None):
+        return cls({})
+
 
 class SOMConfig(Config):
     """SOM generation configuration."""
@@ -218,11 +222,15 @@ class SOMConfig(Config):
         }
     }
 
+    @classmethod
+    def generate_config(cls, args=None):
+        return cls({})
+
 
 class ClassificationConfig(Config):
     """Classification configuration."""
 
-    name = "classconfig"
+    name = "modelconfig"
     desc = "Classification configuration"
     default = ""
     _schema = {
@@ -285,3 +293,7 @@ class ClassificationConfig(Config):
             "confusion_sizes": ((bool,), True),
         },
     }
+
+    @classmethod
+    def generate_config(cls, args=None):
+        return cls({})
