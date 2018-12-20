@@ -464,3 +464,21 @@ def create_handler(handler, fmt=LOGGING_FORMAT, level=logging.DEBUG):
         fmt = logging.Formatter(fmt)
     handler.setFormatter(fmt)
     return handler
+
+
+def load_labels(path):
+    """Load list of labels. Either in .json, .p (pickle) or .txt format.
+    Args:
+        path: path to label file.
+    """
+    if not path:
+        return path
+
+    path = URLPath(path)
+    try:
+        labels = load_file(path)
+    except TypeError:
+        # try loading as simple txt file instead
+        with open(str(path), "r") as f:
+            labels = [l.strip() for l in f]
+    return labels

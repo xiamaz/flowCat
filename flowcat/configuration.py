@@ -56,12 +56,15 @@ class Config:
     """
 
     _schema = None
+    name = ""
+    desc = "Empty configuration. Implement a real configuration by inheriting"
+    default = None
 
     def __init__(self, data):
         self._data = self._check_schema(data)
 
     @classmethod
-    def generate_config(cls):
+    def generate_config(cls, args):
         """Create configuration from args and kwargs"""
         raise NotImplementedError
 
@@ -98,6 +101,29 @@ class Config:
         else:
             raise TypeError(f"Unknown filetype: {path}")
 
+    @classmethod
+    def add_to_arguments(cls, parser, conv=None):
+        """Add the configuration to arguments.
+
+        Args:
+            parser: ArgumentParser object, to which the argument should be
+                added.
+            conv: Type convert parser input.
+        """
+        if conv is None:
+            def conv_type(path):
+                return cls.from_file(path) if path else cls({})
+        else:
+            conv_type = conv
+
+        parser.add_argument(
+            f"--{cls.name}",
+            help=cls.desc,
+            type=conv_type,
+            default=cls.default,
+        )
+        return parser
+
     def __call__(self, *args):
         """Get data. Provide a variable number of arguments, which will be used
         to traverse the schema correctly."""
@@ -116,7 +142,11 @@ class Config:
 
 
 class PathConfig(Config):
+    """Input output paths configuration."""
 
+    name = "pathconfig"
+    desc = "Input/Output paths configuration."
+    default = "paths.toml"
     _schema = {
         "input": (
             ({str: list},), {
@@ -144,7 +174,11 @@ class PathConfig(Config):
 
 
 class SOMConfig(Config):
+    """SOM generation configuration."""
 
+    name = "somconfig"
+    desc = "SOM creation config file."
+    default = ""
     _schema = {
         "name": ((str,), None),
         "dataset": {
@@ -179,14 +213,18 @@ class SOMConfig(Config):
             "node_distance": ((str,), "euclidean"),
             "initialization_method": ((str,), "random"),
         },
-        "somnodes" : {
+        "somnodes": {
             "fitmap_args": ((dict, None), None),
         }
     }
 
 
 class ClassificationConfig(Config):
+    """Classification configuration."""
 
+    name = "classconfig"
+    desc = "Classification configuration"
+    default = ""
     _schema = {
         "name": ((str,), None),
         "dataset": {
