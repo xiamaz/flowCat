@@ -91,7 +91,7 @@ class Case:
             self.sureness_description = data.sureness_description
             self.sureness = data.sureness
             self.filepaths = data.filepaths
-        else:
+        elif isinstance(data, dict):
             self._json = data
             self.path = path
 
@@ -104,6 +104,8 @@ class Case:
             self.sureness = self._infer_sureness()
 
             self.filepaths = data["filepaths"]
+        else:
+            raise TypeError("data needs to be either another Case or a dict")
 
     @property
     def json(self):
