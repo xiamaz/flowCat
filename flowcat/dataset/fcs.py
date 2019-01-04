@@ -45,6 +45,10 @@ class FCSData:
         self.ranges = self.ranges.astype("float64", copy=False)
 
     @property
+    def channels(self):
+        return list(self.data.columns)
+
+    @property
     def meta(self):
         return self._meta
 
