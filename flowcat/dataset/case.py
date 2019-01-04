@@ -256,6 +256,9 @@ class Case:
     def copy(self):
         return self.__class__(self)
 
+    def __repr__(self):
+        return f"<Case {self.id}| G{self.group} {self.date} {len(self.filepaths)} files>"
+
 
 class TubeSample:
     """FCS sample metadata wrapper."""
