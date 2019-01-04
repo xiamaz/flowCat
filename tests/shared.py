@@ -25,9 +25,7 @@ utils.TMP_PATH = "tmp_test"
 class MockLoader:
     """Return mock data for different path calls."""
 
-
     URLPath = utils.URLPath
-
 
     def load_csv(self, path):
         path = str(path)
@@ -49,3 +47,8 @@ class MockLoader:
         else:
             raise KeyError(f"No mock data available for {path}")
         return data
+
+
+def get_test_dataset(name):
+    """Return test dataset with the given name"""
+    return DATAPATH / name

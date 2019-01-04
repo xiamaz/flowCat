@@ -12,7 +12,43 @@ Each map is a dictionary containing:
   confusion matrix, in most cases this should translate into the number classes
   contained in each label
 """
+import enum
 
+
+class Sureness(enum.IntEnum):
+    HIGH = 10
+    NORMAL = 5
+    LOW = 1
+
+
+class Material(enum.Enum):
+    """Class containing material types. Abstracting the concept for
+    easier consumption."""
+    PERIPHERAL_BLOOD = 1
+    BONE_MARROW = 2
+    OTHER = 3
+
+    @staticmethod
+    def from_str(label: str) -> "Material":
+        """Get material enum from string"""
+        if label in ["1", "2", "3", "4", "5", "PB"]:
+            return Material.PERIPHERAL_BLOOD
+        if label == "KM":
+            return Material.BONE_MARROW
+        return Material.OTHER
+
+
+# probe materials allowed in further processing
+ALLOWED_MATERIALS = [Material.PERIPHERAL_BLOOD, Material.BONE_MARROW]
+
+# groups without usable infiltration values
+NO_INFILTRATION = ["normal"]
+
+# threshold of marker availability for inclusion in dataset
+MARKER_THRESHOLD = 0.9
+
+# mapping of some legacy cohort names in order to correctly import older
+# formats
 NAME_MAP = {
     "HZL": "HCL",
     "HZLv": "HCLv",
@@ -21,10 +57,12 @@ NAME_MAP = {
     "CLLPL": "PL"
 }
 
+# name of main groups in defined order for plotting
 GROUPS = [
     "CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"
 ]
 
+# merged group mappings, most useful in classification
 GROUP_MAPS = {
     "8class": {
         "groups": ["CM", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"],

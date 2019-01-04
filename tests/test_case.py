@@ -1,125 +1,152 @@
-import re
+"""Test single case generation and usage."""
 import unittest
-import json
-import pathlib
+import datetime
 
-import pandas as pd
-from pandas.testing import assert_series_equal
+from flowcat.dataset import case
 
-from .shared import *
-
-from flowcat.dataset import case_dataset
+from . import shared
 
 
-class TestBasicCase(unittest.TestCase):
-
-    small_dataset = DATAPATH / "small_dataset"
-
-    @classmethod
-    def setUpClass(cls):
-        cls.cases = case_dataset.CaseCollection.from_path(cls.small_dataset)
-
-    def test_wrong_constructor(self):
-        """Exception should be thrown if we try to instantiate the CaseCollection using a string or pathlike object."""
-        self.assertRaises(ValueError, case_dataset.CaseCollection, "teststr")
-        self.assertRaises(ValueError, case_dataset.CaseCollection, pathlib.Path("teststr"))
-        self.assertRaises(ValueError, case_dataset.CaseCollection, utils.URLPath("teststr"))
+def create_date(dstr):
+    return datetime.datetime.strptime(dstr, "%Y-%m-%d").date()
 
 
-    def test_json_same(self):
-        """Assert that exported json is identical to imported information."""
+class TestCaseGenerated(unittest.TestCase):
+    """Test case creation from generated data."""
 
-        with open(str(self.small_dataset / "case_info.json"), "r") as f:
-            case_jsons = json.load(f)
+    def test_creation(self):
+        """Simple creation using a dict of data."""
+        tests = {
+            "simple": {
+                "date": "2018-10-11",
+                "infiltration": 10.8,
+                "cohort": "testcohort",
+                "id": "12345",
+                "diagnosis": "more stuff",
+                "sureness": "suüre",
+                "filepaths": [],
+            },
+            "minimum": {
+                "id": "123145",
+                "date": "2018-10-12",
+                "filepaths": [],
+            }
+        }
+        for tname, tdata in tests.items():
+            with self.subTest(name=tname):
+                tcase = case.Case(tdata)
+                self.assertEqual(tcase.id, tdata["id"])
+                self.assertEqual(tcase.date, create_date(tdata["date"]))
+                self.assertEqual(tcase.infiltration, tdata["infiltration"] if "infiltration" in tdata else 0.0)
+                self.assertEqual(tcase.group, tdata["cohort"] if "cohort" in tdata else "")
 
-        for cjson, case in zip(case_jsons, self.cases.data):
-            with self.subTest(label=cjson["id"]):
-                self.assertDictEqual(case.json, cjson)
+        missing_tests = {
+            "missingid": {
+                "date": "2018-10-11",
+                "infiltration": 10.8,
+                "cohort": "testcohort",
+                "diagnosis": "more stuff",
+                "sureness": "suüre",
+                "filepaths": [],
+            },
+            "missingdate": {
+                "infiltration": 10.8,
+                "cohort": "testcohort",
+                "id": "12345",
+                "diagnosis": "more stuff",
+                "sureness": "suüre",
+                "filepaths": [],
+            },
+            "missingfp": {
+                "date": "2018-10-11",
+                "infiltration": 10.8,
+                "cohort": "testcohort",
+                "id": "12345",
+                "diagnosis": "more stuff",
+                "sureness": "suüre",
+            }
+        }
+        for tname, tdata in missing_tests.items():
+            with self.subTest(tname):
+                with self.assertRaisesRegex(AssertionError, r"^\w+ is required$"):
+                    case.Case(tdata)
 
-    def test_group_num(self):
-        """Test that the count function is working correctly."""
-        self.assertDictEqual(self.cases.group_count, {"normal": 6, "CLL": 2, "LPL": 1, "PL": 1})
+        conversion_tests = {
+            "strinfil": ({
+                "date": "2018-10-11",
+                "infiltration": "10.8",
+                "cohort": "testcohort",
+                "id": "12345",
+                "diagnosis": "more stuff",
+                "sureness": "suüre",
+                "filepaths": [],
+            }, 10.8),
+            "commainfil": ({
+                "date": "2018-10-11",
+                "infiltration": "10,8",
+                "cohort": "testcohort",
+                "id": "12345",
+                "diagnosis": "more stuff",
+                "sureness": "suüre",
+                "filepaths": [],
+            }, 10.8),
+            "intinfil": ({
+                "date": "2018-10-11",
+                "infiltration": 10,
+                "cohort": "testcohort",
+                "id": "12345",
+                "diagnosis": "more stuff",
+                "sureness": "suüre",
+                "filepaths": [],
+            }, 10.0),
+            "outofrange": ({
+                "date": "2018-10-11",
+                "infiltration": 1000,
+                "cohort": "testcohort",
+                "id": "12345",
+                "diagnosis": "more stuff",
+                "sureness": "suüre",
+                "filepaths": [],
+            }, AssertionError),
+            "outofrange2": ({
+                "date": "2018-10-11",
+                "infiltration": -1,
+                "cohort": "testcohort",
+                "id": "12345",
+                "diagnosis": "more stuff",
+                "sureness": "suüre",
+                "filepaths": [],
+            }, AssertionError),
+        }
+        for tname, (tdata, truth) in conversion_tests.items():
+            with self.subTest(tname):
+                if isinstance(truth, float):
+                    tcase = case.Case(tdata)
+                    self.assertEqual(tcase.infiltration, truth)
+                else:
+                    with self.assertRaises(truth):
+                        case.Case(tdata)
 
-    def test_tubes(self):
-        """Infer tubes from availability in input data."""
-        self.assertListEqual(self.cases.tubes, [1, 2, 3])
+    def test_filepaths(self):
+        """Check correct creation of filepaths."""
+        base_obj = {
+            "id": "12345",
+            "date": "2018-10-10",
+        }
 
-    def test_markers(self):
-        reference = pd.Series({
-            "FS INT LIN": 1.0,
-            "SS INT LIN": 1.0,
-            "FMC7-FITC": 1.0,
-            "CD10-PE": 1.0,
-            "IgM-ECD": 1.0,
-            "CD79b-PC5.5": 1.0,
-            "CD20-PC7": 1.0,
-            "CD23-APC": 1.0,
-            "nix-APCA700": 1.0,
-            "CD19-APCA750": 1.0,
-            "CD5-PacBlue": 1.0,
-            "CD45-KrOr": 1.0,
-        })
+        tests = {
+            "simple": [
+                {
+                    "date": "2018-10-12",
+                    "fcs": {
+                        "path": "nop",
+                    },
+                }
+            ]
+        }
 
-        assert_series_equal(self.cases.get_markers(1), reference)
-
-    def test_filter(self):
-        with self.subTest(i="tube filtering"):
-            tubes_only = self.cases.filter(tubes=[1, 2])
-            # didnt filter out any cases
-            self.assertEqual(len(tubes_only), len(self.cases))
-            self.assertListEqual(tubes_only.selected_tubes, [1, 2])
-            self.assertDictEqual(tubes_only.selected_markers, {
-                1: [
-                    'FS INT LIN',
-                    'SS INT LIN',
-                    'FMC7-FITC',
-                    'CD10-PE',
-                    'IgM-ECD',
-                    'CD79b-PC5.5',
-                    'CD20-PC7',
-                    'CD23-APC',
-                    'CD19-APCA750',
-                    'CD5-PacBlue',
-                    'CD45-KrOr'],
-                2: [
-                    'FS INT LIN',
-                    'SS INT LIN',
-                    'Kappa-FITC',
-                    'Lambda-PE',
-                    'CD38-ECD',
-                    'CD25-PC5.5',
-                    'CD11c-PC7',
-                    'CD103-APC',
-                    'CD19-APCA750',
-                    'CD22-PacBlue',
-                    'CD45-KrOr']})
-
-        with self.subTest(i="group filtering"):
-            single_group = self.cases.filter(groups=["normal"])
-            self.assertEqual(len(single_group), sum(g == "normal" for g in self.cases.groups))
-
-        with self.subTest(i="num filtering"):
-            one_each = self.cases.filter(num=1)
-            self.assertEqual(len(one_each), len(set(self.cases.groups)))
-
-        with self.subTest(i="infiltration filtering"):
-            high_infil = self.cases.filter(infiltration=57)
-            for case in high_infil:
-                with self.subTest(i=case.id, group=case.group):
-                    if case.group != "normal":
-                        self.assertGreaterEqual(case.infiltration, 57)
-
-        with self.subTest(i="count filtering"):
-            high_count = self.cases.filter(counts=50000)
-            for case in high_count:
-                for tubesample in case.filepaths:
-                    with self.subTest(i=case.id, p=tubesample.path):
-                        self.assertGreaterEqual(tubesample.count, 50000)
-
-    def test_view(self):
-        sample_view = self.cases.filter(num=1)
-        sample_tubeview = sample_view.get_tube(1)
-        # all samples should be from the first tube
-        for sample in sample_tubeview:
-            with self.subTest(i=sample.parent.id):
-                self.assertEqual(sample.tube, 1)
+        for tname, tpathdata in tests.items():
+            with self.subTest(tname):
+                tdata = {**base_obj, "filepaths": tpathdata}
+                tcase = case.Case(tdata)
+                self.assertEqual(tcase.filepaths[0].path, tpathdata[0]["fcs"]["path"])

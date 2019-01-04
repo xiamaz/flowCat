@@ -1,22 +1,22 @@
 """
 Objects abstracting basic case information.
+
+Look at tests/test_case.py to see how cases can be defined from simple dicts.
 """
 import logging
-import enum
 import functools
 from datetime import datetime
 
-import numpy as np
 import pandas as pd
-from sklearn import preprocessing
-from sklearn.base import BaseEstimator, TransformerMixin
 
-import fcsparser
-
-from ..utils import URLPath
+from .. import mappings, utils
+from . import fcs
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+CASE_REQUIRED_FIELDS = "date", "id", "filepaths"
 
 
 def all_in(smaller, larger):
@@ -28,30 +28,9 @@ def all_in(smaller, larger):
     return True
 
 
-class Sureness(enum.IntEnum):
-    HIGH = 10
-    NORMAL = 5
-    LOW = 1
-
-
-class Material(enum.Enum):
-    """Class containing material types. Abstracting the concept for
-    easier consumption."""
-    PERIPHERAL_BLOOD = 1
-    BONE_MARROW = 2
-    OTHER = 3
-
-    @staticmethod
-    def from_str(label: str) -> "Material":
-        """Get material enum from string"""
-        if label in ["1", "2", "3", "4", "5", "PB"]:
-            return Material.PERIPHERAL_BLOOD
-        if label == "KM":
-            return Material.BONE_MARROW
-        return Material.OTHER
-
-
-ALLOWED_MATERIALS = [Material.PERIPHERAL_BLOOD, Material.BONE_MARROW]
+def assert_in_dict(fields, data):
+    for field in fields:
+        assert field in data, f"{field} is required"
 
 
 class Case:
@@ -63,8 +42,6 @@ class Case:
         "used_material",
         "date",
         "infiltration",
-        "short_diagnosis",
-        "sureness_description",
         "sureness",
         "group",
         "id",
@@ -74,7 +51,7 @@ class Case:
         """
         Args:
             data: Contains all metainformation, either a dictionary or
-                a case object
+                a case object.
             path: Path prefix used for loading any data.
         Returns:
             New case object.
@@ -83,29 +60,35 @@ class Case:
         self.used_material = None
 
         if isinstance(data, self.__class__):
-            self._json = data._json.copy()
-            self.path = data.path
+            self._json = data.raw.copy()
+            self.path = path if path else data.path
+
+            self.id = data.id
             self.date = data.date
+            self.filepaths = data.filepaths
+
             self.infiltration = data.infiltration
             self.group = data.group
-            self.id = data.id
-            self.short_diagnosis = data.short_diagnosis
-            self.sureness_description = data.sureness_description
             self.sureness = data.sureness
-            self.filepaths = data.filepaths
         elif isinstance(data, dict):
             self._json = data
             self.path = path
 
-            self.date = datetime.strptime(data["date"], "%Y-%m-%d").date()
-            self.infiltration = data["infiltration"]
-            self.group = data["cohort"]
+            # required keys
+            assert_in_dict(CASE_REQUIRED_FIELDS, data)
             self.id = data["id"]
-            self.short_diagnosis = data["diagnosis"]
-            self.sureness_description = data["sureness"] or ""
-            self.sureness = self._infer_sureness()
-
+            self.date = datetime.strptime(data["date"], "%Y-%m-%d").date()
             self.filepaths = data["filepaths"]
+
+            # optional keys
+            infiltration = data.get("infiltration", 0.0)
+            self.infiltration = float(
+                infiltration.replace(",", ".") if isinstance(infiltration, str) else infiltration)
+            assert self.infiltration <= 100.0 and self.infiltration >= 0.0, "Infiltration out of range 0-100"
+            self.group = data.get("cohort", "")
+            short_diagnosis = data.get("diagnosis", "")
+            sureness = data.get("sureness", "")
+            self.sureness = self._infer_sureness(sureness, short_diagnosis)
         else:
             raise TypeError("data needs to be either another Case or a dict")
 
@@ -118,10 +101,15 @@ class Case:
             "filepaths": [p.json for p in self.filepaths],
             "cohort": self.group,
             "infiltration": self.infiltration,
-            "diagnosis": self.short_diagnosis,
-            "sureness": self.sureness_description,
+            "diagnosis": self.raw["diagnosis"],
+            "sureness": self.raw["sureness"],
         }
         return cdict
+
+    @property
+    def raw(self):
+        """Return raw input dictionary."""
+        return self._json
 
     @property
     def filepaths(self):
@@ -194,7 +182,7 @@ class Case:
 
     def set_allowed_material(self, tubes):
         """Set used material to one of the allowed materials."""
-        self.used_material = self.get_possible_material(tubes, ALLOWED_MATERIALS)
+        self.used_material = self.get_possible_material(tubes, mappings.ALLOWED_MATERIALS)
 
     def has_same_material(self, tubes, allowed_materials=None):
         if allowed_materials is None:
@@ -226,92 +214,94 @@ class Case:
             joined = joined[[c for c in joined.columns if "nix" not in c]]
         return joined
 
-    def _infer_sureness(self):
+    def _infer_sureness(self, sureness_desc, short_diag):
         """Return a sureness score from existing information."""
-        sureness_desc = self.sureness_description.lower()
-        short_diag = self.short_diagnosis.lower()
+        sureness_desc = sureness_desc.lower()
+        short_diag = short_diag.lower()
+
         if self.group == "FL":
             if "nachweis eines igh-bcl2" in sureness_desc:
-                return Sureness.HIGH
-            else:
-                return Sureness.NORMAL
-        elif self.group == "MCL":
+                return mappings.Sureness.HIGH
+            return mappings.Sureness.NORMAL
+        if self.group == "MCL":
             if "mit nachweis ccnd1-igh" in sureness_desc:
-                return Sureness.HIGH
-            elif "nachweis eines igh-ccnd1" in sureness_desc:  # synon. to first
-                return Sureness.HIGH
-            elif "nachweis einer 11;14-translokation" in sureness_desc:  # synon. to first
-                return Sureness.HIGH
-            elif "mantelzelllymphom" in short_diag:  # prior known diagnosis will be used
-                return Sureness.HIGH
-            elif "ohne fish-sonde" in sureness_desc:  # diagnosis uncertain without genetic proof
-                return Sureness.LOW
-            else:
-                return Sureness.NORMAL
-        elif self.group == "PL":
+                return mappings.Sureness.HIGH
+            if "nachweis eines igh-ccnd1" in sureness_desc:  # synon. to first
+                return mappings.Sureness.HIGH
+            if "nachweis einer 11;14-translokation" in sureness_desc:  # synon. to first
+                return mappings.Sureness.HIGH
+            if "mantelzelllymphom" in short_diag:  # prior known diagnosis will be used
+                return mappings.Sureness.HIGH
+            if "ohne fish-sonde" in sureness_desc:  # diagnosis uncertain without genetic proof
+                return mappings.Sureness.LOW
+            return mappings.Sureness.NORMAL
+        if self.group == "PL":
             if "kein nachweis eines igh-ccnd1" in sureness_desc:  # hallmark MCL (synon. 11;14)
-                return Sureness.HIGH
-            elif "kein nachweis einer 11;14-translokation" in sureness_desc:  # synon to first
-                return Sureness.HIGH
-            elif "nachweis einer 11;14-translokation" in sureness_desc:  # hallmark MCL
-                return Sureness.LOW
-            else:
-                return Sureness.NORMAL
-        elif self.group == "LPL":
+                return mappings.Sureness.HIGH
+            if "kein nachweis einer 11;14-translokation" in sureness_desc:  # synon to first
+                return mappings.Sureness.HIGH
+            if "nachweis einer 11;14-translokation" in sureness_desc:  # hallmark MCL
+                return mappings.Sureness.LOW
+            return mappings.Sureness.NORMAL
+        if self.group == "LPL":
             if "lymphoplasmozytisches lymphom" in short_diag:  # prior known diagnosis will be used
-                return Sureness.HIGH
-            else:
-                return Sureness.NORMAL
-        elif self.group == "MZL":
+                return mappings.Sureness.HIGH
+            return mappings.Sureness.NORMAL
+        if self.group == "MZL":
             if "marginalzonenlymphom" in short_diag:  # prior known diagnosis will be used
-                return Sureness.HIGH
-            else:
-                return Sureness.NORMAL
-        else:
-            return Sureness.NORMAL
+                return mappings.Sureness.HIGH
+            return mappings.Sureness.NORMAL
+        return mappings.Sureness.NORMAL
 
     def copy(self):
         return self.__class__(self)
 
 
 class TubeSample:
+    """FCS sample metadata wrapper."""
     __slots__ = (
+        "_json",
         "count",
         "date",
         "path",
         "markers",
         "material",
-        "material_desc",
         "parent",
         "panel",
-        "result",
-        "result_success",
         "tube",
     )
 
     """Single sample from a certain tube."""
-    def __init__(self, path, parent):
-        if isinstance(path, self.__class__):
-            self.tube = path.tube
-            self.material_desc = path.material_desc
-            self.material = path.material
-            self.path = path.path
-            self.panel = path.panel
-            self.markers = path.markers.copy()
-            self.count = path.count
-            self.date = path.date
-        else:
-            self.tube = int(path["tube"])
-            self.material_desc = path["material"]
-            self.material = Material.from_str(path["material"])
-            self.panel = path["panel"]
-            self.date = datetime.strptime(path["date"], "%Y-%m-%d").date()
+    def __init__(self, data, parent):
+        if isinstance(data, self.__class__):
+            self._json = data.raw
+            self.path = data.path
 
-            self.path = path["fcs"]["path"]
-            self.markers = path["fcs"]["markers"]
-            self.count = path["fcs"]["event_count"]
+            self.tube = data.tube
+            self.material = data.material
+            self.panel = data.panel
+            self.markers = data.markers.copy()
+            self.count = data.count
+            self.date = data.date
+        else:
+            self._json = data
+            assert "fcs" in data and "path" in data["fcs"], "Path to data is missing"
+            assert "date" in data, "Date is missing"
+            self.path = data["fcs"]["path"]
+            self.date = datetime.strptime(data["date"], "%Y-%m-%d").date()
+
+            self.tube = int(data.get("tube", 0))
+            self.material = mappings.Material.from_str(data.get("material", ""))
+            self.panel = data.get("panel", "")
+
+            self.markers = data["fcs"].get("markers", None)
+            self.count = int(data["fcs"].get("event_count", -1))
 
         self.parent = parent
+
+    @property
+    def raw(self):
+        return self._json
 
     @property
     def json(self):
@@ -320,7 +310,7 @@ class TubeSample:
             "panel": self.panel,
             "tube": self.tube,
             "date": self.date.isoformat(),
-            "material": self.material_desc,
+            "material": self.raw["material"],
             "fcs": {
                 "path": self.path,
                 "markers": self.markers,
@@ -336,7 +326,7 @@ class TubeSample:
 
     @property
     def urlpath(self):
-        url_path = URLPath(self.parent.path) / self.path
+        url_path = utils.URLPath(self.parent.path) / self.path
         return url_path
 
     @property
@@ -352,216 +342,14 @@ class TubeSample:
         Returns:
             Dataframe with fcs data.
         """
-        url_path = URLPath(self.parent.path) / self.path
-        data = FCSData(url_path.get())
-
+        url_path = utils.URLPath(self.parent.path) / self.path
+        data = fcs.FCSData(url_path.get())
         if normalized:
-            data = FCSStandardScaler().fit_transform(data)
+            data = data.normalize()
         if scaled:
-            data = FCSMinMaxScaler().fit_transform(data)
-
+            data = data.scale()
         return data
 
     def has_markers(self, markers: list) -> bool:
         """Return whether given list of markers are fulfilled."""
         return all_in(markers, self.markers)
-
-
-class FCSData:
-    """Wrap FCS data with additional metadata"""
-
-    __slots__ = (
-        "_meta", "data", "ranges"
-    )
-
-    default_encoding = "latin-1"
-    default_dataset = 0
-
-    def __init__(self, initdata):
-        """Create a new FCS object.
-
-        Args:
-            initdata: Either tuple of meta and data from fcsparser, string filepath or another FCSData object.
-        Returns:
-            FCSData object.
-        """
-        if isinstance(initdata, self.__class__):
-            self._meta = initdata.meta.copy()
-            self.ranges = initdata.ranges.copy()
-            self.data = initdata.data.copy()
-        else:
-            # unpack metadata, data tuple
-            if isinstance(initdata, tuple):
-                meta, data = initdata
-            # load using filepath
-            else:
-                meta, data = fcsparser.parse(
-                    str(initdata),
-                    data_set=self.default_dataset,
-                    encoding=self.default_encoding)
-            self._meta = meta
-            self.data = data
-            self.ranges = self._get_ranges_from_pnr(self._meta)
-
-        self.data = self.data.astype("float64", copy=False)
-        self.ranges = self.ranges.astype("float64", copy=False)
-
-    @property
-    def meta(self):
-        return self._meta
-
-    def copy(self):
-        return self.__class__(self)
-
-    def drop_empty(self):
-        """Drop all channels containing nix in the channel name.
-        """
-        nix_cols = [c for c in self.data.columns if "nix" in c]
-        self.drop_channels(nix_cols)
-        return self
-
-    def drop_channels(self, channels):
-        """Drop the given columns from the data.
-        Args:
-            channels: List of channels or channel name to drop. Will not throw an error if the name is not found.
-        Returns:
-            self. This operation is done in place, so the original object will be modified!
-        """
-        self.data.drop(channels, axis=1, inplace=True, errors="ignore")
-        self.ranges.drop(channels, axis=1, inplace=True, errors="ignore")
-        return self
-
-    def _get_ranges_from_pnr(self, metadata):
-        """Get ranges from metainformation."""
-        pnr = {
-            c: {
-                "min": 0,
-                "max": int(metadata[f"$P{i + 1}R"])
-            } for i, c in enumerate(self.data.columns)
-        }
-        pnr = pd.DataFrame.from_dict(pnr, orient="columns", dtype="float32")
-        return pnr
-
-    def __repr__(self):
-        """Print string representation of the input file."""
-        nevents, nchannels = self.data.shape
-        return f"<FCS :: {nevents} events :: {nchannels} channels>"
-
-
-class FCSMarkersTransform(TransformerMixin, BaseEstimator):
-    """Filter FCS files based on a list of markers.
-
-    This will drop markers not in the initial list and reorder the columns
-    to reflect the sequence in the original markers.
-    """
-
-    def __init__(self, markers):
-        self._markers = markers
-
-    def fit(self, *_):
-        return self
-
-    def transform(self, X, *_):
-        if isinstance(X, FCSData):
-            X.data = X.data.loc[:, self._markers]
-        else:
-            X = X.loc[:, self._markers]
-        return X
-
-
-class FCSLogTransform(BaseEstimator, TransformerMixin):
-    """Transform FCS files logarithmically.  Currently this does not work
-    correctly, since FCS files are not $PnE transformed on import"""
-
-    def transform(self, X, *_):
-        names = [n for n in X.columns if "LIN" not in n]
-        X[names] = np.log1p(X[names])
-        return X
-
-    def fit(self, *_):
-        return self
-
-
-class FCSScatterFilter(BaseEstimator, TransformerMixin):
-    """Remove events with values below threshold in specified channels."""
-
-    def __init__(self, filters=None):
-        if filters is None:
-            filters = [("SS INT LIN", 0), ("FS INT LIN", 0)]
-        self._filters = filters
-
-    def transform(self, X, *_):
-        if isinstance(X, FCSData):
-            selected = functools.reduce(
-                lambda x, y: x & y, [X.data[c] > t for c, t in self._filters])
-            X.data = X.data.loc[selected, :]
-        else:
-            selected = functools.reduce(
-                lambda x, y: x & y, [X[c] > t for c, t in self._filters])
-            X = X.loc[selected, :]
-        return X
-
-    def fit(self, *_):
-        return self
-
-
-class FCSMinMaxScaler(TransformerMixin, BaseEstimator):
-    """MinMaxScaling with adaptations for FCSData."""
-
-    def __init__(self):
-        self._model = None
-
-    def fit(self, X, *_):
-        """Fit min max range to the given data."""
-        self._model = preprocessing.MinMaxScaler()
-        if isinstance(X, FCSData):
-            data = X.ranges
-        else:
-            data = X.data
-        self._model.fit(data)
-        return self
-
-    def transform(self, X, *_):
-        """Transform data to be 0 min and 1 max using the fitted values."""
-        if isinstance(X, FCSData):
-            data = self._model.transform(X.data)
-            X.data = pd.DataFrame(data, columns=X.data.columns, index=X.data.index)
-            ranges = self._model.transform(X.ranges)
-            X.ranges = pd.DataFrame(ranges, columns=X.ranges.columns, index=X.ranges.index)
-        elif isinstance(X, pd.DataFrame):
-            X = pd.DataFrame(
-                self._model.transform(X),
-                columns=X.columns, index=X.index)
-        else:
-            X = self._model.transform(X)
-        return X
-
-
-class FCSStandardScaler(TransformerMixin, BaseEstimator):
-    """Standard deviation scaling adapted for FCSData objects."""
-    def __init__(self):
-        self._model = None
-
-    def fit(self, X, *_):
-        """Fit standard deviation to the given data."""
-        self._model = preprocessing.StandardScaler()
-        if isinstance(X, FCSData):
-            data = X.data
-        else:
-            data = X
-        self._model.fit(data)
-        return self
-
-    def transform(self, X, *_):
-        """Transform data to be zero mean and unit standard deviation"""
-        if isinstance(X, FCSData):
-            data = self._model.transform(X.data)
-            ranges = self._model.transform(X.ranges)
-            X.data = pd.DataFrame(data, columns=X.data.columns, index=X.data.index)
-            X.ranges = pd.DataFrame(ranges, columns=X.ranges.columns, index=X.ranges.index)
-        elif isinstance(X, pd.DataFrame):
-            data = self._model.transform(X)
-            X = pd.DataFrame(data, columns=X.columns, index=X.index)
-        else:
-            X = self._model.transform(X)
-        return X

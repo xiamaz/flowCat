@@ -8,20 +8,10 @@ import collections
 import pandas as pd
 from sklearn import model_selection
 
-from .case import Case, Material
+from .case import Case
+from .. import mappings
 from ..utils import load_json, URLPath
 
-
-# Threshold for channel markers to be used in SOM
-#
-# It cases do not possess a marker required for the consensus SOM
-# they will be ignored.
-MARKER_THRESHOLD = 0.9
-
-# materials allowed in processing
-ALLOWED_MATERIALS = [Material.BONE_MARROW, Material.PERIPHERAL_BLOOD]
-
-NO_INFILTRATION = ["normal"]
 
 LOGGER = logging.getLogger(__name__)
 
@@ -35,7 +25,7 @@ def get_meta(path, how):
     else:
         # use how as the complete name
         case_info = path / how
-        assert case_infos.exists()
+        assert case_info.exists()
     return case_info
 
 
@@ -197,7 +187,7 @@ class CaseIterable(IterableMixin):
         tubes = self.selected_tubes or self.tubes
         # enforce same material
         material = case.get_possible_material(
-            tubes, allowed_materials=ALLOWED_MATERIALS)
+            tubes, allowed_materials=mappings.ALLOWED_MATERIALS)
         paths = {
             t: str(case.get_tube(t, material=material).localpath) for t in tubes
         }
@@ -219,7 +209,7 @@ class CaseIterable(IterableMixin):
 
         # set defaults
         if materials is None:
-            materials = ALLOWED_MATERIALS
+            materials = mappings.ALLOWED_MATERIALS
         if tubes is None:
             tubes = self.selected_tubes or self.tubes
 
@@ -246,9 +236,9 @@ class CaseIterable(IterableMixin):
                 "Filter Infiltration %d - %d", infiltration, infiltration_max)
             data = [
                 d for d in data
-                if (d.infiltration >= infiltration
-                and d.infiltration <= infiltration_max)
-                or d.group in NO_INFILTRATION
+                if (
+                    d.infiltration >= infiltration and d.infiltration <= infiltration_max
+                ) or d.group in mappings.NO_INFILTRATION
             ]
 
         # create copy since we will start modifying objects
@@ -276,7 +266,7 @@ class CaseIterable(IterableMixin):
                 for t in tubes
             }
             selected_markers = {
-                t: [m for m, n in v.items() if n / len(data) > MARKER_THRESHOLD and "nix" not in m]
+                t: [m for m, n in v.items() if n / len(data) > mappings.MARKER_THRESHOLD and "nix" not in m]
                 for t, v in tubemarkers.items()
             }
 
