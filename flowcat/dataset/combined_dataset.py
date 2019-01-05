@@ -16,7 +16,7 @@ LOGGER = logging.getLogger(__name__)
 class CombinedDataset:
     """Combines information from different data sources."""
 
-    def __init__(self, cases, datasets, group_names, mapping=None):
+    def __init__(self, cases, datasets, group_names=None, mapping=None):
         """
         Args:
             fcspath: Path to fcs dataset. Necessary because of metainfo access.
@@ -25,7 +25,11 @@ class CombinedDataset:
         self.cases = cases
         self.datasets = datasets
         self.mapping = mapping
-        self._group_names = group_names
+        if group_names is not None:
+            self._group_names = group_names
+        else:
+            LOGGER.warning("Getting group names from FCS dataset.")
+            self._group_names = self.cases.groups
 
     @classmethod
     def from_paths(cls, paths, tubes=None, **kwargs):
@@ -44,11 +48,8 @@ class CombinedDataset:
         return cls(cases, datasets, **kwargs)
 
     @classmethod
-    def from_config(cls, pathconfig, config):
+    def from_config(cls, config, pathconfig=None):
         """Initialize dataset from configuration dicts."""
-        # define search paths from pathconfig
-        datasets = pathconfig("input")
-
         # select the specific dataset from config
         dataset_names = config("dataset", "names")
         tubes = config("dataset", "filters", "tubes")
@@ -56,11 +57,14 @@ class CombinedDataset:
         filters = config("dataset", "filters")
         mapping_name = config("dataset", "mapping")
 
-        paths = {
-            dtype: utils.get_path(name, datasets[dtype]) for dtype, name in dataset_names.items()
-        }
+        if pathconfig:
+            LOGGER.debug("Completing dataset names using paths configuration.")
+            paths = utils.get_paths(dataset_names, pathconfig("input"))
+        else:
+            LOGGER.debug("Using dataset names as literal paths.")
+            paths = dataset_names
 
-        mapping = mappings.GROUP_MAPS[mapping_name]
+        mapping = mappings.GROUP_MAPS.get(mapping_name, None)
 
         obj = cls.from_paths(paths, tubes=tubes, group_names=group_names, mapping=mapping)
         # filter using filters and only include cases available in all datasets
@@ -97,6 +101,11 @@ class CombinedDataset:
             return self.mapping["groups"]
         else:
             return self._group_names
+
+    def get_dtype_configs(self):
+        """Get a dictionary mapping datasets to their configurations,
+        will be None if a config cannot be found for a certain dataset."""
+        return {dtype: data.get_config() for dtype, data in self.datasets.items()}
 
     def get_label_rand_group(self, dtypes):
         """Return list of label, randnum, group tuples using the dtypes requested."""

@@ -267,25 +267,27 @@ class ClassificationConfig(Config):
             },
             "train_args": {
                 "batch_size": ((int,), None),
-                "draw_method": ((str,), "random"),  # possible: sequential, shuffle, balanced, groupnum
+                "draw_method": ((str,), "shuffle"),  # possible: sequential, shuffle, balanced, groupnum
                 "epoch_size": ((int, None), None),
                 "sample_weights": ((bool,), False),
             },
-            "test_args": ((dict,), {
+            "test_args": {
                 "batch_size": ((int,), None),
                 "draw_method": ((str,), "sequential"),
                 "epoch_size": ((int, None), None),
                 "sample_weights": ((bool,), False),
-            }),
+            },
+            "compile": {
+                "weights": ((str, None), None),  # weights in loss function
+                "epsilon": ((float,), 1e-8),
+            },
         },
-        "run": {
-            "weights": ((str, None), None),
+        "fit": {
             "train_epochs": ((int,), 100),
             "initial_rate": ((float,), 1e-4),
             "drop": ((float,), 0.5),
             "epochs_drop": ((int,), 50),
-            "epsilon": ((float,), 1e-8),
-            "num_workers": ((int,), 8),
+            "num_workers": ((int,), 1),
             "validation": ((bool,), False),
             "pregenerate": ((bool,), True),
         },

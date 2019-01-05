@@ -236,53 +236,27 @@ def generate_reference(args):
     return data
 
 
-def filter_tubedata_existing(tubedata, outdir):
-    """Filter tubedata to remove all cases that have already been generated."""
-    not_existing = []
-    for tcase in tubedata:
-        filename = f"{tcase.parent.id}_0_t{tubedata.tube}.csv"
-        filepath = outdir / filename
-        if not filepath.exists():
-            not_existing.append(tcase)
+def create_indiv_soms(config, path, tensorboard_dir=None, pathconfig=None, references=None):
+    """Create indiv soms using a generator."""
+    if pathconfig is not None:
+        casespath = utils.get_path(config("dataset", "names", "FCS"), pathconfig("input", "FCS"))
+    else:
+        casespath = config("dataset", "names", "FCS")
 
-    ne_tcases = case_dataset.TubeView(not_existing, markers=tubedata.markers, tube=tubedata.tube)
-    return ne_tcases
+    if references:
+        selected_markers = {k: list(v.columns) for k, v in references.items()}
+    else:
+        selected_markers = None
 
-
-def generate_soms(args):
-    """Generate sommaps using the given configuration."""
-    config = args.somconfig
-    output_dir = utils.URLPath(args.pathconfig("output", "som-sample"), config("name"))
-    print(f"Create individual SOM in {output_dir}")
-    config.to_file(output_dir / "config.toml")
-
-    casespath = utils.get_path(config("dataset", "names", "FCS"), args.pathconfig("input", "FCS"))
     cases = case_dataset.CaseCollection.from_path(casespath)
     labels = utils.load_labels(config("dataset", "labels"))
 
-    selected_markers = None
-    if config("tfsom", "initialization_method") != "random":
-        references = generate_reference(args)
-        selected_markers = {k: list(v.columns) for k, v in references.items()}
-        config.data["reference"] = args.refconfig.data["name"]
-    else:
-        references = {int(t): None for t in config("dataset", "filters", "tubes")}
-
     data = cases.filter(labels=labels, selected_markers=selected_markers, **config("dataset", "filters"))
-    # get a dict how often specific groups should get replicated
-    randnums = config("randnums")
-    meta = {
-        "label": [c.id for c in data for i in range(randnums.get(c.group, 1))],
-        "randnum": [i for c in data for i in range(randnums.get(c.group, 1))],
-        "group": [c.group for c in data for i in range(randnums.get(c.group, 1))],
-    }
 
+    meta = {"label": [], "randnum": []}
     for tube in data.selected_tubes:
         # get the correct data from cases with the correct view
         tubedata = data.get_tube(tube)
-
-        if not args.no_recreate_samples:
-            tubedata = filter_tubedata_existing(tubedata, output_dir)
 
         # get the referece if using reference initialization or sample based
         if selected_markers is None:
@@ -295,9 +269,10 @@ def generate_soms(args):
             reference=reference,
             channels=used_channels,
             tube=tube,
+            randnums=config("randnums"),
             **config("somnodes"),
             **config("tfsom"),
-            tensorboard_dir=args.tensorboard,
+            tensorboard_dir=tensorboard_dir,
         )
 
         circ_buffer = collections.deque(maxlen=20)
@@ -305,9 +280,11 @@ def generate_soms(args):
         for label, randnum, result in model.transform_generator(tubedata):
             time_b = time.time()
             print(f"Saving {label} {randnum}")
+            meta["label"].append(label)
+            meta["randnum"].append(randnum)
 
             filename = f"{result.name}_t{tube}.csv"
-            filepath = output_dir / filename
+            filepath = path / filename
             utils.save_csv(result, filepath)
 
             time_d = time_b - time_a
@@ -315,7 +292,23 @@ def generate_soms(args):
             print(f"Training time: {time_d}s Rolling avg: {np.mean(circ_buffer)}s")
             time_a = time_b
 
-    # save the metadata
-    metadata = pd.DataFrame(meta)
-    metadata.to_csv(f"{output_dir}.csv")
-    return metadata
+    return pd.DataFrame(meta)
+
+
+def generate_soms(args):
+    config = args.somconfig
+    output_dir = utils.URLPath(args.pathconfig("output", "som-sample"), config("name"))
+    print(f"Create individual SOM in {output_dir}")
+
+    if config("reference"):
+        references = generate_reference(args)
+    else:
+        references = None
+
+    metadata = create_indiv_soms(
+        config, output_dir, references=references,
+        tensorboard_dir=args.tensorboard, pathconfig=args.pathconfig)
+
+    metadata.to_csv(output_dir + ".csv")
+
+    config.to_file(output_dir / "config.toml")

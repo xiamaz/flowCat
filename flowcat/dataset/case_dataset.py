@@ -160,6 +160,10 @@ class CaseIterable(IterableMixin):
     def get_randnums(self, labels):
         return {l: [0] for l in labels}
 
+    def get_config(self):
+        """Get configuration."""
+        return None
+
     def copy(self):
         data = [d.copy() for d in self.data]
         return self.__class__(
@@ -193,6 +197,11 @@ class CaseIterable(IterableMixin):
             if case.id == label:
                 return case
         return None
+
+    def label_to_group(self, label):
+        """Return group of the given label."""
+        case = self.get_label(label)
+        return case.group if case else None
 
     def get_paths(self, label, randnum=0):
         case = self.get_label(label)

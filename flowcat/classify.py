@@ -97,10 +97,7 @@ def run(args):
     classification_path = pathconfig("output", "classification")
     outpath = utils.URLPath(f"{classification_path}/{config('name')}")
 
-    # save configuration
-    config.to_file(outpath / "config.toml")
-
-    dataset = combined_dataset.CombinedDataset.from_config(pathconfig, config)
+    dataset = combined_dataset.CombinedDataset.from_config(config, pathconfig)
 
     # split into train and test set
     LOGGER.info("Splitting dataset")
@@ -111,18 +108,112 @@ def run(args):
     LOGGER.info("Getting models")
     model, trainseq, testseq = generate_model_inputs(train, test, config("model"))
 
-    LOGGER.info("Running model")
-    weights = load_weights(config("run", "weights"))
-    model, pred_df, history = run_model(
-        model, trainseq, testseq, **{**config("run"), "weights": weights})
-    save_model(model, outpath, name="0")
-    save_history(history, outpath, name="0")
-    save_weights(weights, outpath, name="0")
-    save_predictions(pred_df, outpath, name="0")
+    LOGGER.info("Fitting model")
+    if config("fit", "validation"):
+        data_val = testseq
+    else:
+        data_val = None
+    history = fit(model, trainseq, data_val=data_val, config=config("fit"))
+    pred_df = predict(model, testseq)
+
+    save_model(model, config, outpath, weights=weights, history=history)
+    save_predictions(pred_df, outpath)
 
     LOGGER.info("Creating statistics")
     create_stats(
         outpath=outpath, dataset=dataset, pred_df=pred_df, **config("stat"))
+
+
+def compile(model, weights=None, epsilon=1e-8, config=None):
+    """Compile model."""
+    if config is not None:
+        weights = config["weights"]
+        epsilon = config["epsilon"]
+
+    weights = load_weights(weights)
+    if weights is None:
+        lossfun = "categorical_crossentropy"
+    else:
+        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
+            weights=weights.values)
+
+    def top2_acc(y_true, y_pred):
+        return keras.metrics.top_k_categorical_accuracy(y_true, y_pred, k=2)
+
+    model.compile(
+        loss=lossfun,
+        # optimizer="adam",
+        optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=epsilon),  # lr and decay set by callback
+        metrics=[
+            "acc",
+            # top2_acc,
+        ]
+    )
+
+    return model
+
+
+def fit(
+        model, data, data_val=None, train_epochs=10,
+        initial_rate=1e-3, drop=0.5, epochs_drop=100,
+        num_workers=1, pregenerate=True, config=None):
+
+    if config is not None:
+        train_epochs = config["train_epochs"]
+        initial_rate = config["initial_rate"]
+        drop = config["drop"]
+        epochs_drop = config["epochs_drop"]
+        num_workers = config["num_workers"]
+        pregenerate = config["pregenerate"]
+
+    def create_stepped(initial_rate=1e-3, drop=0.5, epochs_drop=100):
+
+        def scheduler(epoch):
+            lrate = initial_rate * math.pow(drop, math.floor((1 + epoch) / epochs_drop))
+            return lrate
+
+        return keras.callbacks.LearningRateScheduler(scheduler)
+
+    if pregenerate:
+        data.generate_batches(num_workers)
+        if data_val is not None:
+            data_val.generate_batches(num_workers)
+        LOGGER.info("Pregenerating batches in sequences. Worker number will be ignored in the fit generator")
+        num_workers = 0
+
+    history = model.fit_generator(
+        data, epochs=train_epochs,
+        callbacks=[
+            # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min"),
+            create_stepped(initial_rate, drop, epochs_drop),
+        ],
+        validation_data=data_val,
+        # class_weight={
+        #     0: 1.0,  # CM
+        #     1: 2.0,  # MCL
+        #     2: 2.0,  # PL
+        #     3: 2.0,  # LP
+        #     4: 2.0,  # MZL
+        #     5: 50.0,  # FL
+        #     6: 50.0,  # HCL
+        #     7: 1.0,  # normal
+        # }
+        workers=num_workers,
+        use_multiprocessing=False,
+        shuffle=True,
+    )
+    return history
+
+
+def predict(model, data, num_workers=0, config=None):
+    if config is not None:
+        num_workers = config["num_workers"]
+
+    pred_mat = model.predict_generator(data, workers=num_workers, use_multiprocessing=True)
+
+    pred_df = pd.DataFrame(pred_mat, columns=data.groups, index=data.labels)
+    pred_df["correct"] = data.ylabels
+    return pred_df
 
 
 def inverse_binarize(y, classes):
@@ -163,27 +254,53 @@ def get_weights_by_name(name, groups):
     return weights
 
 
-def save_model(model, path, name):
-    """Save the given model to the given path."""
+def save_model(model, config, path, history=None, weights=None, dataset=None):
+    """Save the given model to the given path.
+
+    This will save the model including all informations needed to load the model
+    again and use it to train new data.
+
+    Args:
+        model: Model to be saved
+        path: Output path to save model in.
+    """
+    path = utils.URLPath(path)
     # plot a model diagram
-    plotpath = path / f"modelplot_{name}.png"
+    plotpath = path / "modelplot.png"
     plotpath.put(lambda p: keras.utils.plot_model(model, p, show_shapes=True))
 
-    modelpath = path / f"model_{name}.h5"
+    modelpath = path / "weights.h5"
     modelpath.put(lambda p: model.save(p))
 
+    if history is not None:
+        histpath = path / "history"
+        histpath.put(lambda p: classify_plots.plot_train_history(p, history.history))
+        utils.save_pickle(history.history, histpath / "history.p")
 
-def save_predictions(df, path, name):
+    if weights is not None:
+        save_weights(weights, path)
+
+    if dataset is not None:
+        # get configs for each dtype
+        dtype_configs = dataset.get_dtype_configs()
+        for dtype, dconfig in dtype_configs.items():
+            if dconfig is None:
+                LOGGER.warning("No configuration file found for %s", dtype)
+                continue
+            if dtype == "SOM":
+                LOGGER.debug("Copying reference weights into directory.")
+            if dtype == "HISTO":
+                LOGGER.debug("Copying reference weights into directory.")
+                pass
+            dconfig.to_file(path / f"config_{dtype}.toml")
+
+    config.to_file(path / "config.toml")
+
+
+def save_predictions(df, path):
     """Save the given predictions into a specified csv file."""
-    predpath = path / f"predictions_{name}.csv"
+    predpath = path / f"predictions.csv"
     predpath.put(lambda p: df.to_csv(str(p)))
-
-
-def save_history(history, path, name):
-    """Save train history."""
-    histpath = path / f"trainhistory_{name}"
-    histpath.put(lambda p: classify_plots.plot_train_history(p, history.history))
-    utils.save_pickle(history.history, path / f"history_{name}.p")
 
 
 def load_weights(weights):
@@ -194,82 +311,14 @@ def load_weights(weights):
     return weights
 
 
-def save_weights(weights, path, name):
+def save_weights(weights, path, plot=False):
     """Save weighted matrix."""
     if weights is not None:
-        weights.to_csv(path / f"weights_{name}.csv")
+        weights.to_csv(path / f"weights.csv")
         plotting.plot_confusion_matrix(
             weights.values, weights.columns, normalize=False, cmap=cm.get_cmap("Reds"),
             title="Weight Matrix",
-            filename=path / f"weightsplot_{name}", dendroname=None)
-
-
-def run_model(
-        model, trainseq, testseq,
-        train_epochs=200, epsilon=1e-8, initial_rate=1e-3, drop=0.5, epochs_drop=100, num_workers=1,
-        validation=False, weights=None, pregenerate=False):
-    """Run and predict using the given model."""
-
-    if weights is None:
-        lossfun = "categorical_crossentropy"
-    else:
-        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
-            weights=weights.values)
-
-    def top2_acc(y_true, y_pred):
-        return keras.metrics.top_k_categorical_accuracy(y_true, y_pred, k=2)
-
-    def create_stepped(initial_rate=1e-3, drop=0.5, epochs_drop=100):
-
-        def scheduler(epoch):
-            lrate = initial_rate * math.pow(drop, math.floor((1 + epoch) / epochs_drop))
-            return lrate
-
-        return keras.callbacks.LearningRateScheduler(scheduler)
-
-    model.compile(
-        loss=lossfun,
-        # optimizer="adam",
-        optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=epsilon),  # lr and decay set by callback
-        metrics=[
-            "acc",
-            # top2_acc,
-        ]
-    )
-
-    if pregenerate:
-        trainseq.generate_batches(num_workers)
-        testseq.generate_batches(num_workers)
-        LOGGER.info("Pregenerating batches in sequences. Worker number will be ignored in the fit generator")
-        num_workers = 0
-
-    history = model.fit_generator(
-        trainseq, epochs=train_epochs,
-        callbacks=[
-            # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min"),
-            create_stepped(initial_rate, drop, epochs_drop),
-        ],
-        validation_data=testseq if validation else None,
-        # class_weight={
-        #     0: 1.0,  # CM
-        #     1: 2.0,  # MCL
-        #     2: 2.0,  # PL
-        #     3: 2.0,  # LP
-        #     4: 2.0,  # MZL
-        #     5: 50.0,  # FL
-        #     6: 50.0,  # HCL
-        #     7: 1.0,  # normal
-        # }
-        workers=num_workers,
-        use_multiprocessing=False,
-        shuffle=True,
-    )
-    pred_mat = model.predict_generator(testseq, workers=num_workers, use_multiprocessing=True)
-
-    pred_df = pd.DataFrame(
-        pred_mat, columns=testseq.groups, index=testseq.labels)
-    pred_df["correct"] = testseq.ylabels
-    return model, pred_df, history
+            filename=path / f"weightsplot", dendroname=None)
 
 
 def merge_predictions(prediction, group_map, groups):
@@ -399,6 +448,8 @@ def generate_model_inputs(
             "etefcs": fcs_cnn.create_model_fcs,
         }
         model = constructors[mtype](*train.shape)
+
+    model = compile(model, config=config["compile"])
 
     return model, train, test
 
