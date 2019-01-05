@@ -443,6 +443,7 @@ def df_get_count(data, tubes):
         count.reset_index(inplace=True)
         count.set_index("label", inplace=True)
         count = count.loc[~count.index.duplicated(keep='first')]
+        count.drop("group", axis=1, inplace=True, errors="ignore") 
         if counts is None:
             counts = count
         else:
