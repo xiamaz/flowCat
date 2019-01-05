@@ -130,11 +130,17 @@ def create_som(cases, config, tensorboard_path=None, seed=None):
 
     markers = config("dataset", "selected_markers")
 
+    # load reference if available
+    reference = config("reference")
+    if reference is not None:
+        reference = load_som(reference, config("dataset", "filters", "tubes"), suffix=False)
+
     somweights = {}
     for tube, (datagen, length) in create_datasets(cases, config("dataset")):
         tmarkers = markers[tube]
+        treference = reference[tube] if reference else None
         model = tfsom.TFSom(
-            channels=tmarkers, tube=tube,
+            channels=tmarkers, tube=tube, reference=treference,
             **config("tfsom"),
             tensorboard_dir=tensorboard_path,
             seed=seed)
@@ -191,17 +197,6 @@ def save_som(data, path, suffix=False):
         utils.save_csv(somdata, outpath)
 
 
-def load_reference(args):
-    """Load a reference if it already exists in the given folder."""
-    path = utils.URLPath(args.pathconfig("output", "som-reference"), args.refconfig("name"))
-
-    if path.exists():
-        print(f"Loading existing references in {path}")
-        return load_som(path, args.refconfig("dataset", "filters", "tubes"), suffix=False)
-
-    return None
-
-
 def create_new_reference(args):
     """Create a new reference SOM."""
     config = args.refconfig
@@ -223,25 +218,22 @@ def create_new_reference(args):
     return create_som(data, config, tensorboard_path)
 
 
-def save_reference(args, data):
-    # Save reference data
+def generate_reference(args):
+    """Generate a reference SOMmap using the given configuration."""
+    # load existing if it already exists
     path = utils.URLPath(args.pathconfig("output", "som-reference"), args.refconfig("name"))
+
+    if path.exists():
+        print(f"Loading existing references in {path}")
+        return load_som(path, args.refconfig("dataset", "filters", "tubes"), suffix=False)
+
+    data = create_new_reference(args)
     print(f"Saving reference SOM in {path}")
     save_som(data, path, suffix=False)
     # Save reference configuration
     args.refconfig.to_file(get_config_path(path))
 
-
-def generate_reference(args):
-    """Generate a reference SOMmap using the given configuration."""
-    # load existing if it already exists
-    reference_data = load_reference(args)
-    # create new reference
-    if not reference_data:
-        reference_data = create_new_reference(args)
-        save_reference(args, reference_data)
-
-    return reference_data
+    return data
 
 
 def filter_tubedata_existing(tubedata, outdir):

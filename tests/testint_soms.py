@@ -70,6 +70,24 @@ def create_configuration():
     })
 
 
+def create_configuration_reference(refpath):
+    return configuration.SOMConfig({
+        "name": "testconfig",
+        "dataset": {
+            "names": {},
+            "filters": {
+                "tubes": [1, 2],
+            },
+            "selected_markers": CHANNELS,
+        },
+        "reference": str(refpath),
+        "tfsom": {
+            "model_name": "testmodel",
+            "initialization_method": "reference",
+        }
+    })
+
+
 class TestSOMCreation(unittest.TestCase):
     """Multiple SOM creation scenarios."""
 
@@ -87,3 +105,15 @@ class TestSOMCreation(unittest.TestCase):
         result = som.create_som([tcase], config, seed=42)
 
         assert_frame_equal(orig[1], result[1], check_dtype=False)
+        assert_frame_equal(orig[2], result[2], check_dtype=False)
+
+    def test_reference_initialization(self):
+        """Generate SOM using weights from previous SOM for initialization."""
+        orig = som.load_som(shared.DATAPATH / "ref_som_seed42", [1, 2], suffix=False)
+
+        tcase = create_single_case("cll2")
+        config = create_configuration_reference(shared.DATAPATH / "som_seed42")
+        result = som.create_som([tcase], config, seed=42)
+
+        assert_frame_equal(orig[1], result[1], check_dtype=False)
+        assert_frame_equal(orig[2], result[2], check_dtype=False)
