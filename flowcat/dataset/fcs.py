@@ -105,7 +105,11 @@ class FCSMarkersTransform(base.TransformerMixin, base.BaseEstimator):
 
     This will drop markers not in the initial list and reorder the columns
     to reflect the sequence in the original markers.
+
+    Missing columns will be instantiated to a default value.
     """
+
+    missing_value = 0.0
 
     def __init__(self, markers):
         self._markers = markers
@@ -115,9 +119,18 @@ class FCSMarkersTransform(base.TransformerMixin, base.BaseEstimator):
 
     def transform(self, X, *_):
         if isinstance(X, FCSData):
-            X.data = X.data.loc[:, self._markers]
+            data = X.data
         else:
-            X = X.loc[:, self._markers]
+            data = X
+
+        missing = [marker for marker in self._markers if marker not in data]
+        data[missing] = self.missing_value
+        data = data.loc[:, self._markers]
+
+        if isinstance(X, FCSData):
+            X.data = data
+            X.ranges = X.ranges.loc[:, self._markers]
+            X.ranges[missing] = self.missing_value
         return X
 
 

@@ -137,3 +137,36 @@ GROUP_MAPS = {
         "sizes": [1, 1],
     }
 }
+
+
+# Common channel configurations
+CHANNEL_CONFIGS = {
+    "CLL-9F": {
+        1: [
+            "FS INT LIN",
+            "SS INT LIN",
+            "FMC7-FITC",
+            "CD10-PE",
+            "IgM-ECD",
+            "CD79b-PC5.5",
+            "CD20-PC7",
+            "CD23-APC",
+            "CD19-APCA750",
+            "CD5-PacBlue",
+            "CD45-KrOr",
+        ],
+        2: [
+            "FS INT LIN",
+            "SS INT LIN",
+            "Kappa-FITC",
+            "Lambda-PE",
+            "CD38-ECD",
+            "CD25-PC5.5",
+            "CD11c-PC7",
+            "CD103-APC",
+            "CD19-APCA750",
+            "CD22-PacBlue",
+            "CD45-KrOr",
+        ],
+    }
+}

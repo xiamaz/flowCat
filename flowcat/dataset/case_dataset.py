@@ -16,6 +16,18 @@ from ..utils import load_json, URLPath
 LOGGER = logging.getLogger(__name__)
 
 
+def get_selected_markers(cases, tube):
+    """Get a list of marker channels available in all tubes."""
+    marker_counts = collections.Counter(
+        marker for case in cases for marker in case.get_tube(tube).markers)
+    # get ratio of availability vs all cases
+    selected = [
+        marker for marker, count in marker_counts.items()
+        if count / len(cases) > mappings.MARKER_THRESHOLD and "nix" not in marker
+    ]
+    return selected
+
+
 def get_meta(path, how):
     """Choose strategy on how to select for metadata."""
     if how == "latest":
@@ -261,14 +273,7 @@ class CaseIterable(IterableMixin):
 
         selected_markers = selected_markers or self.selected_markers
         if selected_markers is None:
-            tubemarkers = {
-                t: collections.Counter(m for c in data for m in c.get_tube(t).markers)
-                for t in tubes
-            }
-            selected_markers = {
-                t: [m for m, n in v.items() if n / len(data) > mappings.MARKER_THRESHOLD and "nix" not in m]
-                for t, v in tubemarkers.items()
-            }
+            selected_markers = {tube: get_selected_markers(data, tube) for tube in tubes}
 
         # filter files to have selected markers
         data = [d for d in data if d.has_selected_markers(selected_markers)]
@@ -375,6 +380,7 @@ class CaseView(CaseIterable):
 class TubeView(IterableMixin):
     """List containing CasePath."""
     def __init__(self, data, markers, tube):
+        assert None not in data, "None contained in passed list"
         self.markers = markers
         self.tube = tube
         self._data = data

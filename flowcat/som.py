@@ -3,6 +3,7 @@ Functions to create SOMs.
 
 These functions use configuration objects, as defined properly in configurations.
 """
+import logging
 import collections
 import time
 
@@ -12,6 +13,9 @@ import pandas as pd
 from . import configuration, utils
 from .dataset import case_dataset
 from .models import tfsom
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ReferenceConfig(configuration.SOMConfig):
@@ -108,34 +112,99 @@ def get_config_path(path):
     return path / "config.toml"
 
 
-def load_reference_if_same(args):
-    """Check whether the given path contains a dataset generated with the same
-    configuration. Return the reference dict if yes, otherwise return None."""
+def create_datasets(cases, dataset_config):
+    """Create dataset generators."""
+    filters = dataset_config["filters"]
+    tubes = filters["tubes"]
+    markers = dataset_config["selected_markers"]
 
+    dataset = case_dataset.CaseView(cases, selected_markers=markers, selected_tubes=tubes)
+
+    for tube in tubes:
+        tubeview = dataset.get_tube(tube)
+        yield tube, tfsom.create_z_score_generator(tubeview)
+
+
+def create_som(cases, config, tensorboard_path=None, seed=None):
+    """Create a SOM for the given list of cases with the configuration."""
+
+    markers = config("dataset", "selected_markers")
+
+    somweights = {}
+    for tube, (datagen, length) in create_datasets(cases, config("dataset")):
+        tmarkers = markers[tube]
+        model = tfsom.TFSom(
+            channels=tmarkers, tube=tube,
+            **config("tfsom"),
+            tensorboard_dir=tensorboard_path,
+            seed=seed)
+        # train the network
+        with utils.timer("Training time"):
+            model.train(datagen(), num_inputs=length)
+
+        somweights[tube] = pd.DataFrame(model.output_weights, columns=tmarkers)
+
+    return somweights
+
+
+def load_som(path, tubes, suffix=False):
+    """Load SOM data from the given location.
+
+    SOMs are saved to multiple files, each representing data from a different
+    tube.
+
+    Args:
+        path: Path to get data from.
+        tubes: Tubes to be loaded.
+        suffix: Enable to append tube as suffix to the path instead of using path as
+            a directory level.
+    Returns:
+        Dictionary mapping tube to SOM data.
+    """
+    path = utils.URLPath(path)
+    data = {}
+    for tube in tubes:
+        if suffix:
+            tpath = path + f"_t{tube}.csv"
+        else:
+            tpath = path / f"t{tube}.csv"
+        data[tube] = utils.load_csv(tpath)
+    return data
+
+
+def save_som(data, path, suffix=False):
+    """Save SOM to the specified location.
+    Args:
+        data: Dict mapping tubes to SOM data.
+        path: Output path to save files.
+        suffix: Enable suffix mode will save files to path by appending the tube
+            as a suffix to the output path. Otherwise the path will be treated as a
+            folder with files saved to t{tube}.csv inside it.
+    """
+    path = utils.URLPath(path)
+    for tube, somdata in data.items():
+        if suffix:
+            outpath = path + f"_t{tube}.csv"
+        else:
+            outpath = path / f"t{tube}.csv"
+        LOGGER.debug("Saving SOM tube %d to %s", tube, outpath)
+        utils.save_csv(somdata, outpath)
+
+
+def load_reference(args):
+    """Load a reference if it already exists in the given folder."""
     path = utils.URLPath(args.pathconfig("output", "som-reference"), args.refconfig("name"))
 
-    # skip if dataset folder does not exist
-    if not path.exists():
-        return None
-
-    # check if configuration is the same
-    old_config = ReferenceConfig.from_file(get_config_path(path))
-    if args.refconfig == old_config:
+    if path.exists():
         print(f"Loading existing references in {path}")
-        return {
-            t: utils.load_csv(path / f"t{t}.csv")
-            for t in args.refconfig("dataset", "filters", "tubes")
-        }
-    if not utils.CLOBBER:
-        raise RuntimeError(f"{path} exists with different configuration and will not be overwritten because CLOBBER is {utils.CLOBBER}")
-    print(f"Old data is different. Clobbering {path}")
+        return load_som(path, args.refconfig("dataset", "filters", "tubes"), suffix=False)
+
     return None
 
 
 def create_new_reference(args):
     """Create a new reference SOM."""
     config = args.refconfig
-    reference_data = {}
     print(f"Creating reference SOM with name {config('name')}")
 
     casespath = utils.get_path(config("dataset", "names", "FCS"), args.pathconfig("input", "FCS"))
@@ -151,33 +220,14 @@ def create_new_reference(args):
     else:
         tensorboard_path = None
 
-    for tube in data.selected_tubes:
-        tubedata = data.get_tube(tube)
-        marker_list = tubedata.markers
-
-        model = tfsom.TFSom(channels=marker_list, tube=tube, **config("tfsom"), tensorboard_dir=tensorboard_path)
-
-        # create a data generator
-        datagen, length = tfsom.create_z_score_generator(tubedata.data, randnums=None)
-
-        # train the network
-        with utils.timer("Training time"):
-            model.train(datagen(), num_inputs=length)
-
-        reference_map = pd.DataFrame(model.output_weights, columns=marker_list)
-
-        # get the results and save them to files
-        reference_data[tube] = reference_map
-
-    return reference_data
+    return create_som(data, config, tensorboard_path)
 
 
 def save_reference(args, data):
     # Save reference data
     path = utils.URLPath(args.pathconfig("output", "som-reference"), args.refconfig("name"))
     print(f"Saving reference SOM in {path}")
-    for tube, reference_map in data.items():
-        utils.save_csv(reference_map, path / f"t{tube}.csv")
+    save_som(data, path, suffix=False)
     # Save reference configuration
     args.refconfig.to_file(get_config_path(path))
 
@@ -185,7 +235,7 @@ def save_reference(args, data):
 def generate_reference(args):
     """Generate a reference SOMmap using the given configuration."""
     # load existing if it already exists
-    reference_data = load_reference_if_same(args)
+    reference_data = load_reference(args)
     # create new reference
     if not reference_data:
         reference_data = create_new_reference(args)

@@ -125,6 +125,10 @@ class Case:
         """
         self._filepaths = [TubeSample(v, self) for v in value]
 
+    def get_markers(self, tubes):
+        """Return a dictionary of markers."""
+        return {tube: self.get_tube(tube).markers for tube in tubes}
+
     def get_tube(self, tube, min_count=0, material=None):
         """Get the TubePath fulfilling the given requirements, return the
         last on the list if multiple are available.
@@ -264,6 +268,7 @@ class TubeSample:
     """FCS sample metadata wrapper."""
     __slots__ = (
         "_json",
+        "_data",
         "count",
         "date",
         "path",
@@ -276,6 +281,7 @@ class TubeSample:
 
     """Single sample from a certain tube."""
     def __init__(self, data, parent):
+        self._data = None
         if isinstance(data, self.__class__):
             self._json = data.raw
             self.path = data.path
@@ -298,7 +304,7 @@ class TubeSample:
             self.panel = data.get("panel", "")
 
             self.markers = data["fcs"].get("markers", None)
-            self.count = int(data["fcs"].get("event_count", -1))
+            self.count = int(data["fcs"].get("event_count", 0))
 
         self.parent = parent
 
@@ -325,6 +331,8 @@ class TubeSample:
     def data(self):
         """FCS data. Do not save the fcs data in the case, since
         it would be too large."""
+        if self._data is not None:
+            return self._data
         return self.get_data(normalized=False, scaled=False)
 
     @property
@@ -353,6 +361,23 @@ class TubeSample:
             data = data.scale()
         return data
 
+    def load(self):
+        """Load data into slot."""
+        self._data = self.get_data()
+        return self._data
+
+    def clear(self):
+        """Clear data from slot."""
+        self._data = None
+
+    def set_markers(self):
+        """Set markers from own data."""
+        assert self._data is not None, "Load data beforehand into slot"
+        self.markers = list(self.data.columns)
+
     def has_markers(self, markers: list) -> bool:
         """Return whether given list of markers are fulfilled."""
         return all_in(markers, self.markers)
+
+    def __repr__(self):
+        return f"<Sample| T{self.tube} D{self.date} {self.count} events>"
