@@ -214,7 +214,7 @@ class TFSom:
             initialization_method="random", reference=None, max_random=1.0,
             subsample_size=None,
             model_name="Self-Organizing-Map",
-            tensorboard_dir=None,
+            tensorboard_dir=None, seed=None,
     ):
         """
         Initialize a self-organizing map on the tensorflow graph
@@ -315,6 +315,13 @@ class TFSom:
         self._input_tensor = None
 
         self._graph = tf.Graph()
+
+        self._seed = seed
+        if self._seed is not None:
+            LOGGER.info("Setting seed to %d", self._seed)
+            random.seed(self._seed)
+            with self._graph.as_default():
+                tf.set_random_seed(self._seed)
 
         self._sess = tf.Session(
             graph=self._graph,
@@ -597,15 +604,6 @@ class TFSom:
         ]
         marker_image = tf.reshape(tf.stack(slices, axis=1), shape=(1, self._m, self._n, 3))
         summary_image = tf.summary.image(name, marker_image)
-
-        # if None in channels:
-        #     none_pos = channels.index(None)
-        #     legend_list = [[i, j] for i in range(2) for j in range(2)]
-        #     for leg in legend_list:
-        #         leg.insert(none_pos, 0)
-
-        #     legend_axis = tf.reshape(tf.constant(legend_list, dtype=tf.float16), shape=(1, 2, 2, 3))
-        #     self._summary_list.append(tf.summary.image(f"{name}_legend", legend_axis))
         return summary_image
 
     def fit_map(
@@ -630,7 +628,6 @@ class TFSom:
         with graph.as_default():
             # data input as dataset from generator
             dataset = tf.data.Dataset.from_generator(marker_generator, output_types=tf.float32)
-                # marker_generator, output_types=tf.float32, output_shapes=(None, len(self.channels)))
             data_tensor = dataset.make_one_shot_iterator().get_next()
             input_tensor = tf.Variable(data_tensor, validate_shape=False)
 
@@ -813,7 +810,7 @@ class TFSom:
         return avg_distance
 
 
-def create_generator(data, randnums=None, ):
+def create_generator(data, randnums=None):
     """Create a generator for the given data. Optionally applying additional transformations.
     Args:
         transforms: Optional transformation pipeline for the data.
@@ -838,29 +835,32 @@ def create_generator(data, randnums=None, ):
     return generator_fun, length
 
 
-def create_label_generator(tubecases, randnums):
-    datagen, length = create_generator(tubecases, randnums=randnums)
+def create_label_generator(samples, randnums=None):
+    datagen, length = create_generator(samples, randnums=randnums)
+
     def generator_fun():
-        for i, tubecase in datagen():
-            yield tubecase.parent.id, i
+        for i, sample in datagen():
+            yield sample.parent.id, i
     return generator_fun, length
 
 
-def create_z_score_generator(tubecases, randnums):
+def create_z_score_generator(samples, randnums=None, scaler=None):
     """Normalize channel information for mean and standard deviation.
     Args:
-        tubecases: List of tubecases.
+        samples: List of samples.
     Returns:
-        Generator function and length of tubecases.
+        Generator function and length of samples.
     """
-    datagen, length = create_generator(tubecases, randnums=randnums)
+    datagen, length = create_generator(samples, randnums=randnums)
 
-    def generator_fun():
-        for i, case in datagen():
-            fcsdata = case.data
-            fcsdata = ccase.FCSStandardScaler().fit_transform(fcsdata)
-            fcsdata = ccase.FCSMinMaxScaler().fit_transform(fcsdata)
-            yield fcsdata.data
+    if scaler is None:
+        def generator_fun():
+            for _, case in datagen():
+                yield case.data.normalize().scale().data
+    else:
+        def generator_fun():
+            for _, case in datagen():
+                yield scaler.transform(case.data).data
 
     return generator_fun, length
 

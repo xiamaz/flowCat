@@ -1,6 +1,11 @@
 import re
+import logging
 
-from .. import utils
+from .. import utils, configuration
+from .. import som
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class SOMDataset:
@@ -8,7 +13,7 @@ class SOMDataset:
 
     re_tube = re.compile(r".*[\/]\w+_t(\d+).csv")
 
-    def __init__(self, data, tubes):
+    def __init__(self, data, tubes, path=None):
         """Path to SOM dataset. Should have another csv file with metainfo
         and individual SOM data inside the directory."""
         self.counts = None
@@ -16,12 +21,14 @@ class SOMDataset:
         self.tubes = tubes
         self.set_counts(self.tubes)
 
+        self.path = path
+
     @classmethod
     def from_path(cls, path, tubes=None):
         data = cls.read_path(path, tubes)
         if tubes is None:
             tubes = list(data.keys())
-        return cls(data, tubes)
+        return cls(data, tubes, path=path)
 
     @classmethod
     def read_path(cls, path, tubes):
@@ -44,7 +51,7 @@ class SOMDataset:
                     lambda l, t=tube: cls.get_path(mappath, l, t))
                 somtube["randnum"] = 0
 
-            somtube.set_index(["label", "randnum", "group"], inplace=True)
+            somtube.set_index(["label", "randnum"], inplace=True)
             soms[tube] = somtube
 
         return soms
@@ -54,6 +61,28 @@ class SOMDataset:
             k: v.loc[[label, randnum], "path"].values[0]
             for k, v in self.data.items()
         }
+
+    def get_config(self):
+        """Read configuration, which is to be located in dataset_name/config.toml"""
+        if self.path is not None:
+            configpath = utils.URLPath(self.path) / "config.toml"
+            if configpath.exists():
+                return configuration.SOMConfig.from_file(configpath)
+
+        return None
+
+    def save_config(self, path):
+        config = self.get_config()
+        if config is None:
+            LOGGER.warning("No configuration file found for SOM")
+            return
+        config.to_file(path / "config.toml")
+
+        # save SOM reference too
+        references = config("reference")
+        if references:
+            refdata = som.load_som(references, self.tubes)
+            som.save_som(refdata, path / "reference", suffix=True)
 
     def get_randnums(self, labels):
         meta = next(iter(self.data.values()))
@@ -73,7 +102,7 @@ class SOMDataset:
 
     def copy(self):
         data = {k: v.copy() for k, v in self.data.items()}
-        return self.__class__(data, self.tubes.copy())
+        return self.__class__(data, self.tubes.copy(), path=self.path)
 
     def set_counts(self, tubes):
         self.counts = utils.df_get_count(self.data, tubes)

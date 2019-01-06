@@ -15,7 +15,7 @@ import keras
 from keras import models, optimizers
 from keras.utils import plot_model
 
-from . import configuration, utils, mappings, loaders
+from . import configuration, utils, mappings, loaders, som
 from .dataset import combined_dataset
 from .visual import classify_plots, plotting
 from .models import weighted_crossentropy, fcs_cnn, histo_nn, som_cnn
@@ -97,10 +97,7 @@ def run(args):
     classification_path = pathconfig("output", "classification")
     outpath = utils.URLPath(f"{classification_path}/{config('name')}")
 
-    # save configuration
-    config.to_file(outpath / "config.toml")
-
-    dataset = combined_dataset.CombinedDataset.from_config(pathconfig, config)
+    dataset = combined_dataset.CombinedDataset.from_config(config, pathconfig)
 
     # split into train and test set
     LOGGER.info("Splitting dataset")
@@ -111,18 +108,120 @@ def run(args):
     LOGGER.info("Getting models")
     model, trainseq, testseq = generate_model_inputs(train, test, config("model"))
 
-    LOGGER.info("Running model")
-    weights = load_weights(config("run", "weights"))
-    model, pred_df, history = run_model(
-        model, trainseq, testseq, **{**config("run"), "weights": weights})
-    save_model(model, outpath, name="0")
-    save_history(history, outpath, name="0")
-    save_weights(weights, outpath, name="0")
-    save_predictions(pred_df, outpath, name="0")
+    LOGGER.info("Fitting model")
+    if config("fit", "validation"):
+        data_val = testseq
+    else:
+        data_val = None
+    history = fit(model, trainseq, data_val=data_val, config=config("fit"))
+    pred_df = predict_generator(model, testseq)
+
+    save_model(model, train, config, outpath, history=history)
+    save_predictions(pred_df, outpath)
 
     LOGGER.info("Creating statistics")
     create_stats(
         outpath=outpath, dataset=dataset, pred_df=pred_df, **config("stat"))
+
+
+def compile_model(model, weights=None, epsilon=1e-8, config=None):
+    """Compile model."""
+    if config is not None:
+        weights = config["weights"]
+        epsilon = config["epsilon"]
+
+    weights = load_weights(weights)
+    if weights is None:
+        lossfun = "categorical_crossentropy"
+    else:
+        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
+            weights=weights.values)
+
+    def top2_acc(y_true, y_pred):
+        return keras.metrics.top_k_categorical_accuracy(y_true, y_pred, k=2)
+
+    model.compile(
+        loss=lossfun,
+        # optimizer="adam",
+        optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=epsilon),  # lr and decay set by callback
+        metrics=[
+            "acc",
+            # top2_acc,
+        ]
+    )
+
+    return model
+
+
+def fit(
+        model, data, data_val=None, train_epochs=10,
+        initial_rate=1e-3, drop=0.5, epochs_drop=100,
+        num_workers=1, pregenerate=True, config=None):
+
+    if config is not None:
+        train_epochs = config["train_epochs"]
+        initial_rate = config["initial_rate"]
+        drop = config["drop"]
+        epochs_drop = config["epochs_drop"]
+        num_workers = config["num_workers"]
+        pregenerate = config["pregenerate"]
+
+    def create_stepped(initial_rate=1e-3, drop=0.5, epochs_drop=100):
+
+        def scheduler(epoch):
+            lrate = initial_rate * math.pow(drop, math.floor((1 + epoch) / epochs_drop))
+            return lrate
+
+        return keras.callbacks.LearningRateScheduler(scheduler)
+
+    if pregenerate:
+        data.generate_batches(num_workers)
+        if data_val is not None:
+            data_val.generate_batches(num_workers)
+        LOGGER.info("Pregenerating batches in sequences. Worker number will be ignored in the fit generator")
+        num_workers = 0
+
+    history = model.fit_generator(
+        data, epochs=train_epochs,
+        callbacks=[
+            # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min"),
+            create_stepped(initial_rate, drop, epochs_drop),
+        ],
+        validation_data=data_val,
+        # class_weight={
+        #     0: 1.0,  # CM
+        #     1: 2.0,  # MCL
+        #     2: 2.0,  # PL
+        #     3: 2.0,  # LP
+        #     4: 2.0,  # MZL
+        #     5: 50.0,  # FL
+        #     6: 50.0,  # HCL
+        #     7: 1.0,  # normal
+        # }
+        workers=num_workers,
+        use_multiprocessing=False,
+        shuffle=True,
+    )
+    return history
+
+
+def predict_generator(model, data, num_workers=0, config=None):
+    if config is not None:
+        num_workers = config["num_workers"]
+
+    pred_mat = model.predict_generator(data, workers=num_workers, use_multiprocessing=True)
+
+    pred_df = pd.DataFrame(pred_mat, columns=data.groups, index=data.labels)
+    pred_df["correct"] = data.ylabels
+    return pred_df
+
+
+def predict(model, data, groups, labels, ylabels=None):
+    pred_mat = model.predict(data)
+    pred_df = pd.DataFrame(pred_mat, columns=groups, index=labels)
+    if ylabels is not None:
+        pred_df["correct"] = ylabels
+    return pred_df
 
 
 def inverse_binarize(y, classes):
@@ -163,27 +262,97 @@ def get_weights_by_name(name, groups):
     return weights
 
 
-def save_model(model, path, name):
-    """Save the given model to the given path."""
+def save_model(model, sequence, config, path, history=None, weights=None, dataset=None):
+    """Save the given model to the given path.
+
+    This will save the model including all informations needed to load the model
+    again and use it to train new data.
+
+    Args:
+        model: Model to be saved
+        path: Output path to save model in.
+    """
+    path = utils.URLPath(path)
     # plot a model diagram
-    plotpath = path / f"modelplot_{name}.png"
+    plotpath = path / "modelplot.png"
     plotpath.put(lambda p: keras.utils.plot_model(model, p, show_shapes=True))
 
-    modelpath = path / f"model_{name}.h5"
+    modelpath = path / "model.h5"
     modelpath.put(lambda p: model.save(p))
 
+    if history is not None:
+        histpath = path / "history"
+        histpath.put(lambda p: classify_plots.plot_train_history(p, history.history))
+        utils.save_pickle(history.history, histpath / "history.p")
 
-def save_predictions(df, path, name):
+    if weights is not None:
+        save_weights(weights, path)
+
+    if dataset is not None:
+        # get configs for each dtype
+        for dtype, dset in dataset.datasets.items():
+            dset.save_config(path / dtype.name)
+
+    config.to_file(path / "config.toml")
+
+    # Save dataset to a folder with name dataset
+    datasetpath = path / "dataset"
+    seqconf, outputconfs = sequence.get_config()
+    seqconf.to_file(datasetpath / "config.toml")
+    for name, sconfig in outputconfs.items():
+        sconfig.to_file(datasetpath / f"{name}.toml")
+
+
+def load_som_model(path):
+    config = configuration.SOMConfig.from_file(path / "config.toml")
+    references = som.load_som(path / "reference", tubes=config("dataset", "filters", "tubes"), suffix=True)
+
+    # copy fitmap args into normal args
+    fitmap_args = config.data["somnodes"]["fitmap_args"]
+    config.data["tfsom"]["max_epochs"] = fitmap_args["max_epochs"]
+    config.data["tfsom"]["initial_learning_rate"] = fitmap_args["initial_learn"]
+    config.data["tfsom"]["end_learning_rate"] = fitmap_args["end_learn"]
+    config.data["tfsom"]["initial_radius"] = fitmap_args["initial_radius"]
+    config.data["tfsom"]["end_radius"] = fitmap_args["end_radius"]
+
+    def create_som(case):
+        return som.create_som([case], config, reference=references)
+
+    return create_som
+
+
+def load_model(path):
+    """Load a model from the given directory."""
+    path = utils.URLPath(path)
+    # load configuration
+    config = configuration.ClassificationConfig.from_file(path / "config.toml")
+    dataset_config, output_configs = loaders.load_dataset_config(path / "dataset")
+
+    # load model
+    model = keras.models.load_model(str((path / "model.h5").get()), compile=False)
+    compile_model(model, config=config("model", "compile"))
+
+    # load dataset loaders
+    sommodel = load_som_model(path / "SOM")
+
+    dataseq = loaders.DatasetSequence.from_config(dataset_config, output_configs)
+
+    def transform(cases):
+        """Build a transformer closure to transform data into correct format from single cases."""
+        result = [[] for i in range(len(dataseq.output_dtypes))]
+        for case in cases:
+            somweights = sommodel(case)
+            transformed = dataseq.transform(somweights)
+            for i, tdata in enumerate(transformed):
+                result[i].append(tdata)
+        return result
+    return model, transform, dataseq.groups
+
+
+def save_predictions(df, path):
     """Save the given predictions into a specified csv file."""
-    predpath = path / f"predictions_{name}.csv"
+    predpath = path / f"predictions.csv"
     predpath.put(lambda p: df.to_csv(str(p)))
-
-
-def save_history(history, path, name):
-    """Save train history."""
-    histpath = path / f"trainhistory_{name}"
-    histpath.put(lambda p: classify_plots.plot_train_history(p, history.history))
-    utils.save_pickle(history.history, path / f"history_{name}.p")
 
 
 def load_weights(weights):
@@ -194,82 +363,14 @@ def load_weights(weights):
     return weights
 
 
-def save_weights(weights, path, name):
+def save_weights(weights, path, plot=False):
     """Save weighted matrix."""
     if weights is not None:
-        weights.to_csv(path / f"weights_{name}.csv")
+        weights.to_csv(path / f"weights.csv")
         plotting.plot_confusion_matrix(
             weights.values, weights.columns, normalize=False, cmap=cm.get_cmap("Reds"),
             title="Weight Matrix",
-            filename=path / f"weightsplot_{name}", dendroname=None)
-
-
-def run_model(
-        model, trainseq, testseq,
-        train_epochs=200, epsilon=1e-8, initial_rate=1e-3, drop=0.5, epochs_drop=100, num_workers=1,
-        validation=False, weights=None, pregenerate=False):
-    """Run and predict using the given model."""
-
-    if weights is None:
-        lossfun = "categorical_crossentropy"
-    else:
-        lossfun = weighted_crossentropy.WeightedCategoricalCrossEntropy(
-            weights=weights.values)
-
-    def top2_acc(y_true, y_pred):
-        return keras.metrics.top_k_categorical_accuracy(y_true, y_pred, k=2)
-
-    def create_stepped(initial_rate=1e-3, drop=0.5, epochs_drop=100):
-
-        def scheduler(epoch):
-            lrate = initial_rate * math.pow(drop, math.floor((1 + epoch) / epochs_drop))
-            return lrate
-
-        return keras.callbacks.LearningRateScheduler(scheduler)
-
-    model.compile(
-        loss=lossfun,
-        # optimizer="adam",
-        optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=epsilon),  # lr and decay set by callback
-        metrics=[
-            "acc",
-            # top2_acc,
-        ]
-    )
-
-    if pregenerate:
-        trainseq.generate_batches(num_workers)
-        testseq.generate_batches(num_workers)
-        LOGGER.info("Pregenerating batches in sequences. Worker number will be ignored in the fit generator")
-        num_workers = 0
-
-    history = model.fit_generator(
-        trainseq, epochs=train_epochs,
-        callbacks=[
-            # keras.callbacks.EarlyStopping(min_delta=0.01, patience=20, mode="min"),
-            create_stepped(initial_rate, drop, epochs_drop),
-        ],
-        validation_data=testseq if validation else None,
-        # class_weight={
-        #     0: 1.0,  # CM
-        #     1: 2.0,  # MCL
-        #     2: 2.0,  # PL
-        #     3: 2.0,  # LP
-        #     4: 2.0,  # MZL
-        #     5: 50.0,  # FL
-        #     6: 50.0,  # HCL
-        #     7: 1.0,  # normal
-        # }
-        workers=num_workers,
-        use_multiprocessing=False,
-        shuffle=True,
-    )
-    pred_mat = model.predict_generator(testseq, workers=num_workers, use_multiprocessing=True)
-
-    pred_df = pd.DataFrame(
-        pred_mat, columns=testseq.groups, index=testseq.labels)
-    pred_df["correct"] = testseq.ylabels
-    return model, pred_df, history
+            filename=path / f"weightsplot", dendroname=None)
 
 
 def merge_predictions(prediction, group_map, groups):
@@ -372,8 +473,7 @@ def create_output_spec(modelname, dataoptions):
     return output_spec
 
 
-def generate_model_inputs(
-        train_data, test_data, config, path=None):
+def generate_model_inputs(train_data, test_data, config):
     """Create model and associated inputs.
     Args:
         train_data, test_data: Dataset used to infer sizes.
@@ -388,17 +488,17 @@ def generate_model_inputs(
     traindata_args = config["train_args"]
     testdata_args = config["test_args"]
     output_spec = create_output_spec(mtype, loader_options)
-    train = loaders.DatasetSequence(train_data, output_spec, **traindata_args)
-    test = loaders.DatasetSequence(test_data, output_spec, **testdata_args)
-    if path is not None:
-        model = keras.models.load_model(path, compile=False)
-    else:
-        constructors = {
-            "histogram": histo_nn.create_model_histo,
-            "som": som_cnn.create_model_cnn,
-            "etefcs": fcs_cnn.create_model_fcs,
-        }
-        model = constructors[mtype](*train.shape)
+    train = loaders.DatasetSequence.from_data(train_data, output_spec, **traindata_args)
+    test = loaders.DatasetSequence.from_data(test_data, output_spec, **testdata_args)
+
+    constructors = {
+        "histogram": histo_nn.create_model_histo,
+        "som": som_cnn.create_model_cnn,
+        "etefcs": fcs_cnn.create_model_fcs,
+    }
+    model = constructors[mtype](*train.shape)
+
+    model = compile_model(model, config=config["compile"])
 
     return model, train, test
 

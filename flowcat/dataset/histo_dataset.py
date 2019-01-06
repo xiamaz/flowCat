@@ -43,6 +43,14 @@ class HistoDataset:
                 data[int(match[1])] = pd.DataFrame(str(lpath), index=df.index, columns=["path"])
         return data
 
+    def get_config(self):
+        """Get configuration for histogram data."""
+        # TODO: implementation following
+        return None
+
+    def save_config(self, *_):
+        pass
+
     def get_randnums(self, labels):
         """Get randnums for the given labels."""
         return {l: [0] for l in labels}

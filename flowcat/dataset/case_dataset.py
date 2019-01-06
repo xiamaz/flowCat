@@ -8,22 +8,24 @@ import collections
 import pandas as pd
 from sklearn import model_selection
 
-from .case import Case, Material
+from .case import Case
+from .. import mappings
 from ..utils import load_json, URLPath
 
 
-# Threshold for channel markers to be used in SOM
-#
-# It cases do not possess a marker required for the consensus SOM
-# they will be ignored.
-MARKER_THRESHOLD = 0.9
-
-# materials allowed in processing
-ALLOWED_MATERIALS = [Material.BONE_MARROW, Material.PERIPHERAL_BLOOD]
-
-NO_INFILTRATION = ["normal"]
-
 LOGGER = logging.getLogger(__name__)
+
+
+def get_selected_markers(cases, tube):
+    """Get a list of marker channels available in all tubes."""
+    marker_counts = collections.Counter(
+        marker for case in cases for marker in case.get_tube(tube).markers)
+    # get ratio of availability vs all cases
+    selected = [
+        marker for marker, count in marker_counts.items()
+        if count / len(cases) > mappings.MARKER_THRESHOLD and "nix" not in marker
+    ]
+    return selected
 
 
 def get_meta(path, how):
@@ -35,7 +37,7 @@ def get_meta(path, how):
     else:
         # use how as the complete name
         case_info = path / how
-        assert case_infos.exists()
+        assert case_info.exists()
     return case_info
 
 
@@ -158,6 +160,13 @@ class CaseIterable(IterableMixin):
     def get_randnums(self, labels):
         return {l: [0] for l in labels}
 
+    def get_config(self):
+        """Get configuration."""
+        return None
+
+    def save_config(self, *_):
+        return None
+
     def copy(self):
         data = [d.copy() for d in self.data]
         return self.__class__(
@@ -192,12 +201,17 @@ class CaseIterable(IterableMixin):
                 return case
         return None
 
+    def label_to_group(self, label):
+        """Return group of the given label."""
+        case = self.get_label(label)
+        return case.group if case else None
+
     def get_paths(self, label, randnum=0):
         case = self.get_label(label)
         tubes = self.selected_tubes or self.tubes
         # enforce same material
         material = case.get_possible_material(
-            tubes, allowed_materials=ALLOWED_MATERIALS)
+            tubes, allowed_materials=mappings.ALLOWED_MATERIALS)
         paths = {
             t: str(case.get_tube(t, material=material).localpath) for t in tubes
         }
@@ -219,7 +233,7 @@ class CaseIterable(IterableMixin):
 
         # set defaults
         if materials is None:
-            materials = ALLOWED_MATERIALS
+            materials = mappings.ALLOWED_MATERIALS
         if tubes is None:
             tubes = self.selected_tubes or self.tubes
 
@@ -246,9 +260,9 @@ class CaseIterable(IterableMixin):
                 "Filter Infiltration %d - %d", infiltration, infiltration_max)
             data = [
                 d for d in data
-                if (d.infiltration >= infiltration
-                and d.infiltration <= infiltration_max)
-                or d.group in NO_INFILTRATION
+                if (
+                    d.infiltration >= infiltration and d.infiltration <= infiltration_max
+                ) or d.group in mappings.NO_INFILTRATION
             ]
 
         # create copy since we will start modifying objects
@@ -271,14 +285,7 @@ class CaseIterable(IterableMixin):
 
         selected_markers = selected_markers or self.selected_markers
         if selected_markers is None:
-            tubemarkers = {
-                t: collections.Counter(m for c in data for m in c.get_tube(t).markers)
-                for t in tubes
-            }
-            selected_markers = {
-                t: [m for m, n in v.items() if n / len(data) > MARKER_THRESHOLD and "nix" not in m]
-                for t, v in tubemarkers.items()
-            }
+            selected_markers = {tube: get_selected_markers(data, tube) for tube in tubes}
 
         # filter files to have selected markers
         data = [d for d in data if d.has_selected_markers(selected_markers)]
@@ -385,6 +392,7 @@ class CaseView(CaseIterable):
 class TubeView(IterableMixin):
     """List containing CasePath."""
     def __init__(self, data, markers, tube):
+        assert None not in data, "None contained in passed list"
         self.markers = markers
         self.tube = tube
         self._data = data

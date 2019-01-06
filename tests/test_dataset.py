@@ -1,10 +1,10 @@
 import unittest
 import pathlib
 
-from .shared import *
-
 from flowcat.dataset import combined_dataset
 from flowcat.mappings import GROUP_MAPS
+
+from . import shared
 
 
 def invert_dict(d):
@@ -21,7 +21,7 @@ class TestCombinedDataset(unittest.TestCase):
 
     def setUp(self):
         self.data = combined_dataset.CombinedDataset.from_paths(
-            paths={"FCS": FCS_PATH, "HISTO": HISTO_PATH, "SOM": SOM_PATH},
+            paths={"FCS": shared.FCS_PATH, "HISTO": shared.HISTO_PATH, "SOM": shared.SOM_PATH},
             group_names=["CLL", "LPL", "PL", "normal"],
         )
 
@@ -125,7 +125,6 @@ class TestCombinedDataset(unittest.TestCase):
             self.assertEqual(len(data.labels), len(dtrain.labels + dtest.labels))
             self.assertEqual(len(data.labels), len(set(dtrain.labels + dtest.labels)))
 
-
         test_splits = [0.5, 0.75, 0.8, 0.9, 1]
         for split in test_splits:
             with self.subTest(split=split):
@@ -137,7 +136,6 @@ class TestCombinedDataset(unittest.TestCase):
         train number, which is larger than the cohort."""
         with self.assertRaises(ValueError):
             combined_dataset.split_dataset(self.data, train_num=1000)
-
 
     def test_split_dataset_seed(self):
         """Check that using a seed will always return the same split of the
@@ -160,7 +158,6 @@ class TestCombinedDataset(unittest.TestCase):
             ]
             self.assertListEqual(tr1.labels, train)
             self.assertListEqual(t1.labels, test)
-
 
         with self.subTest("Different seeds will return different splits on the same data."):
             tr1, t1 = combined_dataset.split_dataset(self.data, train_num=0.5, seed=42)

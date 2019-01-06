@@ -1,15 +1,19 @@
+"""
+Test loaders.
+"""
 import unittest
 import collections
-import pathlib
 
-from .shared import *
+import numpy as np
 
 from flowcat import loaders
 from flowcat.dataset import combined_dataset
-from tests.test_dataset import TestCombinedDataset
+
+from .shared import FCS_PATH, HISTO_PATH, SOM_PATH, MockLoader
 
 
 class TestLoaders(unittest.TestCase):
+    """Test loader functions"""
 
     @classmethod
     def setUpClass(cls):
@@ -38,7 +42,7 @@ class TestLoaders(unittest.TestCase):
                 pad_width=1,
             ),
         ]
-        cls.seq = loaders.DatasetSequence(cls.data, cls.output_spec, draw_method="sequential")
+        cls.seq = loaders.DatasetSequence.from_data(cls.data, cls.output_spec, draw_method="sequential")
 
         cls.xshapes = [
             (400, 36),
@@ -52,7 +56,7 @@ class TestLoaders(unittest.TestCase):
     def get_batch_shape(self, batch_size):
         return [[(batch_size, *t) for t in self.xshapes], (batch_size, * self.yshape)]
 
-    def assertShape(self, data, batch_size):
+    def assert_shape(self, data, batch_size):
         """Ensure that output data matches our input specification."""
         xdata, ydata = data
         dshapes = [d.shape for d in xdata]
@@ -77,7 +81,7 @@ class TestLoaders(unittest.TestCase):
 
     def test_get_index(self):
         """Check that getting a single batch will return data of the correct shape."""
-        self.assertShape(self.seq[0], batch_size=10)
+        self.assert_shape(self.seq[0], batch_size=10)
 
     def test_draw_methods(self):
         """Check that the different draw methods behave as expected."""
@@ -87,7 +91,7 @@ class TestLoaders(unittest.TestCase):
             seq_ds = [(l, g) for l, _, g in self.seq.label_groups]
             self.assertListEqual(seq_ds, seq_truth)
         with self.subTest("shuffle"):
-            shuffled = loaders.DatasetSequence(self.data, self.output_spec, draw_method="shuffle")
+            shuffled = loaders.DatasetSequence.from_data(self.data, self.output_spec, draw_method="shuffle")
             shuffled_labels = set(l for l, _, _ in shuffled.label_groups)
             self.assertSetEqual(shuffled_labels, labels)
         with self.subTest("balanced_nodict"):
@@ -97,7 +101,8 @@ class TestLoaders(unittest.TestCase):
                 "PL": 20,
                 "normal": 20,
             }
-            equalized = loaders.DatasetSequence(self.data, self.output_spec, draw_method="balanced", epoch_size=80)
+            equalized = loaders.DatasetSequence.from_data(
+                self.data, self.output_spec, draw_method="balanced", epoch_size=80)
             equal_labels = equalized.label_groups
             equal_counts = collections.Counter(g for _, _, g in equal_labels)
             self.assertDictEqual(equal_counts, equal_truth)
@@ -108,9 +113,9 @@ class TestLoaders(unittest.TestCase):
                 "PL": 5,
                 "normal": 5
             }
-            grouped = loaders.DatasetSequence(
+            grouped = loaders.DatasetSequence.from_data(
                 self.data, self.output_spec, draw_method="balanced", number_per_group=group_nums)
-            grouped_labels = equalized.label_groups
+            grouped_labels = grouped.label_groups
             grouped_counts = collections.Counter(g for _, _, g in grouped_labels)
             self.assertDictEqual(grouped_counts, grouped_counts)
         with self.subTest("balanced_wrongdict"):
@@ -118,21 +123,22 @@ class TestLoaders(unittest.TestCase):
                 "CLL": 100,
             }
             with self.assertRaises(AssertionError):
-                incomplete_grouped = loaders.DatasetSequence(
+                loaders.DatasetSequence.from_data(
                     self.data, self.output_spec, draw_method="balanced", number_per_group=incomplete_nums)
 
     def test_generate_batches(self):
         """Test generation of samples using multiprocessing."""
-        shuffled = loaders.DatasetSequence(self.data, self.output_spec, draw_method="shuffle", batch_size=2)
+        shuffled = loaders.DatasetSequence.from_data(
+            self.data, self.output_spec, draw_method="shuffle", batch_size=2)
         num_workers = [1, 4, 8]
         for num_worker in num_workers:
             with self.subTest(num_workers=num_workers):
                 shuffled.generate_batches(num_workers=num_worker)
                 res = shuffled._cache
                 for r in res:
-                    self.assertShape(r, batch_size=2)
+                    self.assert_shape(r, batch_size=2)
                 self.assertEqual(len(res), len(shuffled))
-                self.assertShape(shuffled[0], batch_size=2)
+                self.assert_shape(shuffled[0], batch_size=2)
 
 
 class TestDataReaders(unittest.TestCase):
@@ -192,5 +198,5 @@ class TestDataReaders(unittest.TestCase):
                     csvname=csvname, rows=rows, gridsize=gridsize, pad_width=pad_width, sel_count=sel_count
             ):
                 result = loaders.LoaderMixin.read_som(
-                   csvname , tube=rows, gridsize=gridsize, pad_width=pad_width, sel_count=sel_count)
+                   csvname, tube=rows, gridsize=gridsize, pad_width=pad_width, sel_count=sel_count)
                 np.testing.assert_array_equal(result, correct)

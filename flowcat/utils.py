@@ -46,6 +46,12 @@ def get_path(dname, dpaths):
     raise RuntimeError(f"Could not find {dname} in {dpaths}")
 
 
+def get_paths(names, datasets):
+    return {
+        dtype: get_path(name, datasets[dtype]) for dtype, name in names.items()
+    }
+
+
 class Singleton(abc.ABCMeta):
     _instances = {}
 
@@ -435,8 +441,9 @@ def df_get_count(data, tubes):
         count = pd.DataFrame(
             1, index=data[tube].index, columns=["count"])
         count.reset_index(inplace=True)
-        count.set_index(["label", "group"], inplace=True)
+        count.set_index("label", inplace=True)
         count = count.loc[~count.index.duplicated(keep='first')]
+        count.drop("group", axis=1, inplace=True, errors="ignore")
         if counts is None:
             counts = count
         else:
