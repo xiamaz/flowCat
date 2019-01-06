@@ -15,7 +15,7 @@ import keras
 from keras import models, optimizers
 from keras.utils import plot_model
 
-from . import configuration, utils, mappings, loaders
+from . import configuration, utils, mappings, loaders, som
 from .dataset import combined_dataset
 from .visual import classify_plots, plotting
 from .models import weighted_crossentropy, fcs_cnn, histo_nn, som_cnn
@@ -114,9 +114,9 @@ def run(args):
     else:
         data_val = None
     history = fit(model, trainseq, data_val=data_val, config=config("fit"))
-    pred_df = predict(model, testseq)
+    pred_df = predict_generator(model, testseq)
 
-    save_model(model, config, outpath, weights=weights, history=history)
+    save_model(model, train, config, outpath, history=history)
     save_predictions(pred_df, outpath)
 
     LOGGER.info("Creating statistics")
@@ -124,7 +124,7 @@ def run(args):
         outpath=outpath, dataset=dataset, pred_df=pred_df, **config("stat"))
 
 
-def compile(model, weights=None, epsilon=1e-8, config=None):
+def compile_model(model, weights=None, epsilon=1e-8, config=None):
     """Compile model."""
     if config is not None:
         weights = config["weights"]
@@ -205,7 +205,7 @@ def fit(
     return history
 
 
-def predict(model, data, num_workers=0, config=None):
+def predict_generator(model, data, num_workers=0, config=None):
     if config is not None:
         num_workers = config["num_workers"]
 
@@ -213,6 +213,14 @@ def predict(model, data, num_workers=0, config=None):
 
     pred_df = pd.DataFrame(pred_mat, columns=data.groups, index=data.labels)
     pred_df["correct"] = data.ylabels
+    return pred_df
+
+
+def predict(model, data, groups, labels, ylabels=None):
+    pred_mat = model.predict(data)
+    pred_df = pd.DataFrame(pred_mat, columns=groups, index=labels)
+    if ylabels is not None:
+        pred_df["correct"] = ylabels
     return pred_df
 
 
@@ -254,7 +262,7 @@ def get_weights_by_name(name, groups):
     return weights
 
 
-def save_model(model, config, path, history=None, weights=None, dataset=None):
+def save_model(model, sequence, config, path, history=None, weights=None, dataset=None):
     """Save the given model to the given path.
 
     This will save the model including all informations needed to load the model
@@ -269,7 +277,7 @@ def save_model(model, config, path, history=None, weights=None, dataset=None):
     plotpath = path / "modelplot.png"
     plotpath.put(lambda p: keras.utils.plot_model(model, p, show_shapes=True))
 
-    modelpath = path / "weights.h5"
+    modelpath = path / "model.h5"
     modelpath.put(lambda p: model.save(p))
 
     if history is not None:
@@ -282,19 +290,63 @@ def save_model(model, config, path, history=None, weights=None, dataset=None):
 
     if dataset is not None:
         # get configs for each dtype
-        dtype_configs = dataset.get_dtype_configs()
-        for dtype, dconfig in dtype_configs.items():
-            if dconfig is None:
-                LOGGER.warning("No configuration file found for %s", dtype)
-                continue
-            if dtype == "SOM":
-                LOGGER.debug("Copying reference weights into directory.")
-            if dtype == "HISTO":
-                LOGGER.debug("Copying reference weights into directory.")
-                pass
-            dconfig.to_file(path / f"config_{dtype}.toml")
+        for dtype, dset in dataset.datasets.items():
+            dset.save_config(path / dtype.name)
 
     config.to_file(path / "config.toml")
+
+    # Save dataset to a folder with name dataset
+    datasetpath = path / "dataset"
+    seqconf, outputconfs = sequence.get_config()
+    seqconf.to_file(datasetpath / "config.toml")
+    for name, sconfig in outputconfs.items():
+        sconfig.to_file(datasetpath / f"{name}.toml")
+
+
+def load_som_model(path):
+    config = configuration.SOMConfig.from_file(path / "config.toml")
+    references = som.load_som(path / "reference", tubes=config("dataset", "filters", "tubes"), suffix=True)
+
+    # copy fitmap args into normal args
+    fitmap_args = config.data["somnodes"]["fitmap_args"]
+    config.data["tfsom"]["max_epochs"] = fitmap_args["max_epochs"]
+    config.data["tfsom"]["initial_learning_rate"] = fitmap_args["initial_learn"]
+    config.data["tfsom"]["end_learning_rate"] = fitmap_args["end_learn"]
+    config.data["tfsom"]["initial_radius"] = fitmap_args["initial_radius"]
+    config.data["tfsom"]["end_radius"] = fitmap_args["end_radius"]
+
+    def create_som(case):
+        return som.create_som([case], config, reference=references)
+
+    return create_som
+
+
+def load_model(path):
+    """Load a model from the given directory."""
+    path = utils.URLPath(path)
+    # load configuration
+    config = configuration.ClassificationConfig.from_file(path / "config.toml")
+    dataset_config, output_configs = loaders.load_dataset_config(path / "dataset")
+
+    # load model
+    model = keras.models.load_model(str((path / "model.h5").get()), compile=False)
+    compile_model(model, config=config("model", "compile"))
+
+    # load dataset loaders
+    sommodel = load_som_model(path / "SOM")
+
+    dataseq = loaders.DatasetSequence.from_config(dataset_config, output_configs)
+
+    def transform(cases):
+        """Build a transformer closure to transform data into correct format from single cases."""
+        result = [[] for i in range(len(dataseq.output_dtypes))]
+        for case in cases:
+            somweights = sommodel(case)
+            transformed = dataseq.transform(somweights)
+            for i, tdata in enumerate(transformed):
+                result[i].append(tdata)
+        return result
+    return model, transform, dataseq.groups
 
 
 def save_predictions(df, path):
@@ -421,8 +473,7 @@ def create_output_spec(modelname, dataoptions):
     return output_spec
 
 
-def generate_model_inputs(
-        train_data, test_data, config, path=None):
+def generate_model_inputs(train_data, test_data, config):
     """Create model and associated inputs.
     Args:
         train_data, test_data: Dataset used to infer sizes.
@@ -437,19 +488,17 @@ def generate_model_inputs(
     traindata_args = config["train_args"]
     testdata_args = config["test_args"]
     output_spec = create_output_spec(mtype, loader_options)
-    train = loaders.DatasetSequence(train_data, output_spec, **traindata_args)
-    test = loaders.DatasetSequence(test_data, output_spec, **testdata_args)
-    if path is not None:
-        model = keras.models.load_model(path, compile=False)
-    else:
-        constructors = {
-            "histogram": histo_nn.create_model_histo,
-            "som": som_cnn.create_model_cnn,
-            "etefcs": fcs_cnn.create_model_fcs,
-        }
-        model = constructors[mtype](*train.shape)
+    train = loaders.DatasetSequence.from_data(train_data, output_spec, **traindata_args)
+    test = loaders.DatasetSequence.from_data(test_data, output_spec, **testdata_args)
 
-    model = compile(model, config=config["compile"])
+    constructors = {
+        "histogram": histo_nn.create_model_histo,
+        "som": som_cnn.create_model_cnn,
+        "etefcs": fcs_cnn.create_model_fcs,
+    }
+    model = constructors[mtype](*train.shape)
+
+    model = compile_model(model, config=config["compile"])
 
     return model, train, test
 

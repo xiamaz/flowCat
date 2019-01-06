@@ -5,7 +5,7 @@ other classifiers.
 import unittest
 
 from flowcat import classify, configuration
-from flowcat.dataset import combined_dataset
+from flowcat.dataset import combined_dataset, case
 
 from . import shared
 
@@ -16,7 +16,7 @@ def create_basic_configuration():
         "dataset": {
             "names": {
                 "FCS": str(shared.FCS_PATH),
-                "SOM": str(shared.SOM_PATH),
+                "SOM": str(shared.DATAPATH / "indivsom"),
             },
             "filters": {
                 "num": 20,
@@ -37,6 +37,18 @@ def create_basic_configuration():
     })
 
 
+def create_single_case(name):
+    filepaths = [
+        {"fcs": {"path": f"{name}_{i}.lmd"}, "date": "2018-01-02", "tube": i} for i in [1, 2]
+    ]
+    tdict = {
+        "id": name,
+        "date": "2018-01-02",
+        "filepaths": filepaths,
+    }
+    return case.Case(tdict, path=shared.DATAPATH / "fcs")
+
+
 class TestClassify(unittest.TestCase):
     """Testing of SOM classifier."""
 
@@ -49,10 +61,15 @@ class TestClassify(unittest.TestCase):
 
         model, trainseq, testseq = classify.generate_model_inputs(train, test, config("model"))
         classify.fit(model, trainseq)
-        classify.predict(model, testseq)
+        classify.predict_generator(model, testseq)
 
-        classify.save_model(model, config, shared.DATAPATH / "lolmodel", dataset=dataset)
+        classify.save_model(model, trainseq, config, shared.DATAPATH / "basicmodel", dataset=dataset)
 
     def test_load_model(self):
         """Loading a model and predicting another case from FCS files."""
-        pass
+        single = create_single_case("cll1")
+        model, transformer, groups = classify.load_model(shared.DATAPATH / "basicmodel")
+
+        indata = transformer([single])
+        pred_df = classify.predict(model, indata, groups, [single.id])
+        print(pred_df)

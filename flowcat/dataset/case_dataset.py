@@ -164,6 +164,9 @@ class CaseIterable(IterableMixin):
         """Get configuration."""
         return None
 
+    def save_config(self, *_):
+        return None
+
     def copy(self):
         data = [d.copy() for d in self.data]
         return self.__class__(

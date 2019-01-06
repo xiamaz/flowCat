@@ -125,15 +125,10 @@ def create_datasets(cases, dataset_config):
         yield tube, tfsom.create_z_score_generator(tubeview)
 
 
-def create_som(cases, config, tensorboard_path=None, seed=None):
+def create_som(cases, config, tensorboard_path=None, seed=None, reference=None):
     """Create a SOM for the given list of cases with the configuration."""
 
     markers = config("dataset", "selected_markers")
-
-    # load reference if available
-    reference = config("reference")
-    if reference is not None:
-        reference = load_som(reference, config("dataset", "filters", "tubes"), suffix=False)
 
     somweights = {}
     for tube, (datagen, length) in create_datasets(cases, config("dataset")):
@@ -215,7 +210,12 @@ def create_new_reference(args):
     else:
         tensorboard_path = None
 
-    return create_som(data, config, tensorboard_path)
+    # load reference if available
+    reference = config("reference")
+    if reference is not None:
+        reference = load_som(reference, config("dataset", "filters", "tubes"), suffix=False)
+
+    return create_som(data, config, tensorboard_path, reference=reference)
 
 
 def generate_reference(args):
@@ -236,22 +236,28 @@ def generate_reference(args):
     return data
 
 
-def create_indiv_soms(config, path, tensorboard_dir=None, pathconfig=None, references=None):
-    """Create indiv soms using a generator."""
+def create_filtered_data(config, pathconfig=None):
+    """Create filtered dataset."""
     if pathconfig is not None:
         casespath = utils.get_path(config("dataset", "names", "FCS"), pathconfig("input", "FCS"))
     else:
         casespath = config("dataset", "names", "FCS")
 
+    labels = utils.load_labels(config("dataset", "labels"))
+    cases = case_dataset.CaseCollection.from_path(casespath)
+    data = cases.filter(labels=labels, **config("dataset", "filters"))
+
+    return data
+
+
+def create_indiv_soms(data, config, path, tensorboard_dir=None, pathconfig=None, references=None):
+    """Create indiv soms using a generator."""
+    path = utils.URLPath(path)
     if references:
         selected_markers = {k: list(v.columns) for k, v in references.items()}
+        data = data.filter(selected_markers=selected_markers)
     else:
         selected_markers = None
-
-    cases = case_dataset.CaseCollection.from_path(casespath)
-    labels = utils.load_labels(config("dataset", "labels"))
-
-    data = cases.filter(labels=labels, selected_markers=selected_markers, **config("dataset", "filters"))
 
     meta = {"label": [], "randnum": []}
     for tube in data.selected_tubes:
@@ -305,10 +311,12 @@ def generate_soms(args):
     else:
         references = None
 
+    data = create_filtered_data(config, pathconfig=args.pathconfig)
+
     metadata = create_indiv_soms(
-        config, output_dir, references=references,
+        data, config, output_dir, references=references,
         tensorboard_dir=args.tensorboard, pathconfig=args.pathconfig)
 
-    metadata.to_csv(output_dir + ".csv")
+    utils.save_csv(metadata, output_dir + ".csv")
 
     config.to_file(output_dir / "config.toml")

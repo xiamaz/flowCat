@@ -1,6 +1,11 @@
 import re
+import logging
 
 from .. import utils, configuration
+from .. import som
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class SOMDataset:
@@ -59,13 +64,25 @@ class SOMDataset:
 
     def get_config(self):
         """Read configuration, which is to be located in dataset_name/config.toml"""
-        print(self.path)
         if self.path is not None:
             configpath = utils.URLPath(self.path) / "config.toml"
             if configpath.exists():
                 return configuration.SOMConfig.from_file(configpath)
 
         return None
+
+    def save_config(self, path):
+        config = self.get_config()
+        if config is None:
+            LOGGER.warning("No configuration file found for SOM")
+            return
+        config.to_file(path / "config.toml")
+
+        # save SOM reference too
+        references = config("reference")
+        if references:
+            refdata = som.load_som(references, self.tubes)
+            som.save_som(refdata, path / "reference", suffix=True)
 
     def get_randnums(self, labels):
         meta = next(iter(self.data.values()))

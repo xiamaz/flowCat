@@ -5,7 +5,7 @@ import unittest
 
 from pandas.testing import assert_frame_equal
 
-from flowcat import som, configuration
+from flowcat import som, configuration, utils
 from flowcat.dataset import case_dataset, case
 
 from . import shared
@@ -117,3 +117,15 @@ class TestSOMCreation(unittest.TestCase):
 
         assert_frame_equal(orig[1], result[1], check_dtype=False)
         assert_frame_equal(orig[2], result[2], check_dtype=False)
+
+    def test_indiv_soms(self):
+        """Generation of multiple SOMs from one reference."""
+        sompath = utils.URLPath(shared.DATAPATH / "indivsom")
+
+        config = create_configuration_reference(shared.DATAPATH / "som_seed42")
+        references = som.load_som(config("reference"), [1, 2], suffix=False)
+
+        data = self.cases.filter(tubes=[1, 2])
+        result = som.create_indiv_soms(data, config,  sompath, references=references)
+        config.to_file(sompath / "config.toml")
+        utils.save_csv(result, sompath + ".csv")

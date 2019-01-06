@@ -42,6 +42,24 @@ def check_schema(schema, data):
     return data
 
 
+def mangle_numeric_keys(data):
+    replaced = {}
+    for key, value in data.items():
+        if str(key).isnumeric():
+            key = f"rnum_{key}"
+        replaced[key] = mangle_numeric_keys(value) if isinstance(value, dict) else value
+    return replaced
+
+
+def unmangle_numeric_keys(data):
+    cleaned = {}
+    for key, value in data.items():
+        if str(key).startswith("rnum_"):
+            key = int(key.replace("rnum_", ""))
+        cleaned[key] = unmangle_numeric_keys(value) if isinstance(value, dict) else value
+    return cleaned
+
+
 class Config:
     """Create configuration skeletons using provided schemas.
 
@@ -75,6 +93,7 @@ class Config:
             data = utils.load_json(path)
         elif str(path).endswith(".toml"):
             data = utils.load_toml(path)
+            data = unmangle_numeric_keys(data)
         else:
             raise TypeError(f"Unknown filetype: {path}")
         return cls(data)
@@ -97,7 +116,8 @@ class Config:
         if str(path).endswith(".json"):
             utils.save_json(self.data, path)
         elif str(path).endswith(".toml"):
-            utils.save_toml(self.data, path)
+            data = mangle_numeric_keys(self.data)
+            utils.save_toml(data, path)
         else:
             raise TypeError(f"Unknown filetype: {path}")
 
@@ -218,7 +238,13 @@ class SOMConfig(Config):
             "initialization_method": ((str,), "random"),
         },
         "somnodes": {
-            "fitmap_args": ((dict, None), None),
+            "fitmap_args": {
+                "max_epochs": ((int,), 10),
+                "initial_learn": ((float,), 0.5),
+                "end_learn": ((float,), 0.1),
+                "initial_radius": ((int,), 16),
+                "end_radius": ((int,), 1),
+            },
         }
     }
 

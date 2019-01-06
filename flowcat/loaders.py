@@ -15,9 +15,9 @@ import pandas as pd
 from sklearn import preprocessing
 from keras.utils import Sequence
 
-from . import utils
+from . import utils, configuration
 from .mappings import NAME_MAP, GROUP_MAPS
-from .dataset import case as ccase
+from .dataset import case as ccase, fcs
 
 
 LOGGER = logging.getLogger(__name__)
@@ -148,16 +148,50 @@ def loader_builder(constructor, *args, **kwargs):
     return build
 
 
+class Transformer:
+
+    @property
+    def name(self):
+        raise NotImplementedError
+
+    @classmethod
+    def from_config(cls, config):
+        raise NotImplementedError
+
+    def transform(self, data):
+        """Transform data read from FS into format usable for model."""
+        raise NotImplementedError
+
+    def get_config(self):
+        """Get transformer configuration."""
+        raise NotImplementedError
+
+
+def dtype_to_loader(dtype):
+    if dtype == "SOM":
+        return Map2DLoader
+    if dtype == "HISTO":
+        return CountLoader
+    if dtype == "FCS":
+        return FCSLoader
+    raise KeyError(f"{dtype} not found")
+
+
 class LoaderMixin:
+
     @staticmethod
-    def read_som(path, tube, sel_count=None, gridsize=None, pad_width=None):
-        """Load the data associated with the given tube."""
-        csv_path = utils.URLPath(str(path).format(tube=tube))
-        mapdata = utils.load_csv(csv_path)
-        mapdata = select_drop_counts(mapdata, sel_count=sel_count)
+    def reshape_som(weights, sel_count=None, gridsize=None, pad_width=None):
+        mapdata = select_drop_counts(weights, sel_count=sel_count)
         if gridsize is not None:
             mapdata = reshape_dataframe(mapdata, m=gridsize, n=gridsize, pad_width=pad_width)
         return mapdata
+
+    @staticmethod
+    def read_som(path, tube, *args, **kwargs):
+        """Load the data associated with the given tube."""
+        csv_path = utils.URLPath(str(path).format(tube=tube))
+        mapdata = utils.load_csv(csv_path)
+        return LoaderMixin.reshape_som(mapdata, *args, **kwargs)
 
     @staticmethod
     @mem_cache
@@ -191,16 +225,16 @@ class LoaderMixin:
             path: path to FCS file.
             transform: Apply specific transformation to the input data.
         """
-        data = ccase.FCSData(path).drop_empty().data
+        data = fcs.FCSData(path).drop_empty().data
         if transform == "none":
             data = data
         elif transform == "rescale":
             data = data / 1024.0
         elif transform == "zscores_scaled":
-            data = ccase.FCSMinMaxScaler().fit_transform(
-                ccase.FCSStandardScaler().fit_transform(data))
+            data = fcs.FCSMinMaxScaler().fit_transform(
+                fcs.FCSStandardScaler().fit_transform(data))
         elif transform == "zscores":
-            data = ccase.FCSStandardScaler().fit_transform(data)
+            data = fcs.FCSStandardScaler().fit_transform(data)
         else:
             raise TypeError(f"Unknown transform type {transform}")
 
@@ -225,10 +259,23 @@ class LoaderMixin:
         return batch
 
 
+class CountLoaderConfiguration(configuration.Config):
+    name = "CountLoader"
+    desc = "Count Loader configuration"
+    default = ""
+    _schema = {
+        "datatype": ((str,), "dataframe"),  # alternative SOM will load counts from 2d maps
+        "tube": ((int,), None),
+        "width": ((int,), None),
+        "datacol": ((int, None), None),
+    }
+
+
 class CountLoader(LoaderMixin):
     """Load count information from 1d histogram analysis."""
 
     dtype = "HISTO"
+    ctype = CountLoaderConfiguration
 
     def __init__(self, tube, width, datatype="mapcount", datacol=None):
         """
@@ -255,9 +302,19 @@ class CountLoader(LoaderMixin):
         width = dfdata.shape[1]
         return cls(tube=tube, width=width, datatype=datatype)
 
+    @classmethod
+    def from_config(cls, config):
+        if isinstance(config, configuration.Config):
+            config = config.data
+        return cls(**config)
+
     @property
     def shape(self):
         return (self.width, )
+
+    @property
+    def name(self):
+        return f"{self.dtype}_{self.tube}"
 
     @classmethod
     def load_histos(cls, data, tube, datatype, datacol):
@@ -290,11 +347,33 @@ class CountLoader(LoaderMixin):
             label_group_paths, self.tube, self.datatype, self.datacol)
         return batch
 
+    def get_config(self):
+        return CountLoaderConfiguration({
+            "datatype": self.datatype,
+            "width": self.width,
+            "tube": self.tube,
+            "datacol": self.datacol,
+        })
 
-class FCSLoader(LoaderMixin):
+
+class FCSLoaderConfiguration(configuration.Config):
+    name = "FCSLoader"
+    desc = "FCS Loader configuration"
+    default = ""
+
+    _schema = {
+        "tubes": (([int],), None),
+        "channels": (([str], None), None),
+        "subsample": ((int,), 200),
+        "randomize": ((bool,), False),  # always change subsample in different epochs
+    }
+
+
+class FCSLoader(LoaderMixin, Transformer):
     """Directly load FCS data associated with the given ids."""
 
     dtype = "FCS"
+    ctype = FCSLoaderConfiguration
 
     def __init__(self, tubes, channels=None, subsample=200, randomize=False,):
         self.tubes = tubes
@@ -310,9 +389,19 @@ class FCSLoader(LoaderMixin):
         channels = list(testdata.columns)
         return cls(tubes=tubes, channels=channels, subsample=subsample, *args, **kwargs)
 
+    @classmethod
+    def from_config(cls, config):
+        if isinstance(config, configuration.Config):
+            config = config.data
+        return cls(**config)
+
     @property
     def shape(self):
         return (self.subsample * len(self.tubes), len(self.channels))
+
+    @property
+    def name(self):
+        return f"{self.dtype}_{''.join(self.tubes)}"
 
     @classmethod
     def load_fcs_randomized(cls, pathdict, subsample, tubes, channels=None):
@@ -341,13 +430,37 @@ class FCSLoader(LoaderMixin):
         else:
             return self.load_fcs(path, self.subsample, self.tubes, self.channels)
 
+    def get_config(self):
+        return FCSLoaderConfiguration({
+            "tubes": self.tubes,
+            "subsample": self.subsample,
+            "randomize": self.randomize,
+            "channels": self.channels,
+        })
 
-class Map2DLoader(LoaderMixin):
+
+class Map2DLoaderConfiguration(configuration.Config):
+
+    name = "Map2DLoader"
+    desc = "Map2D Loader configuration"
+    default = ""
+
+    _schema = {
+        "sel_count": ((str, None), None),  # whether counts will be included in 2d map
+        "pad_width": ((int,), 0),  # whether map will be padded
+        "channels": (([str],), None),
+        "gridsize": ((int,), None),
+        "tube": ((int, None), None),
+    }
+
+
+class Map2DLoader(LoaderMixin, Transformer):
     """2-Dimensional SOM maps for 2D-Convolutional processing."""
 
     dtype = "SOM"
+    ctype = Map2DLoaderConfiguration
 
-    def __init__(self, tube, gridsize, channels, sel_count=None, pad_width=0, cached=False):
+    def __init__(self, tube, gridsize, channels, sel_count=None, pad_width=0):
         """Object to transform input rows into the specified format."""
         self.tube = tube
         self.gridsize = gridsize
@@ -357,12 +470,18 @@ class Map2DLoader(LoaderMixin):
         self._cache = {}
 
     @classmethod
-    def create_inferred(cls, data, tube, *args, **kwargs):
-        """Create with inferred information."""
-        return cls(tube=tube, *args, **cls.infer_size(data, tube), **kwargs)
+    def from_config(cls, config):
+        if isinstance(config, configuration.Config):
+            config = config.data
+        return cls(**config)
 
     @classmethod
-    def infer_size(cls, data, tube=1):
+    def create_inferred(cls, data, tube, gridsize=None, channels=None, *args, **kwargs):
+        """Create with inferred information."""
+        return cls(tube=tube, *args, **cls.infer_size(data, tube, gridsize, channels), **kwargs)
+
+    @classmethod
+    def infer_size(cls, data, tube=1, gridsize=None, channels=None):
         """Infer size of input from data."""
         label = data.labels[0]
         path = data.get(label, cls.dtype)[tube]
@@ -371,10 +490,12 @@ class Map2DLoader(LoaderMixin):
         # number of nodes in rows
         nodes, _ = refdata.shape
         # always a m x m grid
-        gridsize = int(np.ceil(np.sqrt(nodes)))
+        if gridsize is None:
+            gridsize = int(np.ceil(np.sqrt(nodes)))
         # get all non count channel names
-        non_count_channels = [c for c in refdata.columns if "count" not in c]
-        return {"gridsize": gridsize, "channels": non_count_channels}
+        if channels is None:
+            channels = [c for c in refdata.columns if "count" not in c]
+        return {"gridsize": gridsize, "channels": channels}
 
     @property
     def shape(self):
@@ -384,8 +505,43 @@ class Map2DLoader(LoaderMixin):
             len(self.channels) + bool(self.sel_count)
         )
 
+    @property
+    def name(self):
+        return f"{self.dtype}_{self.tube}"
+
     def load_data(self, pathdict):
         return self.read_som(pathdict[self.tube], self.tube, self.sel_count, self.gridsize, self.pad_width)
+
+    def transform(self, data):
+        tdata = data[self.tube]
+        reshaped = self.reshape_som(tdata, self.sel_count, self.gridsize, self.pad_width)
+        return reshaped
+
+    def get_config(self):
+        config = Map2DLoaderConfiguration({
+            "tube": self.tube,
+            "gridsize": self.gridsize,
+            "channels": self.channels,
+            "sel_count": self.sel_count,
+            "pad_width": self.pad_width,
+        })
+        return config
+
+
+class DatasetSequenceConfiguration(configuration.Config):
+    name = "DatasetSequence"
+    desc = "Combined sequence configuration"
+    default = ""
+
+    _schema = {
+        "groups": (([str],), None),
+        "batch_size": ((int,), None),
+        "epoch_size": ((int, None), None),
+        "number_per_group": ((dict, None), None),
+        "avg_sample_weight": ((float, None), None),
+        "sample_weights": ((bool,), False),
+        "outputs": ((dict,), None),
+    }
 
 
 class DatasetSequence(LoaderMixin, Sequence):
@@ -395,9 +551,9 @@ class DatasetSequence(LoaderMixin, Sequence):
     """
 
     def __init__(
-            self, data, output_spec,
+            self, outputs, groups,
             batch_size=32, draw_method="shuffle", epoch_size=None,
-            number_per_group=None, sample_weights=False,
+            number_per_group=None, sample_weights=False, avg_sample_weight=None,
     ):
         """
         Args:
@@ -419,22 +575,47 @@ class DatasetSequence(LoaderMixin, Sequence):
         Returns:
             SOMMapDataset object.
         """
-        self._data = data
-        self._output_spec = [x(data) for x in output_spec]
+        self._output_spec = outputs
 
         self.batch_size = batch_size
+        self.epoch_size = epoch_size
         self.draw_method = draw_method
 
         self.sample_weights = sample_weights
-        self.avg_sample_weight = np.mean(
-            self._data.get_sample_weights(self._data.label_groups))
+        self.avg_sample_weight = avg_sample_weight
 
-        self.groups = self._data.group_names
+        self.groups = groups
+        self.number_per_group = number_per_group
 
+        self._data = None
+        self.label_groups = None
+        self._cache = None
+
+    def set_data(self, data):
+        self._data = data
         self.epoch_size, self.label_groups, self.number_per_group = self._sample_data(
-            data, epoch_size, number_per_group)
-
+            data, self.epoch_size, self.number_per_group)
         self._cache = [None] * len(self)
+        return self
+
+    @classmethod
+    def from_data(cls, data, output_partial, **kwargs):
+        outputs = [x(data) for x in output_partial]
+        groups = data.group_names
+        avg_sample_weight = float(np.mean(data.get_sample_weights()))
+        obj = cls(outputs, groups=groups, avg_sample_weight=avg_sample_weight, **kwargs)
+        obj.set_data(data)
+        return obj
+
+    @classmethod
+    def from_config(cls, config, output_configs):
+        confdict = config.data.copy()
+        outputs = [
+            dtype_to_loader(dtype).from_config(output_configs[name])
+            for name, dtype in confdict["outputs"].items()
+        ]
+        del confdict["outputs"]
+        return cls(**confdict, outputs=outputs)
 
     @property
     def output_dtypes(self):
@@ -550,3 +731,29 @@ class DatasetSequence(LoaderMixin, Sequence):
             sample_weights = np.array(self._data.get_sample_weights(batch_data)) / self.avg_sample_weight * 5
             return xdata, ybinary, sample_weights
         return xdata, ybinary
+
+    def get_config(self):
+        config_dict = {
+            "groups": self.groups,
+            "batch_size": self.batch_size,
+            "epoch_size": self.epoch_size,
+            "number_per_group": self.number_per_group,
+            "avg_sample_weight": self.avg_sample_weight,
+            "sample_weights": self.sample_weights,
+            "outputs": {s.name: s.dtype for s in self._output_spec},
+        }
+        output_configs = {s.name: s.get_config() for s in self._output_spec}
+        return DatasetSequenceConfiguration(config_dict), output_configs
+
+    def transform(self, data):
+        """Transform a single case into a format usable for predicting."""
+        return [o.transform(data) for o in self._output_spec]
+
+
+def load_dataset_config(path):
+    config = DatasetSequenceConfiguration.from_file(path / "config.toml")
+    output_configs = {
+        name: dtype_to_loader(dtype).ctype.from_file(path / f"{name}.toml")
+        for name, dtype in config("outputs").items()
+    }
+    return config, output_configs

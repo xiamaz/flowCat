@@ -161,13 +161,11 @@ class CombinedDataset:
         self.fcs = self.fcs.filter(**kwargs)
         return self
 
-    def get_sample_weights(self, indices):
-        labels = [l for l, *_ in indices]
-        sample_weights = {}
-        for case in self.fcs:
-            if case.id in labels:
-                sample_weights[case.id] = case.sureness
-        return [sample_weights[i] for i, *_ in indices]
+    def get_sample_weights(self, labels=None):
+        if labels is None:
+            labels = self.labels
+        sample_weights = [case.sureness for case in self.fcs if case.id in labels]
+        return sample_weights
 
 
 def split_dataset(data, train_num=None, test_labels=None, train_labels=None, seed=None):
