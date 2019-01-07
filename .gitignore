@@ -16,3 +16,6 @@ tags*
 
 # ignore sphinx build folder
 /docs/_build
+
+# tensorboard outputs
+/tensorboard
