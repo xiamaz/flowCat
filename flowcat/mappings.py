@@ -168,5 +168,16 @@ CHANNEL_CONFIGS = {
             "CD22-PacBlue",
             "CD45-KrOr",
         ],
+        3: [
+            "FS INT LIN",
+            "SS INT LIN",
+            "CD8-FITC",
+            "CD4-PE",
+            "CD3-ECD",
+            "CD56-APC",
+            "CD19-APCA750",
+            "HLA-DR-PacBlue",
+            "CD45-KrOr"
+        ],
     }
 }
