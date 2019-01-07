@@ -35,7 +35,7 @@ def tokenize(arg):
 
 
 def info_case(case):
-    casestr = f"{case.id} {case.group} {case.infiltration} {case.sureness}"
+    casestr = f"{case.id} {case.group} {case.infiltration} {case.sureness} {len(case.filepaths)} samples"
     print(casestr)
 
 
@@ -75,6 +75,9 @@ class Interpreter(cmd.Cmd):
                 elif query["type"] == "s":
                     cases = [
                         c for c in cases if c.infiltration == int(query["query"])]
+                elif query["type"] == "p":
+                    cases = [
+                        c for c in cases if len(c.filepaths) == int(query["query"])]
                 else:
                     print("Invalid type ", query["type"])
             [info_case(c) for c in cases[:10]]
@@ -83,6 +86,42 @@ class Interpreter(cmd.Cmd):
                 print(f"Saving labels to {save}")
                 labels = [c.id for c in cases]
                 utils.save_json(labels, save)
+
+    def do_sm(self, arg):
+        "Show selected markers for the following query"
+        cases = list(self.data.data)
+        save = None
+        if arg != "":
+            queries, save = tokenize(arg)
+
+            for query in queries:
+                if query["type"] == "g":
+                    cases = [c for c in cases if c.group == query["query"]]
+                elif query["type"] == "ig":
+                    cases = [
+                        c for c in cases if c.infiltration > float(query["query"])]
+                elif query["type"] == "il":
+                    cases = [
+                        c for c in cases if c.infiltration < float(query["query"])]
+                elif query["type"] == "s":
+                    cases = [
+                        c for c in cases if c.infiltration == int(query["query"])]
+                elif query["type"] == "p":
+                    cases = [
+                        c for c in cases if len(c.filepaths) == int(query["query"])]
+                else:
+                    print("Invalid type ", query["type"])
+        selected_markers = {
+            tube: case_dataset.get_selected_markers(cases, tube)
+            for tube in self.data.tubes
+        }
+        for tube, markers in selected_markers.items():
+            print(f"{tube}: {', '.join(markers)}")
+        if save:
+            print(f"Saving markers to {save}")
+            utils.save_json(selected_markers, save)
+
+
 
 
 if __name__ == "__main__":

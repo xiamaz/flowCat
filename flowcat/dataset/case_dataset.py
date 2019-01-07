@@ -19,7 +19,8 @@ LOGGER = logging.getLogger(__name__)
 def get_selected_markers(cases, tube):
     """Get a list of marker channels available in all tubes."""
     marker_counts = collections.Counter(
-        marker for case in cases for marker in case.get_tube(tube).markers)
+        marker for t in [case.get_tube(tube) for case in cases]
+        if t is not None for marker in t.markers)
     # get ratio of availability vs all cases
     selected = [
         marker for marker, count in marker_counts.items()
