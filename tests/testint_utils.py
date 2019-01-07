@@ -15,12 +15,9 @@ class TestRemotePath(TestURLPathBase):
 
     def test_ls(self):
         self.assertEqual(
-            [str(l) for l in self.url.ls()],
+            [str(l) for l in (self.url / "histogram/").ls()],
             [
-                f"{self.name}/test_cases.json",
-                f"{self.name}/histogram/",
-                f"{self.name}/small_dataset/",
-                f"{self.name}/som/",
+                f"{self.name}/histogram/abstract_normal/",
             ]
         )
 

@@ -250,11 +250,11 @@ def create_filtered_data(config, pathconfig=None):
     return data
 
 
-def create_indiv_soms(data, config, path, tensorboard_dir=None, pathconfig=None, references=None):
+def create_indiv_soms(data, config, path, tensorboard_dir=None, pathconfig=None, reference=None):
     """Create indiv soms using a generator."""
     path = utils.URLPath(path)
-    if references:
-        selected_markers = {k: list(v.columns) for k, v in references.items()}
+    if reference:
+        selected_markers = {k: list(v.columns) for k, v in reference.items()}
         data = data.filter(selected_markers=selected_markers)
     else:
         selected_markers = None
@@ -269,10 +269,10 @@ def create_indiv_soms(data, config, path, tensorboard_dir=None, pathconfig=None,
             used_channels = tubedata.markers
         else:
             used_channels = selected_markers[tube]
-        reference = references[tube]
+        treference = reference[tube]
 
         model = tfsom.SOMNodes(
-            reference=reference,
+            reference=treference,
             channels=used_channels,
             tube=tube,
             randnums=config("randnums"),
@@ -307,14 +307,14 @@ def generate_soms(args):
     print(f"Create individual SOM in {output_dir}")
 
     if config("reference"):
-        references = generate_reference(args)
+        reference = generate_reference(args)
     else:
-        references = None
+        reference = None
 
     data = create_filtered_data(config, pathconfig=args.pathconfig)
 
     metadata = create_indiv_soms(
-        data, config, output_dir, references=references,
+        data, config, output_dir, reference=reference,
         tensorboard_dir=args.tensorboard, pathconfig=args.pathconfig)
 
     utils.save_csv(metadata, output_dir + ".csv")

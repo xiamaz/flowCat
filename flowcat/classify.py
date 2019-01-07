@@ -305,7 +305,7 @@ def save_model(model, sequence, config, path, history=None, weights=None, datase
 
 def load_som_model(path):
     config = configuration.SOMConfig.from_file(path / "config.toml")
-    references = som.load_som(path / "reference", tubes=config("dataset", "filters", "tubes"), suffix=True)
+    reference = som.load_som(path / "reference", tubes=config("dataset", "filters", "tubes"), suffix=True)
 
     # copy fitmap args into normal args
     fitmap_args = config.data["somnodes"]["fitmap_args"]
@@ -316,7 +316,7 @@ def load_som_model(path):
     config.data["tfsom"]["end_radius"] = fitmap_args["end_radius"]
 
     def create_som(case):
-        return som.create_som([case], config, reference=references)
+        return som.create_som([case], config, reference=reference)
 
     return create_som
 

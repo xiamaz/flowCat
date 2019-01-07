@@ -88,8 +88,19 @@ def create_configuration_reference(refpath):
     })
 
 
+def assert_som_equal(som_a, som_b, tubes=None):
+    if tubes is None:
+        tubes = [1, 2]
+    for tube in tubes:
+        assert_frame_equal(som_a[tube], som_b[tube], check_dtype=False)
+
+
 class TestSOMCreation(unittest.TestCase):
-    """Multiple SOM creation scenarios."""
+    """Multiple SOM creation scenarios.
+
+    Check for reproducibility with a predefined seed will be checked with
+    different runs on the same machine.
+    """
 
     @classmethod
     def setUpClass(cls):
@@ -97,35 +108,58 @@ class TestSOMCreation(unittest.TestCase):
             shared.get_test_dataset("small_dataset"))
 
     def test_single_case_som(self):
-        """Create a SOM using a single case."""
-        orig = som.load_som(shared.DATAPATH / "som_seed42", [1, 2], suffix=False)
-
+        """Create a SOM using a single case. Check that results using the
+        same seed stay the same."""
         tcase = create_single_case("cll1")
         config = create_configuration()
-        result = som.create_som([tcase], config, seed=42)
 
-        assert_frame_equal(orig[1], result[1], check_dtype=False)
-        assert_frame_equal(orig[2], result[2], check_dtype=False)
+        for seed in [42, 32]:
+            with self.subTest(seed=seed):
+                result_a = som.create_som([tcase], config, seed=seed)
+                result_b = som.create_som([tcase], config, seed=seed)
+                assert_som_equal(result_a, result_b)
+
+        with self.subTest("different seeds"):
+            result_a = som.create_som([tcase], config, seed=20)
+            result_b = som.create_som([tcase], config, seed=10)
+            with self.assertRaises(AssertionError):
+                assert_som_equal(result_a, result_b)
 
     def test_reference_initialization(self):
         """Generate SOM using weights from previous SOM for initialization."""
-        orig = som.load_som(shared.DATAPATH / "ref_som_seed42", [1, 2], suffix=False)
-
         tcase = create_single_case("cll2")
         config = create_configuration_reference(shared.DATAPATH / "som_seed42")
-        result = som.create_som([tcase], config, seed=42)
+        reference = som.load_som(shared.DATAPATH / "som_seed42", [1, 2], suffix=False)
 
-        assert_frame_equal(orig[1], result[1], check_dtype=False)
-        assert_frame_equal(orig[2], result[2], check_dtype=False)
+        with self.subTest("seeded"):
+            result_a = som.create_som([tcase], config, seed=42, reference=reference)
+            result_b = som.create_som([tcase], config, seed=42, reference=reference)
+            assert_som_equal(result_a, result_b)
+
+        # check that not using a reference will consistently return different
+        # values
+        with self.subTest("no reference"):
+            nconfig = config.copy()
+            nconfig.data["tfsom"]["initialization_method"] = "random"
+            result_nonref = som.create_som([tcase], nconfig, seed=42, reference=None)
+            with self.assertRaises(AssertionError):
+                assert_som_equal(result_a, result_nonref)
+
+        # check that training for 0 epochs will return the original reference
+        with self.subTest("no training"):
+            nconfig = config.copy()
+            nconfig.data["tfsom"]["max_epochs"] = 0
+            result_same = som.create_som([tcase], nconfig, seed=42, reference=reference)
+            assert_som_equal(result_same, reference)
 
     def test_indiv_soms(self):
         """Generation of multiple SOMs from one reference."""
         sompath = utils.URLPath(shared.DATAPATH / "indivsom")
 
         config = create_configuration_reference(shared.DATAPATH / "som_seed42")
-        references = som.load_som(config("reference"), [1, 2], suffix=False)
+        reference = som.load_som(config("reference"), [1, 2], suffix=False)
 
         data = self.cases.filter(tubes=[1, 2])
-        result = som.create_indiv_soms(data, config,  sompath, references=references)
+        result = som.create_indiv_soms(data, config,  sompath, reference=reference)
         config.to_file(sompath / "config.toml")
         utils.save_csv(result, sompath + ".csv")

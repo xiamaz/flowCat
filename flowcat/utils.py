@@ -148,7 +148,7 @@ class S3Backend(FileBackend):
             else:
                 break
 
-        if len(prefixes) == 1 and not files:
+        if len(prefixes) == 1 and not files and prefixes[0] == path:
             return self.ls(
                 netloc, path + "/", files_only=files_only, delimiter=delimiter)
         return [p.replace(path, "") for p in (files + prefixes)]
