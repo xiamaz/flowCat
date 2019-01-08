@@ -108,6 +108,7 @@ hi_groups = {
 configs = create_subsample_size_tests()
 
 for name, config in configs.items():
+    print(f"Generating {name}")
     som_groups = {
         case.id: {
             "som": som.create_som([case], config, seed=SEED),
