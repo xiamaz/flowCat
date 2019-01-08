@@ -217,6 +217,7 @@ class SOMConfig(Config):
                 "counts": ((int, None), 8192),
             },
             "selected_markers": ((dict, None), None),
+            "preprocessing": ((str,), "scale"),
         },
         "reference": ((str, None), None),
         "randnums": ((dict,), {}),

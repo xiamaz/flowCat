@@ -41,7 +41,8 @@ class ReferenceConfig(configuration.SOMConfig):
                     "counts": subsample_size,
                     "infiltration": None,
                     "infiltration_max": None,
-                }
+                },
+                "preprocessing": "zscore",
             },
             "tfsom": {
                 "model_name": name,
@@ -81,7 +82,8 @@ class IndivConfig(configuration.SOMConfig):
                     "counts": subsample_size,
                     "infiltration": None,
                     "infiltration_max": None,
-                }
+                },
+                "preprocessing": "zscore",
             },
             "tfsom": {
                 "model_name": name,
@@ -117,12 +119,13 @@ def create_datasets(cases, dataset_config):
     filters = dataset_config["filters"]
     tubes = filters["tubes"]
     markers = dataset_config["selected_markers"]
+    preprocessing = tfsom.get_generator(dataset_config["preprocessing"])
 
     dataset = case_dataset.CaseView(cases, selected_markers=markers, selected_tubes=tubes)
 
     for tube in tubes:
         tubeview = dataset.get_tube(tube)
-        yield tube, tfsom.create_z_score_generator(tubeview)
+        yield tube, preprocessing(tubeview)
 
 
 def create_som(cases, config, tensorboard_path=None, seed=None, reference=None):
@@ -276,6 +279,7 @@ def create_indiv_soms(data, config, path, tensorboard_dir=None, pathconfig=None,
             channels=used_channels,
             tube=tube,
             randnums=config("randnums"),
+            preprocessing=config("dataset", "preprocessing"),
             **config("somnodes"),
             **config("tfsom"),
             tensorboard_dir=tensorboard_dir,

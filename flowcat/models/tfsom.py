@@ -844,6 +844,15 @@ def create_label_generator(samples, randnums=None):
     return generator_fun, length
 
 
+def create_min_max_generator(samples, randnums=None):
+    datagen, length = create_generator(samples, randnums=randnums)
+
+    def generator_fun():
+        for _, case in datagen():
+            yield case.data.scale().data
+    return generator_fun, length
+
+
 def create_z_score_generator(samples, randnums=None, scaler=None):
     """Normalize channel information for mean and standard deviation.
     Args:
@@ -865,10 +874,20 @@ def create_z_score_generator(samples, randnums=None, scaler=None):
     return generator_fun, length
 
 
+def get_generator(name):
+    if name == "scale":
+        create_generator = create_min_max_generator
+    elif name == "zscore":
+        create_generator = create_z_score_generator
+    else:
+        raise KeyError(f"Preprocessing {name} has to be either: scale, zscore")
+    return create_generator
+
+
 class SOMNodes:
     """Transform FCS data into SOM nodes, optionally with number of mapped counts."""
 
-    def __init__(self, counts=False, fitmap_args=None, randnums=None, *args, **kwargs):
+    def __init__(self, counts=False, fitmap_args=None, randnums=None, preprocessing="scale", *args, **kwargs):
         """
         Args:
             counts: Save counts together with marker channel data.
@@ -881,6 +900,7 @@ class SOMNodes:
         self.history = []
         self._fitmap_args = {} if fitmap_args is None else fitmap_args
         self._randnums = {} if randnums is None else randnums
+        self._preprocessing = preprocessing
 
     def fit(self, X, *_):
         """Optionally train the model on the provided data."""
@@ -909,7 +929,7 @@ class SOMNodes:
         Yields:
             Dataframe with som node weights and optionally counts.
         """
-        datagen, length = create_z_score_generator(X, self._randnums)
+        datagen, length = get_generator(self._preprocessing)(X, self._randnums)
         labelgen, length = create_label_generator(X, self._randnums)
         labels = list(labelgen())
         for i, (weights, counts, count_prev) in enumerate(
