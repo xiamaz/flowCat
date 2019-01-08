@@ -58,32 +58,35 @@ def create_subsample_size_tests():
     return configs
 
 
-def different_epochs():
+def sample_more_epochs():
 
-    config = configuration.SOMConfig({
-        "name": "hcltest",
-        "dataset": {
-            "filters": {
-                "tubes": [1, 2, 3],
+    configs = {}
+    for epochs in [10, 50, 100]:
+        config = configuration.SOMConfig({
+            "name": "hcltest",
+            "dataset": {
+                "filters": {
+                    "tubes": [1, 2, 3],
+                },
+                "selected_markers": mappings.CHANNEL_CONFIGS["CLL-9F"],
             },
-            "selected_markers": mappings.CHANNEL_CONFIGS["CLL-9F"],
-        },
-        "tfsom": {
-            "model_name": "hcltest",
-            "map_type": "toroid",
-            "max_epochs": 10,
-            "subsample_size": 1024,
-            "initial_learning_rate": 0.5,
-            "end_learning_rate": 0.1,
-            "learning_cooling": "linear",
-            "initial_radius": 16,
-            "end_radius": 1,
-            "radius_cooling": "linear",
-            "node_distance": "euclidean",
-            "initialization_method": "random",
-        },
-    })
-    return config
+            "tfsom": {
+                "model_name": "hcltest",
+                "map_type": "toroid",
+                "max_epochs": epochs,
+                "subsample_size": 1024,
+                "initial_learning_rate": 0.5,
+                "end_learning_rate": 0.1,
+                "learning_cooling": "linear",
+                "initial_radius": 16,
+                "end_radius": 1,
+                "radius_cooling": "linear",
+                "node_distance": "euclidean",
+                "initialization_method": "random",
+            },
+        })
+        configs[f"epoch_{epochs}"] = config
+    return configs
 
 
 SEED = 42
@@ -105,7 +108,8 @@ hi_groups = {
 }
 
 
-configs = create_subsample_size_tests()
+# configs = create_subsample_size_tests()
+configs = sample_more_epochs()
 
 for name, config in configs.items():
     print(f"Generating {name}")
