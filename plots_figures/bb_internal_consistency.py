@@ -1,7 +1,7 @@
 # pylint: skip-file
 # flake8: noqa
 import sys
-
+import logging
 import pathlib
 
 import numpy as np
@@ -19,67 +19,120 @@ from flowcat.dataset.case_dataset import CaseCollection
 from flowcat import som, configuration, mappings
 
 
+def create_infil_sorted_group_list(cases, group):
+    return sorted(cases.filter(
+        groups=[group], tubes=[1, 2, 3]
+    ).data, key=lambda c: c.infiltration, reverse=True)
+
+
+def create_subsample_size_tests():
+
+    target_size = 10240
+
+    configs = {}
+    for subsample_size in [16, 64, 256, 1024]:
+        config = configuration.SOMConfig({
+            "name": "hcltest",
+            "dataset": {
+                "filters": {
+                    "tubes": [1, 2, 3],
+                },
+                "selected_markers": mappings.CHANNEL_CONFIGS["CLL-9F"],
+            },
+            "tfsom": {
+                "model_name": "hcltest",
+                "map_type": "toroid",
+                "max_epochs": int(target_size / subsample_size),
+                "subsample_size": subsample_size,
+                "initial_learning_rate": 0.5,
+                "end_learning_rate": 0.1,
+                "learning_cooling": "linear",
+                "initial_radius": 16,
+                "end_radius": 1,
+                "radius_cooling": "linear",
+                "node_distance": "euclidean",
+                "initialization_method": "random",
+            },
+        })
+        configs[f"sample_{subsample_size}"] = config
+    return configs
+
+
+def different_epochs():
+
+    config = configuration.SOMConfig({
+        "name": "hcltest",
+        "dataset": {
+            "filters": {
+                "tubes": [1, 2, 3],
+            },
+            "selected_markers": mappings.CHANNEL_CONFIGS["CLL-9F"],
+        },
+        "tfsom": {
+            "model_name": "hcltest",
+            "map_type": "toroid",
+            "max_epochs": 10,
+            "subsample_size": 1024,
+            "initial_learning_rate": 0.5,
+            "end_learning_rate": 0.1,
+            "learning_cooling": "linear",
+            "initial_radius": 16,
+            "end_radius": 1,
+            "radius_cooling": "linear",
+            "node_distance": "euclidean",
+            "initialization_method": "random",
+        },
+    })
+    return config
+
+
+SEED = 42
+
+
 cases = CaseCollection.from_path("/data/flowcat-data/mll-flowdata/fixedCLL-9F")
 
-# normals = cases.filter(groups=["normal"])
-# over_80 = cases.filter(
-#     groups=["CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL"],
-#     infiltration=80)
+groups = {
+    "CLL": 20,
+    "MZL": 20,
+    "HCL": 5,
+    "FL": 5,
+    "normal": 20,
+}
 
-cll = cases.filter(groups=["CLL"])
-mzl = cases.filter(groups=["MZL"])
+hi_groups = {
+    group: create_infil_sorted_group_list(cases, group)[:num]
+    for group, num in groups.items()
+}
 
-clls = sorted(cll.data, key=lambda c: c.infiltration, reverse=True)
-mzls = sorted(mzl.data, key=lambda c: c.infiltration, reverse=True)
 
-hi_cll = clls[:100]
-hi_mzl = mzls[:100]
+configs = create_subsample_size_tests()
 
-# hcl_1 = cases.get_label("ba1de0efbd9ec6847738ac3060b8a3e23b19b6ad")
-# hcl_2 = cases.get_label("1b5f9e755fda2d8da248565a5534bcff0d846c93")
+for name, config in configs.items():
+    som_groups = {
+        case.id: {
+            "som": som.create_som([case], config, seed=SEED),
+            "group": case.group,
+        }
+        for group, cases in hi_groups.items()
+        for case in cases
+    }
+    tsne = TSNE(random_state=SEED)
 
-config = configuration.SOMConfig({
-    "name": "hcltest",
-    "dataset": {
-        "filters": {
-            "tubes": [1, 2, 3],
-        },
-        "selected_markers": mappings.CHANNEL_CONFIGS["CLL-9F"],
-    },
-    "tfsom": {
-        "model_name": "hcltest",
-        "map_type": "toroid",
-        "max_epochs": 10,
-        "subsample_size": 32,
-        "initial_learning_rate": 0.5,
-        "end_learning_rate": 0.1,
-        "learning_cooling": "linear",
-        "initial_radius": 16,
-        "end_radius": 1,
-        "radius_cooling": "linear",
-        "node_distance": "euclidean",
-        "initialization_method": "random",
-    },
-})
+    colors = ["blue", "red", "green", "brown", "black"]
+    tlabels = np.array([case["group"] for case in som_groups.values()])
+    for tube in [1, 2, 3]:
+        tdata = [case["som"][tube].values.flatten() for case in som_groups.values()]
 
-tbpath = "tensorboard/hcltest"
+        transformed = tsne.fit_transform(tdata)
+        fig, ax = plt.subplots()
+        for i, group in enumerate(groups):
+            ax.scatter(
+                transformed[tlabels == group, 0],
+                transformed[tlabels == group, 1],
+                label=group, color=colors[i])
+        ax.legend()
+        ax.set_title(f"{name} Tube {tube}")
+        fig.savefig(f"{name}_t{tube}.png")
+
+# tbpath = "tensorboard/hcltest"
 # result = som.create_som([hcl_1], config, tensorboard_path=tbpath)
-
-som_cll = [som.create_som([c], config) for c in hi_cll]
-som_mzl = [som.create_som([c], config) for c in hi_mzl]
-
-tsne = TSNE()
-
-tlabels = np.array(["CLL"] * len(som_cll) + ["MZL"] * len(som_mzl))
-colors = ["blue", "red"]
-for tube in [1, 2, 3]:
-    tdata = [d[tube].values.flatten() for d in som_cll + som_mzl]
-    transformed = tsne.fit_transform(tdata)
-    fig, ax = plt.subplots()
-    for i, group in enumerate(["MZL", "CLL"]):
-        ax.scatter(
-            transformed[tlabels == group, 0],
-            transformed[tlabels == group, 1],
-            label=group, color=colors[i])
-    ax.legend()
-    fig.savefig(f"cll_mzl_t{tube}.png")
