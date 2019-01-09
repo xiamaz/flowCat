@@ -1,0 +1,44 @@
+name = "jan19"
+
+[dataset]
+labels = "data/selected_cases.txt"
+preprocessing = "scale"
+
+[tfsom]
+model_name = "jan19"
+m = 32
+n = 32
+map_type = "toroid"
+max_epochs = 50
+batch_size = 1
+subsample_size = 1024
+initial_radius = 16
+initialization_method = "random"
+initial_learning_rate = 0.5
+end_learning_rate = 0.1
+learning_cooling = "exponential"
+end_radius = 1
+radius_cooling = "exponential"
+node_distance = "euclidean"
+
+[randnums]
+
+[dataset.filters]
+num = 1
+counts = 8192
+tubes = [ 1, 2, 3,]
+
+[dataset.selected_markers]
+rnum_1 = [ "FS INT LIN", "SS INT LIN", "FMC7-FITC", "CD10-PE", "IgM-ECD", "CD79b-PC5.5", "CD20-PC7", "CD23-APC", "CD19-APCA750", "CD5-PacBlue", "CD45-KrOr",]
+rnum_2 = [ "FS INT LIN", "SS INT LIN", "Kappa-FITC", "Lambda-PE", "CD38-ECD", "CD25-PC5.5", "CD11c-PC7", "CD103-APC", "CD19-APCA750", "CD22-PacBlue", "CD45-KrOr",]
+rnum_3 = [ "FS INT LIN", "SS INT LIN", "CD8-FITC", "CD4-PE", "CD3-ECD", "CD56-APC", "CD19-APCA750", "HLA-DR-PacBlue", "CD45-KrOr",]
+
+[dataset.names]
+FCS = "decCLL-9F"
+
+[somnodes.fitmap_args]
+max_epochs = 10
+initial_learn = 0.5
+end_learn = 0.1
+initial_radius = 16
+end_radius = 1
