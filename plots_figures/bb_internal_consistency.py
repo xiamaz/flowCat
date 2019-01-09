@@ -20,9 +20,11 @@ from flowcat import som, configuration, mappings
 
 
 def create_infil_sorted_group_list(cases, group):
-    return sorted(cases.filter(
-        groups=[group], tubes=[1, 2, 3]
-    ).data, key=lambda c: c.infiltration, reverse=True)
+    filtered = cases.filter(groups=[group], tubes=[1, 2, 3])
+    # remove zero infiltration from cohorts not normal
+    if group != "normal":
+        filtered = [c for c in filtered if c.infiltration > 0]
+    return sorted(filtered, key=lambda c: c.infiltration, reverse=True)
 
 
 def create_subsample_size_tests():
@@ -38,6 +40,7 @@ def create_subsample_size_tests():
                     "tubes": [1, 2, 3],
                 },
                 "selected_markers": mappings.CHANNEL_CONFIGS["CLL-9F"],
+                "preprocessing": "scale",
             },
             "tfsom": {
                 "model_name": "hcltest",
@@ -61,6 +64,7 @@ def create_subsample_size_tests():
 def sample_more_epochs():
 
     configs = {}
+    # for epochs in [10, 50, 100]:
     for epochs in [10, 50, 100]:
         config = configuration.SOMConfig({
             "name": "hcltest",
@@ -107,9 +111,15 @@ hi_groups = {
     for group, num in groups.items()
 }
 
+lo_groups = {
+    group: create_infil_sorted_group_list(cases, group)[::-1][:num]
+    for group, num in groups.items()
+}
+
 
 # configs = create_subsample_size_tests()
 configs = sample_more_epochs()
+sel_groups = hi_groups
 
 for name, config in configs.items():
     print(f"Generating {name}")
@@ -118,7 +128,7 @@ for name, config in configs.items():
             "som": som.create_som([case], config, seed=SEED),
             "group": case.group,
         }
-        for group, cases in hi_groups.items()
+        for group, cases in sel_groups.items()
         for case in cases
     }
     tsne = TSNE(random_state=SEED)
@@ -136,8 +146,8 @@ for name, config in configs.items():
                 transformed[tlabels == group, 1],
                 label=group, color=colors[i])
         ax.legend()
-        ax.set_title(f"{name} Tube {tube}")
-        fig.savefig(f"{name}_t{tube}.png")
+        ax.set_title(f"Scaled only Hi infiltration {name} Tube {tube}")
+        fig.savefig(f"scaled_{name}_t{tube}.png")
 
 # tbpath = "tensorboard/hcltest"
 # result = som.create_som([hcl_1], config, tensorboard_path=tbpath)
