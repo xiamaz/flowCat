@@ -86,7 +86,8 @@ def generate_reference(args):
 
     if path.exists():
         print(f"Loading existing references in {path}")
-        return som.load_som(path, args.refconfig("dataset", "filters", "tubes"), suffix=False)
+        tubes = args.refconfig("dataset", "filters", "tubes")
+        return som.load_som(path, tubes, suffix=False)
 
     data = create_new_reference(args)
     print(f"Saving reference SOM in {path}")

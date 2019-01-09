@@ -210,11 +210,11 @@ class SOMConfig(Config):
             "names": (({str: str},), {"FCS": "fixedCLL-9F"}),
             "filters": {
                 "tubes": (([int],), [1, 2]),
-                "num": ((int, None), 1),
+                "num": ((int, None), None),
                 "groups": (([str], None), None),
                 "infiltration": ((float, int, None), None),
                 "infiltration_max": ((float, int, None), None),
-                "counts": ((int, None), 8192),
+                "counts": ((int, None), None),
             },
             "selected_markers": ((dict,), None),
             "preprocessing": ((str,), "scale"),

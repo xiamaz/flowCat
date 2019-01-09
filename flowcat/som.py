@@ -205,8 +205,9 @@ def create_filtered_data(config, pathconfig=None):
         casespath = config("dataset", "names", "FCS")
 
     labels = utils.load_labels(config("dataset", "labels"))
+    filters = config("dataset", "filters")
     cases = case_dataset.CaseCollection.from_path(casespath)
-    data = cases.filter(labels=labels, **config("dataset", "filters"))
+    data = cases.filter(labels=labels, **filters)
 
     return data
 
