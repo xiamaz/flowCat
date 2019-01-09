@@ -7,6 +7,7 @@ import argparse
 import logging
 
 from flowcat import utils, configuration, mappings, som
+from flowcat.dataset import case_dataset
 
 
 LOGGER = logging.getLogger(__name__)
@@ -54,6 +55,69 @@ def run_infiltration(args):
         som.generate_reference(args)
 
 
+def create_new_reference(args):
+    """Create a new reference SOM."""
+    config = args.refconfig
+    print(f"Creating reference SOM with name {config('name')}")
+
+    casespath = utils.get_path(config("dataset", "names", "FCS"), args.pathconfig("input", "FCS"))
+    cases = case_dataset.CaseCollection.from_path(casespath)
+    labels = utils.load_labels(config("dataset", "labels"))
+    data = cases.filter(labels=labels, **config("dataset", "filters"))
+
+    if args.tensorboard:
+        tensorboard_path = args.tensorboard / args.name
+        print(f"Creating tensorboard logs in {tensorboard_path}")
+    else:
+        tensorboard_path = None
+
+    # load reference if available
+    reference = config("reference")
+    if reference is not None:
+        reference = som.load_som(reference, config("dataset", "filters", "tubes"), suffix=False)
+
+    return som.create_som(data, config, tensorboard_path, reference=reference)
+
+
+def generate_reference(args):
+    """Generate a reference SOMmap using the given configuration."""
+    # load existing if it already exists
+    path = utils.URLPath(args.pathconfig("output", "som-reference"), args.refconfig("name"))
+
+    if path.exists():
+        print(f"Loading existing references in {path}")
+        return som.load_som(path, args.refconfig("dataset", "filters", "tubes"), suffix=False)
+
+    data = create_new_reference(args)
+    print(f"Saving reference SOM in {path}")
+    som.save_som(data, path, suffix=False)
+    # Save reference configuration
+    args.refconfig.to_file(som.get_config_path(path))
+
+    return data
+
+
+def generate_soms(args):
+    config = args.indivconfig
+    output_dir = utils.URLPath(args.pathconfig("output", "som-sample"), config("name"))
+    print(f"Create individual SOM in {output_dir}")
+
+    if config("reference"):
+        reference = generate_reference(args)
+    else:
+        reference = None
+
+    data = som.create_filtered_data(config, pathconfig=args.pathconfig)
+
+    metadata = som.create_indiv_soms(
+        data, config, output_dir, reference=reference,
+        tensorboard_dir=args.tensorboard, pathconfig=args.pathconfig)
+
+    utils.save_csv(metadata, output_dir + ".csv")
+
+    config.to_file(output_dir / "config.toml")
+
+
 def main():
     configure_print_logging()
 
@@ -74,7 +138,7 @@ def main():
     parser_conf = subparsers.add_parser("config", help="Generate the config to a specified directory")
     parser_conf.add_argument(
         "--type",
-        choices=["refconfig", "somconfig", "pathconfig"],
+        choices=["refconfig", "indivconfig", "pathconfig"],
         help="Generate reference or individual SOM config",
         default="refconfig")
     parser_conf.add_argument(
@@ -83,13 +147,14 @@ def main():
         default="")
     parser_conf.set_defaults(fun=run_config)
 
-    parser_create = subparsers.add_parser("som", help="Generate individual SOM, will also create reference if missing")
+    parser_create = subparsers.add_parser(
+        "som", help="Generate individual SOM, will also create reference if missing")
     parser_create.add_argument(
         "--no-recreate-samples", help="Do not regenerate already created individual samples", action="store_true")
-    parser_create.set_defaults(fun=som.generate_soms)
+    parser_create.set_defaults(fun=generate_soms)
 
     parser_ref = subparsers.add_parser("reference", help="Generate reference SOM")
-    parser_ref.set_defaults(fun=som.generate_reference)
+    parser_ref.set_defaults(fun=generate_reference)
 
     parser_each = subparsers.add_parser("group", help="Create ref for each group.")
     parser_each.set_defaults(fun=run_groups)
@@ -104,10 +169,10 @@ def main():
         args.refconfig = som.ReferenceConfig.from_file(args.refconfig)
     else:
         args.refconfig = som.ReferenceConfig.generate_config(args)
-    if args.somconfig:
-        args.somconfig = som.IndivConfig.from_file(args.somconfig)
+    if args.indivconfig:
+        args.indivconfig = som.IndivConfig.from_file(args.indivconfig)
     else:
-        args.somconfig = som.IndivConfig.generate_config(args)
+        args.indivconfig = som.IndivConfig.generate_config(args)
 
     if hasattr(args, "fun"):
         args.fun(args)

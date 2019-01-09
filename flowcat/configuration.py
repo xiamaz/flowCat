@@ -216,7 +216,7 @@ class SOMConfig(Config):
                 "infiltration_max": ((float, int, None), None),
                 "counts": ((int, None), 8192),
             },
-            "selected_markers": ((dict, None), None),
+            "selected_markers": ((dict,), None),
             "preprocessing": ((str,), "scale"),
         },
         "reference": ((str, None), None),

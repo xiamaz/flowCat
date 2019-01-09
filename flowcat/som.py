@@ -10,7 +10,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from . import configuration, utils
+from . import configuration, utils, mappings
 from .dataset import case_dataset
 from .models import tfsom
 
@@ -43,6 +43,7 @@ class ReferenceConfig(configuration.SOMConfig):
                     "infiltration_max": None,
                 },
                 "preprocessing": "zscore",
+                "selected_markers": mappings.CHANNEL_CONFIGS["CLL-9F"],
             },
             "tfsom": {
                 "model_name": name,
@@ -84,6 +85,7 @@ class IndivConfig(configuration.SOMConfig):
                     "infiltration_max": None,
                 },
                 "preprocessing": "zscore",
+                "selected_markers": mappings.CHANNEL_CONFIGS["CLL-9F"],
             },
             "tfsom": {
                 "model_name": name,
@@ -195,50 +197,6 @@ def save_som(data, path, suffix=False):
         utils.save_csv(somdata, outpath)
 
 
-def create_new_reference(args):
-    """Create a new reference SOM."""
-    config = args.refconfig
-    print(f"Creating reference SOM with name {config('name')}")
-
-    casespath = utils.get_path(config("dataset", "names", "FCS"), args.pathconfig("input", "FCS"))
-    cases = case_dataset.CaseCollection.from_path(casespath)
-    labels = utils.load_labels(config("dataset", "labels"))
-    data = cases.filter(labels=labels, **config("dataset", "filters"))
-
-    config.data["dataset"]["selected_markers"] = {str(k): v for k, v in data.selected_markers.items()}
-
-    if args.tensorboard:
-        tensorboard_path = args.tensorboard / args.name
-        print(f"Creating tensorboard logs in {tensorboard_path}")
-    else:
-        tensorboard_path = None
-
-    # load reference if available
-    reference = config("reference")
-    if reference is not None:
-        reference = load_som(reference, config("dataset", "filters", "tubes"), suffix=False)
-
-    return create_som(data, config, tensorboard_path, reference=reference)
-
-
-def generate_reference(args):
-    """Generate a reference SOMmap using the given configuration."""
-    # load existing if it already exists
-    path = utils.URLPath(args.pathconfig("output", "som-reference"), args.refconfig("name"))
-
-    if path.exists():
-        print(f"Loading existing references in {path}")
-        return load_som(path, args.refconfig("dataset", "filters", "tubes"), suffix=False)
-
-    data = create_new_reference(args)
-    print(f"Saving reference SOM in {path}")
-    save_som(data, path, suffix=False)
-    # Save reference configuration
-    args.refconfig.to_file(get_config_path(path))
-
-    return data
-
-
 def create_filtered_data(config, pathconfig=None):
     """Create filtered dataset."""
     if pathconfig is not None:
@@ -303,24 +261,3 @@ def create_indiv_soms(data, config, path, tensorboard_dir=None, pathconfig=None,
             time_a = time_b
 
     return pd.DataFrame(meta)
-
-
-def generate_soms(args):
-    config = args.somconfig
-    output_dir = utils.URLPath(args.pathconfig("output", "som-sample"), config("name"))
-    print(f"Create individual SOM in {output_dir}")
-
-    if config("reference"):
-        reference = generate_reference(args)
-    else:
-        reference = None
-
-    data = create_filtered_data(config, pathconfig=args.pathconfig)
-
-    metadata = create_indiv_soms(
-        data, config, output_dir, reference=reference,
-        tensorboard_dir=args.tensorboard, pathconfig=args.pathconfig)
-
-    utils.save_csv(metadata, output_dir + ".csv")
-
-    config.to_file(output_dir / "config.toml")
