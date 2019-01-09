@@ -129,21 +129,22 @@ for name, config in configs.items():
     som_groups = {
         case.id: {
             "som": som.create_som([case], config, seed=SEED),
-            "group": case.group,
+            "group": group,
         }
         for group, cases in sel_groups.items()
         for case in cases
     }
     tsne = TSNE(random_state=SEED)
 
-    colors = ["blue", "red", "green", "orange", "gray", "dark blue", "dark red", "dark green", "dark orange", "black"]
+    colors = ["blue", "red", "green", "orange", "gray", "darkblue", "darkred", "darkgreen", "darkorange", "black"]
     tlabels = np.array([case["group"] for case in som_groups.values()])
     for tube in [1, 2, 3]:
         tdata = [case["som"][tube].values.flatten() for case in som_groups.values()]
 
         transformed = tsne.fit_transform(tdata)
         fig, ax = plt.subplots()
-        for i, group in enumerate(groups):
+        for i, group in enumerate(sel_groups):
+            print(colors[i])
             ax.scatter(
                 transformed[tlabels == group, 0],
                 transformed[tlabels == group, 1],
