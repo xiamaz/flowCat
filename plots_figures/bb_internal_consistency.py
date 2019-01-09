@@ -134,13 +134,13 @@ for name, config in configs.items():
         for group, cases in sel_groups.items()
         for case in cases
     }
-    tsne = TSNE(random_state=SEED)
 
     colors = ["blue", "red", "green", "orange", "gray", "darkblue", "darkred", "darkgreen", "darkorange", "black"]
     tlabels = np.array([case["group"] for case in som_groups.values()])
     for tube in [1, 2, 3]:
         tdata = [case["som"][tube].values.flatten() for case in som_groups.values()]
 
+        tsne = TSNE(random_state=SEED)
         transformed = tsne.fit_transform(tdata)
         fig, ax = plt.subplots()
         for i, group in enumerate(sel_groups):
