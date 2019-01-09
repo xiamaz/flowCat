@@ -19,6 +19,9 @@ from flowcat.dataset.case_dataset import CaseCollection
 from flowcat import som, configuration, mappings
 
 
+OUTPUT_DIR = "output/som-tsne"
+
+
 def create_infil_sorted_group_list(cases, group):
     filtered = cases.filter(groups=[group], tubes=[1, 2, 3])
     # remove zero infiltration from cohorts not normal
@@ -107,19 +110,19 @@ groups = {
 }
 
 hi_groups = {
-    group: create_infil_sorted_group_list(cases, group)[:num]
+    group + "_hi": create_infil_sorted_group_list(cases, group)[:num]
     for group, num in groups.items()
 }
 
 lo_groups = {
-    group: create_infil_sorted_group_list(cases, group)[::-1][:num]
+    group + "_lo": create_infil_sorted_group_list(cases, group)[::-1][:num]
     for group, num in groups.items()
 }
 
 
 # configs = create_subsample_size_tests()
 configs = sample_more_epochs()
-sel_groups = hi_groups
+sel_groups = dict(hi_groups, **lo_groups)
 
 for name, config in configs.items():
     print(f"Generating {name}")
@@ -133,7 +136,7 @@ for name, config in configs.items():
     }
     tsne = TSNE(random_state=SEED)
 
-    colors = ["blue", "red", "green", "brown", "black"]
+    colors = ["blue", "red", "green", "orange", "gray", "dark blue", "dark red", "dark green", "dark orange", "black"]
     tlabels = np.array([case["group"] for case in som_groups.values()])
     for tube in [1, 2, 3]:
         tdata = [case["som"][tube].values.flatten() for case in som_groups.values()]
@@ -147,7 +150,7 @@ for name, config in configs.items():
                 label=group, color=colors[i])
         ax.legend()
         ax.set_title(f"Scaled only Hi infiltration {name} Tube {tube}")
-        fig.savefig(f"scaled_{name}_t{tube}.png")
+        fig.savefig(f"hilo_scaled_{name}_t{tube}.png")
 
 # tbpath = "tensorboard/hcltest"
 # result = som.create_som([hcl_1], config, tensorboard_path=tbpath)
