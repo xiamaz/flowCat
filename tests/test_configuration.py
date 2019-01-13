@@ -190,10 +190,10 @@ class TestSOMConfig(unittest.TestCase):
                 configuration.SOMConfig({})
 
         with self.subTest("minimal initialization"):
-            configuration.SOMConfig({"name": "test", "tfsom": {"model_name": "test"}})
+            configuration.SOMConfig({"name": "test", "tfsom": {"model_name": "test"}, "dataset": {"selected_markers": {}}})
 
     def test_getter(self):
-        t = configuration.SOMConfig({"name": "test", "tfsom": {"model_name": "test"}})
+        t = configuration.SOMConfig({"name": "test", "tfsom": {"model_name": "test"}, "dataset": {"selected_markers": {}}})
         self.assertEqual(t("dataset", "names", "FCS"), "fixedCLL-9F")
         self.assertEqual(t("tfsom", "model_name"), "test")
         self.assertEqual(t("tfsom")["model_name"], "test")
