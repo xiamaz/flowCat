@@ -77,7 +77,7 @@ class Case:
             # required keys
             assert_in_dict(CASE_REQUIRED_FIELDS, data)
             self.id = data["id"]
-            self.date = datetime.strptime(data["date"], "%Y-%m-%d").date()
+            self.date = utils.str_to_date(data["date"])
             self.filepaths = data["filepaths"]
 
             # optional keys

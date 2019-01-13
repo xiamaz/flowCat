@@ -37,6 +37,10 @@ else:
     CLOBBER = False
 
 
+def str_to_date(strdate):
+    return datetime.datetime.strptime(strdate, "%Y-%m-%d").date()
+
+
 def get_path(dname, dpaths):
     """Get an existing dataset name from a list of paths."""
     for path in dpaths:

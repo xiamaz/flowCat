@@ -79,7 +79,7 @@ class SOMClassifierConfig(configuration.ClassificationConfig):
                     "epoch_size": None,
                 },
             },
-            "run": {
+            "fit": {
                 "train_epochs": 100,
                 "validation": False,
                 "pregenerate": True,

@@ -4,12 +4,13 @@ Classes for managing collections of case and tubecase objects.
 import random
 import logging
 import collections
+import datetime
 
 import pandas as pd
 from sklearn import model_selection
 
 from .case import Case
-from .. import mappings
+from .. import mappings, utils
 from ..utils import load_json, URLPath
 
 
@@ -61,6 +62,53 @@ def deduplicate_cases_by_sureness(data):
     if len(duplicates):
         LOGGER.warning("%d duplicates removed", len(duplicates))
     return deduplicated
+
+
+def filter_cases_date(cases, date_min=None, date_max=None):
+    """Exclude all cases outside the given date range"""
+    if date_min is not None and not isinstance(date_min, datetime.date):
+        date_min = utils.str_to_date(date_min)
+    if date_max is not None and not isinstance(date_max, datetime.date):
+        date_max = utils.str_to_date(date_max)
+
+    if date_min is not None:
+        cases = [case for case in cases if case.date >= date_min]
+    if date_max is not None:
+        cases = [case for case in cases if case.date <= date_max]
+    return cases
+
+
+def filter_cases_infiltration(cases, infiltration_min=None, infiltration_max=None):
+    LOGGER.debug(
+        "Filter Infiltration %s - %s", str(infiltration_min), str(infiltration_max))
+    if infiltration_min is not None:
+        cases = [
+            case for case in cases
+            if case.infiltration >= infiltration_min
+            or case.group in mappings.NO_INFILTRATION
+        ]
+    if infiltration_max is not None:
+        cases = [
+            case for case in cases
+            if case.infiltration <= infiltration_max
+            or case.group in mappings.NO_INFILTRATION
+        ]
+    return cases
+
+
+def filter_cases_groups(cases, groups=None):
+    if groups is not None:
+        LOGGER.debug("Filter Groups %s", ", ".join(groups))
+        cases = [case for case in cases if case.group in groups]
+    return cases
+
+
+def filter_cases_labels(cases, labels=None):
+    if labels is not None:
+        LOGGER.debug(
+            "Filter labels using %d labels", len(labels))
+        cases = [case for case in cases if case.id in labels]
+    return cases
 
 
 class IterableMixin(object):
@@ -224,6 +272,8 @@ class CaseIterable(IterableMixin):
             groups=None,
             infiltration=None,
             infiltration_max=None,
+            date_min=None,
+            date_max=None,
             counts=None,
             materials=None,
             selected_markers=None,
@@ -240,29 +290,11 @@ class CaseIterable(IterableMixin):
         # or a preselection of cases
         data = self._data
 
-        if groups is not None:
-            LOGGER.debug(
-                "Filter Groups %s", ", ".join(groups))
-            data = [case for case in data if case.group in groups]
-
-        if labels is not None:
-            LOGGER.debug(
-                "Filter labels using %d labels", len(labels))
-            data = [case for case in data if case.id in labels]
-
-        if infiltration or infiltration_max:
-            if infiltration is None:
-                infiltration = 0
-            if infiltration_max is None:
-                infiltration_max = 100
-            LOGGER.debug(
-                "Filter Infiltration %d - %d", infiltration, infiltration_max)
-            data = [
-                d for d in data
-                if (
-                    d.infiltration >= infiltration and d.infiltration <= infiltration_max
-                ) or d.group in mappings.NO_INFILTRATION
-            ]
+        data = filter_cases_groups(data, groups)
+        data = filter_cases_labels(data, labels)
+        data = filter_cases_date(data, date_min=date_min, date_max=date_max)
+        data = filter_cases_infiltration(
+            data, infiltration_min=infiltration, infiltration_max=infiltration_max)
 
         # create copy since we will start modifying objects
         data = [d.copy() for d in data]
