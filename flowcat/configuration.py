@@ -269,6 +269,8 @@ class ClassificationConfig(Config):
                 "counts": ((int, None), None),
                 "groups": (([str], None), None),
                 "num": ((int, None), None),
+                "date_min": ((str, None), None),
+                "date_max": ((str, None), None),
             },
             "mapping": ((str, None), None),
         },

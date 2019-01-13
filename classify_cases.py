@@ -12,10 +12,12 @@ LOGGER = logging.getLogger(__name__)
 
 
 def setup_logging_from_args(args):
-    classification_path = args.pathconfig("output", "classification")
-    outpath = utils.URLPath(f"{classification_path}/{config('name')}")
-    logpath = outpath / f"classification.log"
-    logpath.local.parent.mkdir(parents=True, exist_ok=True)
+    logpath = None
+    if args.name:
+        classification_path = args.pathconfig("output", "classification")
+        outpath = utils.URLPath(f"{classification_path}/{args.name}")
+        logpath = outpath / f"classification.log"
+        logpath.local.parent.mkdir(parents=True, exist_ok=True)
     return setup_logging(logpath, printlevel=args_loglevel(args.verbose))
 
 
@@ -47,7 +49,7 @@ def args_loglevel(vlevel):
     return logging.DEBUG
 
 
-def config(args):
+def run_config(args):
     setup_logging(filelog=None, printlevel=logging.ERROR)
     config = getattr(args, args.type)
 
@@ -61,6 +63,13 @@ def config(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Classify samples")
+    parser.add_argument(
+        "--name",
+        help="Set an alternative output name.")
+    parser.add_argument(
+        "-v", "--verbose",
+        help="Control verbosity. -v is info, -vv is debug",
+        action="count")
     configuration.PathConfig.add_to_arguments(parser)
     classify.SOMClassifierConfig.add_to_arguments(parser)
     subparsers = parser.add_subparsers()
@@ -79,7 +88,7 @@ def main():
         choices=["pathconfig", "modelconfig"],
         default="modelconfig",
     )
-    cparser.set_defaults(fun=config)
+    cparser.set_defaults(fun=run_config)
 
     # Run the classification process
     rparser = subparsers.add_parser("run", help="Run classification")
@@ -91,13 +100,6 @@ def main():
         "--model",
         help="Use an existing model",
         type=utils.URLPath) # TODO
-    rparser.add_argument(
-        "--name",
-        help="Set an alternative output name.")
-    rparser.add_argument(
-        "-v", "--verbose",
-        help="Control verbosity. -v is info, -vv is debug",
-        action="count")
     rparser.set_defaults(fun=classify.run)
 
     args = parser.parse_args()
