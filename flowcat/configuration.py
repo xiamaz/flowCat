@@ -46,7 +46,7 @@ def mangle_numeric_keys(data):
     replaced = {}
     for key, value in data.items():
         if str(key).isnumeric():
-            key = f"rnum_{key}"
+            key = f"kint_{key}"
         replaced[key] = mangle_numeric_keys(value) if isinstance(value, dict) else value
     return replaced
 
@@ -54,8 +54,8 @@ def mangle_numeric_keys(data):
 def unmangle_numeric_keys(data):
     cleaned = {}
     for key, value in data.items():
-        if str(key).startswith("rnum_"):
-            key = int(key.replace("rnum_", ""))
+        if str(key).startswith("kint_"):
+            key = int(key.replace("kint_", ""))
         cleaned[key] = unmangle_numeric_keys(value) if isinstance(value, dict) else value
     return cleaned
 
