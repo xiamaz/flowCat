@@ -66,6 +66,7 @@ def deduplicate_cases_by_sureness(data):
 
 def filter_cases_date(cases, date_min=None, date_max=None):
     """Exclude all cases outside the given date range"""
+    len_prev = len(cases)
     if date_min is not None and not isinstance(date_min, datetime.date):
         date_min = utils.str_to_date(date_min)
     if date_max is not None and not isinstance(date_max, datetime.date):
@@ -75,12 +76,13 @@ def filter_cases_date(cases, date_min=None, date_max=None):
         cases = [case for case in cases if case.date >= date_min]
     if date_max is not None:
         cases = [case for case in cases if case.date <= date_max]
+    LOGGER.debug(
+        "Filter Date %s - %s: %d -> %d", str(date_min), str(date_max), len_prev, len(cases))
     return cases
 
 
 def filter_cases_infiltration(cases, infiltration_min=None, infiltration_max=None):
-    LOGGER.debug(
-        "Filter Infiltration %s - %s", str(infiltration_min), str(infiltration_max))
+    len_prev = len(cases)
     if infiltration_min is not None:
         cases = [
             case for case in cases
@@ -93,6 +95,8 @@ def filter_cases_infiltration(cases, infiltration_min=None, infiltration_max=Non
             if case.infiltration <= infiltration_max
             or case.group in mappings.NO_INFILTRATION
         ]
+    LOGGER.debug(
+        "Filter Infiltration %s - %s: %d -> %d", str(infiltration_min), str(infiltration_max), len_prev, len(cases))
     return cases
 
 
