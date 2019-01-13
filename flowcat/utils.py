@@ -43,6 +43,8 @@ def str_to_date(strdate):
 
 def get_path(dname, dpaths):
     """Get an existing dataset name from a list of paths."""
+    if URLPath(dname).exists():
+        return dname
     for path in dpaths:
         dpath = URLPath(path, dname)
         if dpath.exists():
