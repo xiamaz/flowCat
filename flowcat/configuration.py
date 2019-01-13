@@ -1,5 +1,6 @@
 """Manage configuration for different systems."""
 import copy
+import datetime
 
 from . import utils
 
@@ -269,8 +270,8 @@ class ClassificationConfig(Config):
                 "counts": ((int, None), None),
                 "groups": (([str], None), None),
                 "num": ((int, None), None),
-                "date_min": ((str, None), None),
-                "date_max": ((str, None), None),
+                "date_min": ((str, datetime.date, None), None),
+                "date_max": ((str, datetime.date, None), None),
             },
             "mapping": ((str, None), None),
         },
