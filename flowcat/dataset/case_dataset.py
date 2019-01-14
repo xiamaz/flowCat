@@ -125,8 +125,8 @@ def filter_cases_selected_markers(cases, selected_markers=None):
             case for case in cases
             if case.has_selected_markers(selected_markers)
         ]
-        LOGGER.debug("Filter selected markers: %d -> %d", len(labels), prev_len, len(cases))
-    return casea
+        LOGGER.debug("Filter selected markers: %d -> %d", prev_len, len(cases))
+    return cases
 
 
 class IterableMixin(object):
