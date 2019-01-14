@@ -103,6 +103,7 @@ def filter_cases_infiltration(cases, infiltration_min=None, infiltration_max=Non
 def filter_cases_groups(cases, groups=None):
     if groups is not None:
         LOGGER.debug("Filter Groups %s", ", ".join(groups))
+        groups = set(groups)
         cases = [case for case in cases if case.group in groups]
     return cases
 
@@ -111,6 +112,7 @@ def filter_cases_labels(cases, labels=None):
     if labels is not None:
         LOGGER.debug(
             "Filter labels using %d labels", len(labels))
+        labels = set(labels)
         cases = [case for case in cases if case.id in labels]
     return cases
 

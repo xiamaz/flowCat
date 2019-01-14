@@ -39,10 +39,10 @@ class Material(enum.Enum):
 
 
 # probe materials allowed in further processing
-ALLOWED_MATERIALS = [Material.PERIPHERAL_BLOOD, Material.BONE_MARROW]
+ALLOWED_MATERIALS = {Material.PERIPHERAL_BLOOD, Material.BONE_MARROW}
 
 # groups without usable infiltration values
-NO_INFILTRATION = ["normal"]
+NO_INFILTRATION = {"normal"}
 
 # threshold of marker availability for inclusion in dataset
 MARKER_THRESHOLD = 0.9
