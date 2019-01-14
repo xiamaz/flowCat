@@ -71,7 +71,7 @@ class SOMDataset:
 
         return None
 
-    def save_config(self, path):
+    def save_config(self, path, pathconfig=None):
         config = self.get_config()
         if config is None:
             LOGGER.warning("No configuration file found for SOM")
@@ -79,9 +79,11 @@ class SOMDataset:
         config.to_file(path / "config.toml")
 
         # save SOM reference too
-        references = config("reference")
-        if references:
-            refdata = som.load_som(references, self.tubes)
+        reference = config("reference")
+        if reference:
+            if pathconfig is not None:
+                reference = utils.get_path(reference, [pathconfig("output", "som-reference")])
+            refdata = som.load_som(reference, self.tubes)
             som.save_som(refdata, path / "reference", suffix=True)
 
     def get_randnums(self, labels):

@@ -3,18 +3,18 @@ from .. import loaders
 from . import fcs_cnn, histo_nn, som_cnn
 
 
-class ModelType(enum.Enum):
-
-    HISTOGRAM = 1
-    SOM = 2
-    ETEFCS = 3
-
-    @classmethod
+class CaseInsensitiveEnumMeta(enum.EnumMeta):
     def __getitem__(cls, name):
         if isinstance(name, cls):
             return name
         name = name.upper()
-        return super[name]
+        return super().__getitem__(name)
+
+
+class ModelType(enum.Enum, metaclass=CaseInsensitiveEnumMeta):
+    HISTOGRAM = 1
+    SOM = 2
+    ETEFCS = 3
 
 
 MODELS = {

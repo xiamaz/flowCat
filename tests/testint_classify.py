@@ -68,7 +68,7 @@ class TestClassify(unittest.TestCase):
     def test_load_model(self):
         """Loading a model and predicting another case from FCS files."""
         single = create_single_case("cll1")
-        model, transformer, groups = classify.load_model(shared.DATAPATH / "basicmodel")
+        model, transformer, groups, _ = classify.load_model(shared.DATAPATH / "basicmodel")
 
         indata = transformer([single])
         pred_df = classify.predict(model, indata, groups, [single.id])

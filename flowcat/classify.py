@@ -226,7 +226,7 @@ def get_weights_by_name(name, groups):
     return weights
 
 
-def save_model(model, sequence, config, path, history=None, weights=None, dataset=None):
+def save_model(model, sequence, config, path, pathconfig=None, history=None, weights=None, dataset=None):
     """Save the given model to the given path.
 
     This will save the model including all informations needed to load the model
@@ -245,17 +245,20 @@ def save_model(model, sequence, config, path, history=None, weights=None, datase
     modelpath.put(lambda p: model.save(p))
 
     if history is not None:
+        LOGGER.debug("Saving training history")
         histpath = path / "history"
         histpath.put(lambda p: classify_plots.plot_train_history(p, history.history))
         utils.save_pickle(history.history, histpath / "history.p")
 
     if weights is not None:
+        LOGGER.webug("Saving weights")
         save_weights(weights, path)
 
     if dataset is not None:
+        LOGGER.debug("Saving dataset configuration and information necessary to generate SOMs")
         # get configs for each dtype
         for dtype, dset in dataset.datasets.items():
-            dset.save_config(path / dtype.name)
+            dset.save_config(path / dtype.name, pathconfig)
 
     config.to_file(path / "config.toml")
 
@@ -293,6 +296,17 @@ def load_model(path):
     config = configuration.ClassificationConfig.from_file(path / "config.toml")
     dataset_config, output_configs = loaders.load_dataset_config(path / "dataset")
 
+    selected_markers = {
+        int(name.split("_")[-1]): config("channels")
+        for name, config in output_configs.items() if "SOM" in name
+    }
+    # required filters for dataset filtering
+    filters = {
+        "tubes": config("dataset", "filters", "tubes"),
+        "counts": config("dataset", "filters", "counts"),
+        "selected_markers": selected_markers,
+    }
+
     # load model
     model = keras.models.load_model(str((path / "model.h5").get()), compile=False)
     compile_model(model, config=config("model", "compile"))
@@ -311,7 +325,7 @@ def load_model(path):
             for i, tdata in enumerate(transformed):
                 result[i].append(tdata)
         return result
-    return model, transform, dataseq.groups
+    return model, transform, dataseq.groups, filters
 
 
 def save_predictions(df, path):
