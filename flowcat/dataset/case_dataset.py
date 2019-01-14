@@ -102,19 +102,31 @@ def filter_cases_infiltration(cases, infiltration_min=None, infiltration_max=Non
 
 def filter_cases_groups(cases, groups=None):
     if groups is not None:
-        LOGGER.debug("Filter Groups %s", ", ".join(groups))
+        prev_len = len(cases)
         groups = set(groups)
         cases = [case for case in cases if case.group in groups]
+        LOGGER.debug("Filter Groups %s: %d -> %d", ", ".join(groups), prev_len, len(cases))
     return cases
 
 
 def filter_cases_labels(cases, labels=None):
     if labels is not None:
-        LOGGER.debug(
-            "Filter labels using %d labels", len(labels))
+        prev_len = len(cases)
         labels = set(labels)
         cases = [case for case in cases if case.id in labels]
+        LOGGER.debug("Filter %d labels: %d -> %d", len(labels), prev_len, len(cases))
     return cases
+
+
+def filter_cases_selected_markers(cases, selected_markers=None):
+    if selected_markers is not None:
+        prev_len = len(cases)
+        cases = [
+            case for case in cases
+            if case.has_selected_markers(selected_markers)
+        ]
+        LOGGER.debug("Filter selected markers: %d -> %d", len(labels), prev_len, len(cases))
+    return casea
 
 
 class IterableMixin(object):
@@ -325,7 +337,7 @@ class CaseIterable(IterableMixin):
             selected_markers = {tube: get_selected_markers(data, tube) for tube in tubes}
 
         # filter files to have selected markers
-        data = [d for d in data if d.has_selected_markers(selected_markers)]
+        data = filter_cases_selected_markers(data, selected_markers)
 
         # randomly sample num cases from each group
         if num:
