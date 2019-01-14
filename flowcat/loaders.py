@@ -621,6 +621,7 @@ class DatasetSequence(LoaderMixin, Sequence):
     def output_dtypes(self):
         return [o.dtype for o in self._output_spec]
 
+
     def _sample_data(self, data, epoch_size=None, number_per_group=None):
         """
         Get version of the dataset to be used for one epoch. This can be whole

@@ -286,7 +286,9 @@ def load_som_model(path):
     def create_som(case):
         return som.create_som([case], config, reference=reference)
 
-    return create_som
+    selected_markers = config("dataset", "selected_markers")
+
+    return create_som, selected_markers
 
 
 def load_model(path):
@@ -296,10 +298,13 @@ def load_model(path):
     config = configuration.ClassificationConfig.from_file(path / "config.toml")
     dataset_config, output_configs = loaders.load_dataset_config(path / "dataset")
 
-    selected_markers = {
-        int(name.split("_")[-1]): config("channels")
-        for name, config in output_configs.items() if "SOM" in name
-    }
+    # load model
+    model = keras.models.load_model(str((path / "model.h5").get()), compile=False)
+    compile_model(model, config=config("model", "compile"))
+
+    # load dataset loaders
+    sommodel, selected_markers = load_som_model(path / "SOM")
+
     # required filters for dataset filtering
     filters = {
         "tubes": config("dataset", "filters", "tubes"),
@@ -307,19 +312,13 @@ def load_model(path):
         "selected_markers": selected_markers,
     }
 
-    # load model
-    model = keras.models.load_model(str((path / "model.h5").get()), compile=False)
-    compile_model(model, config=config("model", "compile"))
-
-    # load dataset loaders
-    sommodel = load_som_model(path / "SOM")
-
     dataseq = loaders.DatasetSequence.from_config(dataset_config, output_configs)
 
     def transform(cases):
         """Build a transformer closure to transform data into correct format from single cases."""
         result = [[] for i in range(len(dataseq.output_dtypes))]
         for case in cases:
+            print(f"Transforming {case.id}")
             somweights = sommodel(case)
             transformed = dataseq.transform(somweights)
             for i, tdata in enumerate(transformed):

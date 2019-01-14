@@ -63,11 +63,11 @@ def run(args):
     LOGGER.info("Loading cases in %s", casepath)
 
     cases = case_dataset.CaseCollection.from_path(path)
-    LOGGER.debug("Additional filters: %s", filters)
-    cases.filter(labels=labels, **filters)
+    LOGGER.info("Additional filters: %s", filters)
+    filtered = cases.filter(labels=labels, **filters)
 
-    indata = transform(cases)
-    predictions = classify.predict(model, indata, groups, cases.labels)
+    indata = transform(filtered)
+    predictions = classify.predict(model, indata, groups, filtered.labels)
 
     utils.save_csv(predictions, args.output)
 
