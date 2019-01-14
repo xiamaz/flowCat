@@ -451,7 +451,11 @@ def generate_model_inputs(train_data, test_data, config):
     loader_options = config["loader"]
     traindata_args = config["train_args"]
     testdata_args = config["test_args"]
+
+    LOGGER.debug("Creating output spec for model %s.", mtype)
     output_spec = create_output_spec(mtype, loader_options)
+
+    LOGGER.debug("Creating train and test data sequences")
     train = loaders.DatasetSequence.from_data(train_data, output_spec, **traindata_args)
     test = loaders.DatasetSequence.from_data(test_data, output_spec, **testdata_args)
 
