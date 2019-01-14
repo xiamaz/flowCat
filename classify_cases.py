@@ -6,6 +6,7 @@ import logging
 import argparse
 
 from flowcat import utils, classify, configuration
+from flowcat.dataset import combined_dataset
 
 
 LOGGER = logging.getLogger(__name__)
@@ -61,6 +62,42 @@ def run_config(args):
         config.to_file(args.output)
 
 
+def run(args):
+    config = args.modelconfig
+    pathconfig = args.pathconfig
+
+    if args.name:
+        config.data["name"] = args.name
+    classification_path = pathconfig("output", "classification")
+    outpath = utils.URLPath(f"{classification_path}/{config('name')}")
+
+    dataset = combined_dataset.CombinedDataset.from_config(config, pathconfig)
+
+    # split into train and test set
+    LOGGER.info("Splitting dataset")
+    train, test = combined_dataset.split_dataset(dataset, **config("split"), seed=args.seed)
+    utils.save_json(train.labels, outpath / "train_labels.json")
+    utils.save_json(test.labels, outpath / "test_labels.json")
+
+    LOGGER.info("Getting models")
+    model, trainseq, testseq = classify.generate_model_inputs(train, test, config("model"))
+
+    LOGGER.info("Fitting model")
+    if config("fit", "validation"):
+        data_val = testseq
+    else:
+        data_val = None
+    history = classify.fit(model, trainseq, data_val=data_val, config=config("fit"))
+    pred_df = classify.predict_generator(model, testseq)
+
+    classify.save_model(model, trainseq, config, outpath, history=history)
+    classify.save_predictions(pred_df, outpath)
+
+    LOGGER.info("Creating statistics")
+    classify.create_stats(
+        outpath=outpath, dataset=dataset, pred_df=pred_df, **config("stat"))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Classify samples")
     parser.add_argument(
@@ -100,7 +137,7 @@ def main():
         "--model",
         help="Use an existing model",
         type=utils.URLPath) # TODO
-    rparser.set_defaults(fun=classify.run)
+    rparser.set_defaults(fun=run)
 
     args = parser.parse_args()
 
