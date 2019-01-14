@@ -719,15 +719,18 @@ class DatasetSequence(LoaderMixin, Sequence):
         if self._cache[idx] is not None:
             return self._cache[idx]
 
+        LOGGER.debug("Generating batch %d", idx)
         batch_data = self.label_groups[idx * self.batch_size: (idx + 1) * self.batch_size]
 
         # load data using output specs
         xdata = [x(batch_data, self._data) for x in self._output_spec]
+        LOGGER.debug("Loaded data with output spec")
 
         ydata = [g for _, _, g in batch_data]
         ybinary = label_binarize(ydata, classes=self.groups)
 
         if self.sample_weights:
+            LOGGER.debug("Generating sample weights")
             sample_weights = np.array(self._data.get_sample_weights(batch_data)) / self.avg_sample_weight * 5
             return xdata, ybinary, sample_weights
         return xdata, ybinary
