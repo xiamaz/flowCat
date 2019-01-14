@@ -18,7 +18,7 @@ from keras.utils import plot_model
 from . import configuration, utils, mappings, loaders, som
 from .dataset import combined_dataset
 from .visual import classify_plots, plotting
-from .models import weighted_crossentropy, fcs_cnn, histo_nn, som_cnn
+from .models import weighted_crossentropy, classifiers
 
 
 LOGGER = logging.getLogger(__name__)
@@ -459,12 +459,7 @@ def generate_model_inputs(train_data, test_data, config):
     train = loaders.DatasetSequence.from_data(train_data, output_spec, **traindata_args)
     test = loaders.DatasetSequence.from_data(test_data, output_spec, **testdata_args)
 
-    constructors = {
-        "histogram": histo_nn.create_model_histo,
-        "som": som_cnn.create_model_cnn,
-        "etefcs": fcs_cnn.create_model_fcs,
-    }
-    model = constructors[mtype](*train.shape)
+    model = classifiers.mtype_to_model(mtype)(*train.shape)
 
     model = compile_model(model, config=config["compile"])
 
