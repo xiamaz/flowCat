@@ -78,6 +78,14 @@ class Interpreter(cmd.Cmd):
                 elif query["type"] == "p":
                     cases = [
                         c for c in cases if len(c.filepaths) == int(query["query"])]
+                elif query["type"] == "dg":
+                    date_min = utils.str_to_date(query["query"])
+                    cases = [
+                        c for c in cases if c.date >= date_min]
+                elif query["type"] == "dl":
+                    date_max = utils.str_to_date(query["query"])
+                    cases = [
+                        c for c in cases if c.date <= date_max]
                 else:
                     print("Invalid type ", query["type"])
             [info_case(c) for c in cases[:10]]

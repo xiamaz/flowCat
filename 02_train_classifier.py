@@ -90,7 +90,8 @@ def run(args):
     history = classify.fit(model, trainseq, data_val=data_val, config=config("fit"))
     pred_df = classify.predict_generator(model, testseq)
 
-    classify.save_model(model, trainseq, config, outpath, history=history)
+    classify.save_model(
+        model, trainseq, config, outpath, pathconfig=pathconfig, history=history, dataset=dataset)
     classify.save_predictions(pred_df, outpath)
 
     LOGGER.info("Creating statistics")
