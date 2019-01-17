@@ -1,3 +1,4 @@
+"""Example for the generation of saliency plots"""
 import os
 import pathlib
 
@@ -6,16 +7,20 @@ import pandas as pd
 
 import pickle
 
-from flowcat.data import case_dataset as cc
-from flowcat.data import all_dataset as ad
-from flowcat.data import loaders
+from flowcat.dataset import case_dataset as cc
+from flowcat.dataset import som_dataset as sd
+from flowcat.dataset import combined_dataset as cd
+from flowcat.dataset import dataset as dd
+from flowcat import loaders
 from flowcat.visual import plotting
+from flowcat import utils as flowutils
+from flowcat import mappings
 
 
 if "MLLDATA" in os.environ:
     MLLDATA = pathlib.Path(os.environ["MLLDATA"])
 else:
-    MLLDATA = pathlib.Path('../data')
+    MLLDATA = pathlib.Path('data')
 
 def add_correct_magnitude(data):
     newdata = data.copy()
@@ -53,21 +58,23 @@ def main():
     c_tube = [1, 2]
 
     # load datasets
-    somdataset = ad.SOMDataset.from_path(c_sommaps)
-    cases = cc.CaseCollection.from_path(c_cases)
+    somdataset = sd.SOMDataset.from_path(c_sommaps)
+    cases = cc.CaseCollection.from_path(c_cases,how="case_info.json")
 
     # filter datasets
-    test_labels = utils.load_json(c_labels)
+    test_labels = flowutils.load_json(c_labels)
 
     filtered_cases = cases.filter(labels=test_labels)
     somdataset.data[1] = somdataset.data[1].loc[test_labels, :]
 
-    dataset = ad.CombinedDataset(
-        filtered_cases, {ad.Datasets.from_str('SOM'): somdataset, ad.Datasets.from_str('FCS'): filtered_cases})
+    # get mapping
+    config = flowutils.load_json(c_config)
+    groupinfo = mappings.GROUP_MAPS[config["c_groupmap"]]
+
+    dataset = cd.CombinedDataset(
+        filtered_cases, {dd.Dataset.from_str('SOM'): somdataset, dd.Dataset.from_str('FCS'): filtered_cases}, group_names = groupinfo['groups'])
 
     # modify mapping
-    config = utils.load_json(c_config)
-    groupinfo = mappings.GROUP_MAPS[config["c_groupmap"]]
     dataset.set_mapping(groupinfo)
 
     xoutputs = [loaders.loader_builder(
@@ -81,7 +88,7 @@ def main():
         pad_width=1,
     )]
 
-    dataset = loaders.DatasetSequence(
+    dataset = loaders.DatasetSequence.from_data(
         dataset, xoutputs, batch_size=1, draw_method="sequential")
 
     predictions = pd.read_csv(c_preds, index_col=0)
@@ -105,11 +112,6 @@ def main():
 
         gradients = plotting.calc_saliency(
             dataset, case, c_model, classes = classes)
-
-        #save gradients
-        # class_string = "_".join(classes)
-        # with open(f"{c_misclass}/{label}/{class_string}_gradients.p", "wb") as gradient_output:
-        #     pickle.dump(gradients, gradient_output)
 
         for tube in c_tube:
 

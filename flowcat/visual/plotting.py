@@ -14,11 +14,12 @@ from matplotlib.figure import Figure
 from matplotlib import cm
 
 import keras
-import vis
+from vis.utils import utils
+from vis.visualization import visualize_saliency
 
 from scipy.cluster import hierarchy
 
-from ..dataset import case as ccase
+from ..dataset import fcs
 from ..models import tfsom
 
 
@@ -197,7 +198,7 @@ def plot_scatterplot(data, tube, selections=None, selected_views=None, horiz_wid
     if selected_views is None:
         selected_views = ALL_VIEWS[tube]
 
-    if isinstance(data, ccase.FCSData):
+    if isinstance(data, fcs.FCSData):
         ranges = data.ranges
         data = data.data
     else:
@@ -490,13 +491,13 @@ def calc_saliency(dataset, case, model, classes, layer_idx=-1, maximization=Fals
 
     # modify model for saliency usage
     model.layers[layer_idx].activation = keras.activations.linear
-    model = vis.utils.utils.apply_modifications(model)
+    model = utils.apply_modifications(model)
+
 
     xdata, ydata = dataset.get_batch_by_label(case.id)
-
     input_indices = [*range(len(xdata))]
-
-    gradients = [vis.visualization.visualize_saliency(model, layer_idx, dataset.groups.index(
+    
+    gradients = [visualize_saliency(model, layer_idx, dataset.groups.index(
         group), seed_input=xdata, input_indices=input_indices, maximization=maximization) for group in set(classes)]
 
 
