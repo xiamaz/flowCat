@@ -120,6 +120,8 @@ def create_datasets(cases, dataset_config):
     """Create dataset generators."""
     filters = dataset_config["filters"]
     tubes = filters["tubes"]
+    #### tubes = [1, 2]
+    print('filters tubes', tubes)
     markers = dataset_config["selected_markers"]
     preprocessing = tfsom.get_generator(dataset_config["preprocessing"])
 
@@ -136,6 +138,7 @@ def create_som(cases, config, tensorboard_path=None, seed=None, reference=None):
     markers = config("dataset", "selected_markers")
 
     somweights = {}
+    somnodes = {}
     for tube, (datagen, length) in create_datasets(cases, config("dataset")):
         tmarkers = markers[tube]
         treference = reference[tube] if reference else None
@@ -147,10 +150,15 @@ def create_som(cases, config, tensorboard_path=None, seed=None, reference=None):
         # train the network
         with utils.timer("Training time"):
             model.train(datagen(), num_inputs=length)
+            dat = list(datagen())[0]
+            #print('dat', dat)
+            nodes = model.map_to_nodes(dat)
+            #print('nodes', nodes)
 
         somweights[tube] = pd.DataFrame(model.output_weights, columns=tmarkers)
+        somnodes[tube] = nodes
 
-    return somweights
+    return somweights, somnodes
 
 
 def load_som(path, tubes, suffix=False):

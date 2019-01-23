@@ -652,6 +652,8 @@ class TFSom:
                 session.run([var_init, metric_init])
                 (event_mapping_prev,) = session.run([mapping])
                 for epoch in range(max_epochs):
+                    import time
+                    print(time.time(), 'epoch', epoch)
                     session.run([train_op])
                 # get final mapping and weights
                 if self._tensorboard:
@@ -743,6 +745,7 @@ class TFSom:
 
     @prediction_input.setter
     def prediction_input(self, value):
+        print('tfsom channels', self.channels)
         valuearr = value[self.channels].values
         self._sess.run(
             self._prediction_input.initializer, feed_dict={self._invar: valuearr}
@@ -933,7 +936,9 @@ class SOMNodes:
         labelgen, length = create_label_generator(X, self._randnums)
         labels = list(labelgen())
         for i, (weights, counts, count_prev) in enumerate(
-                self._model.fit_map(data_iterable=datagen(), num_inputs=length, **self._fitmap_args)):
+                self._model.fit_map(data_iterable=datagen(),
+                                    num_inputs=length,
+                                    **self._fitmap_args)):
             df_weights = pd.DataFrame(weights, columns=self._model.channels)
             if self._counts:
                 df_weights["counts"] = counts

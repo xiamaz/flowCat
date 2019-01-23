@@ -125,5 +125,4 @@ dependencies:
     - scikit-image==0.14.1
     - toml==0.10.0
     - toolz==0.9.0
-prefix: /usr/local/miniconda3/envs/p36
 

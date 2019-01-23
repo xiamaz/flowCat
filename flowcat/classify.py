@@ -291,7 +291,7 @@ def load_som_model(path):
     return create_som, selected_markers
 
 
-def load_model(path):
+def load_model(path, also_return_somnodes=False):
     """Load a model from the given directory."""
     path = utils.URLPath(path)
     # load configuration
@@ -300,6 +300,9 @@ def load_model(path):
 
     # load model
     model = keras.models.load_model(str((path / "model.h5").get()), compile=False)
+    # print('model', model)
+    # print('model inputs', model.inputs)
+    # print('model outputs', model.outputs)
     compile_model(model, config=config("model", "compile"))
 
     # load dataset loaders
@@ -313,17 +316,25 @@ def load_model(path):
     }
 
     dataseq = loaders.DatasetSequence.from_config(dataset_config, output_configs)
+    print('dataset_config', dataset_config)
+    print('dataseq', dataseq)
+    print('dataseq.output_dtypes', dataseq.output_dtypes)
 
     def transform(cases):
         """Build a transformer closure to transform data into correct format from single cases."""
         result = [[] for i in range(len(dataseq.output_dtypes))]
+        allsomnodes = []
         for case in cases:
             print(f"Transforming {case.id}")
-            somweights = sommodel(case)
+            somweights, somnodes = sommodel(case)
             transformed = dataseq.transform(somweights)
             for i, tdata in enumerate(transformed):
                 result[i].append(tdata)
-        return result
+            allsomnodes.append(somnodes)
+        if also_return_somnodes:
+            return result, allsomnodes
+        else:
+            return result
     return model, transform, dataseq.groups, filters
 
 

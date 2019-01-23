@@ -79,7 +79,8 @@ def save_figure(figure, path):
     FigureCanvas(figure)
     figure.savefig(path)
 
-def plot_tube(case, tube, grads, classes, sommappath=""):
+def plot_tube(case, tube, grads, classes, sommappath=None, somnodemapping=None,
+              channels=None, save=None):
     '''Plot scatterplots where the color indicates the maximum saliency value of the two
     corresponding channels.
     Args:
@@ -98,18 +99,44 @@ def plot_tube(case, tube, grads, classes, sommappath=""):
 
     tubegates = ALL_VIEWS[tube]
 
-    nodedata = map_fcs_to_sommap(case, tube, sommappath)
+    # nodedata = map_fcs_to_sommap(case, tube, sommappath)
+    # unused
 
-    fcsmapped, gridwidth = map_fcs_to_sommap(case, tube, sommappath)
+    if sommappath is None:
+        gridwidth = 32
+        #fcsmapped, gridwidth = map_fcs_to_sommap(case, tube, sommappath)
+        tubecase = case.get_tube(tube)
+        # get scaled zscores
+        fcsdata = tubecase.get_data().data
+        fcsdata["somnode"] = somnodemapping
+        fcsmapped = fcsdata
+    else:
+        fcsmapped, gridwidth = map_fcs_to_sommap(case, tube, sommappath)
     figures = []
     for idx, grad in enumerate(grads):
         chosen_selections = []
         for i, gating in enumerate(tubegates):
-            channel_gradients = [grad[..., fcsdata.columns.get_loc(gate)] for gate in gating]
+            print('gating', gating)
+            for gate in gating:
+                print('gate', gate)
+                gate_index = channels.index(gate)
+                print('gate index', gate_index)
+                # print('fcsdata.columns', fcsdata.columns)
+                # print('fcsdata.columns.get_loc(gate)', fcsdata.columns.get_loc(gate))
+
+
+            channel_gradients = [grad[...,
+                                      #fcsdata.columns.get_loc(gate)]
+                                      channels.index(gate)]
+                                 for gate in gating]
             max_gradients = np.maximum(channel_gradients[0], channel_gradients[1])
             mapped_gradients = [max_gradients[index] for index in fcsmapped['somnode']]
             fcsmapped['gradients'] = pd.Series(mapped_gradients, index=fcsmapped.index)
-            chosen_selection = sommap_selection(fcsmapped.sort_values(by='gradients', ascending=False), max_gradients, gridwidth=gridwidth)
+            chosen_selection = \
+                sommap_selection(
+                    fcsmapped.sort_values(by='gradients', ascending=False),
+                    max_gradients,
+                    gridwidth=gridwidth)
             chosen_selections.append(chosen_selection)
             fcsmapped.drop('gradients', 1, inplace=True)
         fig = Figure(figsize=(12, 8), dpi=300)
@@ -120,7 +147,10 @@ def plot_tube(case, tube, grads, classes, sommappath=""):
 
         fig.tight_layout(rect=(0, 0, 1, 0.95))
         fig.suptitle(f"Scatterplots Tube {tube} Class {classes[idx]}")
-        figures.append(fig)
+        if save is not None:
+            save(idx, fig)
+        else:
+            figures.append(fig)
     return figures
 
 def draw_saliency_heatmap(case, gradients, classes,  tube):
@@ -496,10 +526,13 @@ def calc_saliency(dataset, case, model, classes, layer_idx=-1, maximization=Fals
 
     xdata, ydata = dataset.get_batch_by_label(case.id)
     input_indices = [*range(len(xdata))]
-    
-    gradients = [visualize_saliency(model, layer_idx, dataset.groups.index(
-        group), seed_input=xdata, input_indices=input_indices, maximization=maximization) for group in set(classes)]
-
+    gradients = [vis.visualization.visualize_saliency(model,
+                                                      layer_idx,
+                                                      dataset.groups.index(group),
+                                                      seed_input=xdata,
+                                                      input_indices=input_indices,
+                                                      maximization=maximization)
+                 for group in set(classes)]
 
     if maximization:
         # regroup gradients into tube1 and tube2
@@ -524,6 +557,7 @@ def map_fcs_to_sommap(case, tube, sommap_path):
     # get scaled zscores
     fcsdata = tubecase.get_data().data
 
+    print('using tfsom with max_epochs=0, (???)')
     model = tfsom.TFSom(
         m=gridwidth, n=gridwidth, channels=sommap_data.columns,
         initialization_method="reference", reference=sommap_data,

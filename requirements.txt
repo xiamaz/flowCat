@@ -1,5 +1,5 @@
 # datasci base packages
-numpy >= 1.15
+numpy == 1.15
 pandas >= 0.23
 # plotting libraries
 matplotlib >= 3.0

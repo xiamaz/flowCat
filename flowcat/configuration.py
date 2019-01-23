@@ -97,6 +97,10 @@ class Config:
             data = unmangle_numeric_keys(data)
         else:
             raise TypeError(f"Unknown filetype: {path}")
+        print(f'read config for {cls} from file {path}:')
+        from pprint import PrettyPrinter
+        PrettyPrinter().pprint(data)
+
         return cls(data)
 
     @property
@@ -133,6 +137,10 @@ class Config:
         """
         if conv is None:
             def conv_type(path):
+                if path:
+                    print(f'creating {cls} from file {path}')
+                else:
+                    print(f'creating {cls} anew')
                 return cls.from_file(path) if path else cls.generate_config()
         else:
             conv_type = conv
