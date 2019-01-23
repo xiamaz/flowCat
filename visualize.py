@@ -66,17 +66,14 @@ def find_tube_for_channels(cha, chb):
     
     return None, None, None
 
-for ent in [predicted_class]:
-    fig = Figure(figsize=(12, 8),
-                 #dpi=300
-                 dpi=150
-    )
+for entIndex, ent in enumerate(groups):
+    fig = Figure(figsize=(12, 8), dpi=200)
 
     max_x_diag = 0
     max_y_diag = 0
     
     for diagx, diagy in scatter_specs[ent]:
-        print('d', diagx, diagy)
+        #print('d', diagx, diagy)
         max_x_diag = max(max_x_diag, diagx)
         max_y_diag = max(max_y_diag, diagy)
 
@@ -99,9 +96,8 @@ for ent in [predicted_class]:
             print('dropping scatter plot', cha, chb)
             continue
 
-        print(len(gradients[0]))
-        ga = gradients[0][tube-1].reshape(1156,11)[:,chaindex]
-        gb = gradients[0][tube-1].reshape(1156,11)[:,chbindex]
+        ga = gradients[entIndex][tube-1].reshape(1156,11)[:,chaindex]
+        gb = gradients[entIndex][tube-1].reshape(1156,11)[:,chbindex]
 
         #grads = np.maximum(ga, gb)
         grads = np.maximum(ga, gb)
@@ -149,8 +145,8 @@ for ent in [predicted_class]:
             print('channel not found', chb)
             continue
 
-        print(xs.shape)
-        print(ys.shape)
+        # print(xs.shape)
+        # print(ys.shape)
 
         from matplotlib.colors import hsv_to_rgb
         colors = [
@@ -160,7 +156,7 @@ for ent in [predicted_class]:
         ]
 
         subplot_index = (max_y_diag+1)*diagx+diagy+1
-        print('si', (max_x_diag, max_y_diag), (diagx, diagy), subplot_index)
+        # print('si', (max_x_diag, max_y_diag), (diagx, diagy), subplot_index)
         ax = fig.add_subplot(max_x_diag+1,
                              max_y_diag+1,
                              subplot_index)

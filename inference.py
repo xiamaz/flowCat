@@ -98,7 +98,7 @@ def inference(filenames, modeldir):
     model = utils.apply_modifications(model)
 
     input_indices = [0, 1]
-    grad_groups = [predicted_class]
+    grad_groups = groups
     print('grad_groups', grad_groups)
 
     ts = [transformed[0][0], transformed[1][0]]
@@ -164,10 +164,7 @@ filenames = [
     #'some-facs-files/FL/81ade3605a67eac5bc798d63e96f9bf70286664d-2 CLL 9F 03 N06 001.LMD',
 ]
 
-def format_predictions(anfrageId, fileA, fileB, modelName,
-                       predictions,
-                       predicted_class,
-                       scatterPlotImageUrl):
+def format_predictions(anfrageId, fileA, fileB, modelName, predictions):
     da = sum(predictions[k] for k in ['CM', 'MCL', 'PL'])
     db = sum(predictions[k] for k in ['LPL', 'MZL', 'FL', 'HCL'])
 
@@ -193,10 +190,8 @@ def format_predictions(anfrageId, fileA, fileB, modelName,
                 'pathogen': da+db
             },
             'scatterPlots': {
-                predicted_class: {
-                    'imageURL': scatterPlotImageUrl
-                }
-            }
+                group: { 'imageURL': f'/anfrage/{anfrageId}/scatter-{group}.png' }
+                for group in predictions.keys() }
         }
     }
 
@@ -218,10 +213,7 @@ if __name__ == "__main__":
 
     anfrageDir = os.path.dirname(a)
 
-    scatterPlotImageUrl = f'/anfrage/{anfrageId}/scatter-{predicted_class}.png'
-
-    result = format_predictions(anfrageId, a, b, modeldir, predictions,
-                                predicted_class, scatterPlotImageUrl)
+    result = format_predictions(anfrageId, a, b, modeldir, predictions)
 
     import json
     if output_filename == '-':
