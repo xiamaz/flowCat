@@ -43,7 +43,7 @@ print(somnodes)
 print(somnodes[1].shape)
 
 def xpath(p):
-    return p
+    #return p
     # only for development;
     # override p absolute path;
     # fcs file is right beside the du.pickle file;
@@ -209,8 +209,8 @@ for entIndex, ent in enumerate(groups):
         # axes = fig.add_subplot(1, 3, 3)
         # axes.imshow(grads > lim)
 
-    #fig.tight_layout(rect=(0, 0, 1, 0.95))
-    fig.suptitle(f"Scatterplots Tube {tube} Class {ent}")
+    fig.tight_layout(rect=(0, 0, 1.0, 1.0))
+    #fig.suptitle(f"Scatterplots Tube {tube} Class {ent}")
 
     FigureCanvas(fig)
     figFilename = f'{anfrageDir}/scatter-{ent}.png'
