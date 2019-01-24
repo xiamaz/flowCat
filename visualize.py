@@ -4,7 +4,7 @@ import pandas as pd
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.figure import Figure
-from matplotlib import cm
+from matplotlib import cm, rcParams
 from flowcat.dataset.fcs import FCSData
 from scatter_specs import scatter_specs
 import sys, os
@@ -84,9 +84,22 @@ for entIndex, ent in enumerate(groups):
         max_y_diag = max(max_y_diag, diagy)
         max_x_diag = max(max_x_diag, diagx)
 
-    figheight = 8/3*(max_y_diag+1)
-    print('figheight', figheight)
-    fig = Figure(figsize=(12, figheight), dpi=200)
+    # figheight = 8/3*(max_y_diag+1)
+    # print('figheight', figheight)
+    # fig = Figure(figsize=(12, figheight), dpi=200)
+
+    if len(scatter_specs[ent]) <= 9:
+        figsize = (9, 8)
+    else:
+        figsize = (9, 10.84)
+
+    rcParams['font.size']       = 18
+    rcParams['font.family']     = 'sans-serif'
+    rcParams['font.sans-serif'] = 'DejaVu Sans'
+
+    fig = Figure(figsize=figsize, dpi=200)
+    fig.subplots_adjust(left=0.05, right=0.99, bottom=0.05, top=0.99)
+
 
     for diagy, diagx in scatter_specs[ent]:
         scatter_dims = scatter_specs[ent][(diagy,diagx)]
@@ -170,7 +183,8 @@ for entIndex, ent in enumerate(groups):
         # print('si', (max_y_diag, max_x_diag), (diagx, diagy), subplot_index)
         ax = fig.add_subplot(max_y_diag+1,
                              max_x_diag+1,
-                             subplot_index)
+                             subplot_index,
+                             aspect='equal')
         marker_size = 1 #0.5
         hue = 5/6
         ax.scatter(xs, ys, s=marker_size, marker='.', color=hsv_to_rgb((hue, 0.2, 0.8)),
@@ -197,19 +211,23 @@ for entIndex, ent in enumerate(groups):
                 print('scatter error with limf', limf)
                 pass
 
-        ax.set_xlabel(cha)
-        ax.set_ylabel(chb)
+        ax.set_xlim([-0.05, 1.05])
+        ax.set_ylim([-0.05, 1.05])
 
         ax.set_xticklabels([])
         ax.set_yticklabels([])
 
+        ax.set_xlabel(cha)
+        ax.set_ylabel(chb)
 
         # axes = fig.add_subplot(1, 3, 2)
         # axes.imshow(grads)
         # axes = fig.add_subplot(1, 3, 3)
         # axes.imshow(grads > lim)
 
-    fig.tight_layout(rect=(0, 0, 1.0, 1.0))
+    fig.tight_layout(rect=(0, 0, 1, 1.0))
+    #fig.subplots_adjust(bottom=0.0)
+
     #fig.suptitle(f"Scatterplots Tube {tube} Class {ent}")
 
     FigureCanvas(fig)
