@@ -42,11 +42,20 @@ somnodes = d['somnodes']
 print(somnodes)
 print(somnodes[1].shape)
 
-d1 = FCSData(filepaths[0]['fcs']['path'])
+def xpath(p):
+    return p
+    # only for development;
+    # override p absolute path;
+    # fcs file is right beside the du.pickle file;
+    import os
+    d = os.path.dirname(du_filename)
+    return d + '/' + os.path.basename(p)
+
+d1 = FCSData(xpath(filepaths[0]['fcs']['path']))
 d1.drop_empty()
 d1 = d1.scale()
 
-d2 = FCSData(filepaths[1]['fcs']['path'])
+d2 = FCSData(xpath(filepaths[1]['fcs']['path']))
 d2.drop_empty()
 d2 = d2.scale()
 
@@ -67,18 +76,20 @@ def find_tube_for_channels(cha, chb):
     return None, None, None
 
 for entIndex, ent in enumerate(groups):
-    fig = Figure(figsize=(12, 8), dpi=200)
-
-    max_x_diag = 0
     max_y_diag = 0
+    max_x_diag = 0
     
-    for diagx, diagy in scatter_specs[ent]:
+    for diagy, diagx in scatter_specs[ent]:
         #print('d', diagx, diagy)
-        max_x_diag = max(max_x_diag, diagx)
         max_y_diag = max(max_y_diag, diagy)
+        max_x_diag = max(max_x_diag, diagx)
 
-    for diagx, diagy in scatter_specs[ent]:
-        scatter_dims = scatter_specs[ent][(diagx,diagy)]
+    figheight = 8/3*(max_y_diag+1)
+    print('figheight', figheight)
+    fig = Figure(figsize=(12, figheight), dpi=200)
+
+    for diagy, diagx in scatter_specs[ent]:
+        scatter_dims = scatter_specs[ent][(diagy,diagx)]
 
         cha = scatter_dims['x_label']
         chb = scatter_dims['y_label']
@@ -155,10 +166,10 @@ for entIndex, ent in enumerate(groups):
             hsv_to_rgb((1/6, 0.5, 0.7)),
         ]
 
-        subplot_index = (max_y_diag+1)*diagx+diagy+1
-        # print('si', (max_x_diag, max_y_diag), (diagx, diagy), subplot_index)
-        ax = fig.add_subplot(max_x_diag+1,
-                             max_y_diag+1,
+        subplot_index = (max_x_diag+1)*diagy+diagx+1
+        # print('si', (max_y_diag, max_x_diag), (diagx, diagy), subplot_index)
+        ax = fig.add_subplot(max_y_diag+1,
+                             max_x_diag+1,
                              subplot_index)
         marker_size = 1 #0.5
         hue = 5/6
