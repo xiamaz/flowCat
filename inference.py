@@ -40,12 +40,24 @@ def inference(filenames, modeldir):
     som1 = load_toml(f'{modeldir}/dataset/SOM_1.toml')
     som2 = load_toml(f'{modeldir}/dataset/SOM_2.toml')
 
+    filename_tube1 = None
+    filename_tube2 = None
+
     filepaths = []
     for filename in filenames:
         tube = detect_tube(filename, som1, som2)
         filepaths.append({ "fcs": { "path": filename },
                            "date": "2019-01-01",
                            "tube": tube })
+        if tube == 1:
+            filename_tube1 = filename
+        elif tube == 2:
+            filename_tube2 = filename
+
+    if filename_tube1 == None:
+        raise Exception("tube 1 is missing!")
+    if filename_tube2 == None:
+        raise Exception("tube 2 is missing!")
 
     print('filepaths:')
     p.pprint(filepaths)
@@ -111,11 +123,8 @@ def inference(filenames, modeldir):
                  for group in grad_groups]
 
 
-    # wtf?
-    # all_fcsdata = [ case.get_tube(tube).data.data
-    #                 for tube in [1, 2]]
-
-    du = {'filepaths': filepaths,
+    du = {'filepaths': [{'fcs': {'path': filename_tube1}},
+                        {'fcs': {'path': filename_tube2}}],
           # 'all_fcsdata': all_fcsdata,
           'groups': groups,
           'predictions': predictions,
