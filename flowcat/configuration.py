@@ -155,7 +155,8 @@ class Config:
 
     def __str__(self):
         """Convert to string representation."""
-        return utils.to_toml(self.data)
+        data = mangle_numeric_keys(self.data)
+        return utils.to_toml(data)
 
     def __eq__(self, other):
         """Compare if two configurations are equal."""
