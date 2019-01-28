@@ -190,7 +190,7 @@ for entIndex, ent in enumerate(groups):
         ax.scatter(xs, ys, s=marker_size, marker='.', color=hsv_to_rgb((hue, 0.2, 0.8)),
                    zorder=0)
         ns = 4
-        limfs = np.linspace(0.2, 0.6, ns)
+        limfs = np.linspace(0.30, 0.75, ns)
         sats = np.linspace(0.2, 0.8, ns)
         for ii in range(ns):
             limf = limfs[ii]
