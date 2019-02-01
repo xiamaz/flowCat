@@ -130,6 +130,7 @@ def inference(filenames, modeldir):
           'predictions': predictions,
           'predicted_class_index': predicted_class_index,
           'predicted_class': predicted_class,
+          'somweights': transformed,
           'somnodes': somnodes,
           'grad_groups': grad_groups,
           'gradients': gradients,
@@ -137,23 +138,6 @@ def inference(filenames, modeldir):
           'som_channels': [som1['channels'],
                            som2['channels']]}
     
-
-    ### # regroup gradients into 2D array (nodes,channels) for tube1 and tube2
-    ### gradients = [[grad[0].reshape(1156, 11) for grad in gradients],
-    ###              [grad[1].reshape(1156, 11) for grad in gradients]]
-
-    # def save_function(idx, scatterplot):
-    #     filename = f"scatter-{groups[idx]}-tube-{tube}-scatterplots.png"
-    #     plo.save_figure(scatterplot, filename)
-    #     print('wrote scatterplot', filename)
-
-    # grads = gradients[tube - 1]
-    # channels = [som1, som2][tube-1]['channels']
-    # plo.plot_tube(
-    #     cs, tube, grads, groups,
-    #     somnodemapping=somnodes[tube],
-    #     channels=channels,
-    #     save=save_function)
 
     return predictions, du, predicted_class
 
@@ -200,6 +184,12 @@ def format_predictions(anfrageId, fileA, fileB, modelName, predictions):
             },
             'scatterPlots': {
                 group: { 'imageURL': f'/anfrage/{anfrageId}/scatter-{group}.png' }
+                for group in predictions.keys() },
+            'soms': {
+                group: { 'imageURL': f'/anfrage/{anfrageId}/som-{group}.png' }
+                for group in predictions.keys() },
+            'somsSaliencies': {
+                group: { 'imageURL': f'/anfrage/{anfrageId}/som-saliency-{group}.png' }
                 for group in predictions.keys() }
         }
     }
@@ -238,6 +228,7 @@ if __name__ == "__main__":
         print(f'wrote {filename}')
     
     os.system(f'python3 ./visualize.py "{filename}"')
+    os.system(f'python3 ./visualize_soms.py "{filename}"')
 
 
 # saliency - https://arxiv.org/pdf/1312.6034.pdf
