@@ -59,7 +59,6 @@ for entIndex, ent in enumerate(groups):
     max_y_diag = 0
     max_x_diag = 0
 
-    
     for diagy, diagx in scatter_specs[ent]:
         max_y_diag = max(max_y_diag, diagy)
         max_x_diag = max(max_x_diag, diagx)
@@ -86,18 +85,26 @@ for entIndex, ent in enumerate(groups):
             print('dropping plot', cha, chb)
             continue
 
-        plane1 = somweights[tube-1][0][::,::,chaindex]
-        plane2 = somweights[tube-1][0][::,::,chbindex]
-        image = np.stack([plane1, plane2, np.zeros_like(plane1)], axis=2)
+        color_r = np.minimum(somweights[tube-1][0][::,::,chaindex], 1.0)
+        color_b = np.minimum(somweights[tube-1][0][::,::,chbindex], 1.0)
+        color_g = np.minimum(0.2 * (color_r**2 + color_b**2)**0.5, 1.0)
+        alpha   = np.minimum(1.5 * (color_r**2 + color_b**2)**0.5, 1.0)
+        image   = np.stack([color_r, color_g, color_b, alpha], axis=2)
 
         subplot_index = (max_x_diag+1)*diagy+diagx+1
         ax = fig.add_subplot(max_y_diag+1,
                              max_x_diag+1,
-                             subplot_index,
-                             aspect='equal')
-        ax.imshow(image, aspect='equal')
-        ax.set_title(f'red: {cha}\ngreen: {chb}')
+                             subplot_index)
 
+        ax.imshow(image, aspect='equal')
+
+        ax.text(0.5, 1.15, cha, color='b', horizontalalignment='center', \
+                transform=ax.transAxes, fontsize=12)
+        ax.text(0.5, 1.04, chb, color='r', horizontalalignment='center', \
+                transform=ax.transAxes, fontsize=12)
+
+        ax.xaxis.set_ticks([0, 16, 33])
+        ax.yaxis.set_ticks([0, 16, 33])
         ax.set_xticklabels([])
         ax.set_yticklabels([])
 
@@ -105,6 +112,8 @@ for entIndex, ent in enumerate(groups):
     figFilename = f'{anfrageDir}/soms-{ent}.png'
     fig.savefig(figFilename)
     print(f'wrote {figFilename}')
+
+    fig.clf()
 
     # then the gradients
     for diagy, diagx in scatter_specs[ent]:
@@ -116,18 +125,26 @@ for entIndex, ent in enumerate(groups):
             print('dropping plot', cha, chb)
             continue
 
-        plane1 = gradients[entIndex][tube-1][::,::,chaindex]
-        plane2 = gradients[entIndex][tube-1][::,::,chbindex]
-        image = np.stack([plane1, plane2, np.zeros_like(plane1)], axis=2)
+        color_r = np.minimum(gradients[entIndex][tube-1][::,::,chaindex], 1.0)
+        color_b = np.minimum(gradients[entIndex][tube-1][::,::,chbindex], 1.0)
+        color_g = np.minimum(0.2 * (color_r**2 + color_b**2)**0.5, 1.0)
+        alpha   = np.minimum(3.0 * (color_r**2 + color_b**2)**0.5, 1.0)
+        image   = np.stack([color_r, color_g, color_b, alpha], axis=2)
 
         subplot_index = (max_x_diag+1)*diagy+diagx+1
         ax = fig.add_subplot(max_y_diag+1,
                              max_x_diag+1,
-                             subplot_index,
-                             aspect='equal')
-        ax.imshow(image, aspect='equal')
-        ax.set_title(f'red: {cha}\ngreen: {chb}')
+                             subplot_index)
 
+        ax.imshow(image, aspect='equal')
+
+        ax.text(0.5, 1.15, cha, color='b', horizontalalignment='center', \
+                transform=ax.transAxes, fontsize=12)
+        ax.text(0.5, 1.04, chb, color='r', horizontalalignment='center', \
+                transform=ax.transAxes, fontsize=12)
+
+        ax.xaxis.set_ticks([0, 16, 33])
+        ax.yaxis.set_ticks([0, 16, 33])
         ax.set_xticklabels([])
         ax.set_yticklabels([])
 
