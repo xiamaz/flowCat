@@ -19,3 +19,5 @@ tags*
 
 # tensorboard outputs
 /tensorboard
+/plots_figures/*.json
+/plots_figures/*.png
