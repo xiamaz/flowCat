@@ -125,6 +125,11 @@ class Case:
         """
         self._filepaths = [TubeSample(v, self) for v in value]
 
+    def set_markers(self):
+        for fp in self.filepaths:
+            fp.load()
+            fp.set_markers()
+
     def get_markers(self, tubes):
         """Return a dictionary of markers."""
         return {tube: self.get_tube(tube).markers for tube in tubes}
@@ -289,7 +294,7 @@ class TubeSample:
             self.tube = data.tube
             self.material = data.material
             self.panel = data.panel
-            self.markers = data.markers.copy()
+            self.markers = data.markers.copy() if data.markers is not None else None
             self.count = data.count
             self.date = data.date
         else:
@@ -373,7 +378,7 @@ class TubeSample:
     def set_markers(self):
         """Set markers from own data."""
         assert self._data is not None, "Load data beforehand into slot"
-        self.markers = list(self.data.columns)
+        self.markers = list(self.data.channels)
 
     def has_markers(self, markers: list) -> bool:
         """Return whether given list of markers are fulfilled."""

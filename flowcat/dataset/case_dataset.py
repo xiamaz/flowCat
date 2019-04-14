@@ -11,7 +11,7 @@ from sklearn import model_selection
 
 from .case import Case
 from .. import mappings, utils
-from ..utils import load_json, URLPath
+from ..utils import load_json, load_csv, URLPath
 
 
 LOGGER = logging.getLogger(__name__)
@@ -41,6 +41,18 @@ def get_meta(path, how):
         case_info = path / how
         assert case_info.exists()
     return case_info
+
+
+def load_meta(path, transfun=None):
+    if str(path).endswith(".json"):
+        data = load_json(path)
+    elif str(path).endswith(".csv"):
+        data = load_csv(path, index_col=None)
+    else:
+        raise TypeError(f"Unsupported filetype for metadata {path}")
+    if transfun is not None:
+        data = transfun(data)
+    return data
 
 
 def deduplicate_cases_by_sureness(data):
@@ -252,6 +264,11 @@ class CaseIterable(IterableMixin):
         if tcopy:
             raise AssertionError
 
+    def set_markers(self):
+        """Load markers from files."""
+        for case in self:
+            case.set_markers()
+
     def get_markers(self, tube):
         """Get a list of markers and their presence ratio in the current
         dataset."""
@@ -368,17 +385,19 @@ class CaseCollection(CaseIterable):
         self.path = path
 
     @classmethod
-    def from_path(cls, inputpath, how="latest", **kwargs):
+    def from_path(cls, inputpath, how="latest", metapath=None, transfun=None, **kwargs):
         """
         Initialize on datadir with info json.
         Args:
             inputpath: Input directory containing cohorts and a info file.
         """
         inputpath = URLPath(inputpath)
-        metapath = get_meta(inputpath, how=how)
-        data = [
-            Case(d, path=inputpath) for d in load_json(metapath.get())
-        ]
+        if metapath is None:
+            metapath = get_meta(inputpath, how=how)
+        else:
+            metapath = URLPath(metapath)
+        metadata = load_meta(metapath, transfun=transfun)
+        data = [Case(d, path=inputpath) for d in metadata]
 
         # check the dataset for duplicates
         data = deduplicate_cases_by_sureness(data)

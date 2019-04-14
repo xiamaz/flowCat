@@ -385,8 +385,8 @@ def to_toml(data):
 
 
 @get_urlpath
-def load_csv(path):
-    data = pd.read_csv(str(path), index_col=0)
+def load_csv(path, index_col=0):
+    data = pd.read_csv(str(path), index_col=index_col)
     return data
 
 
