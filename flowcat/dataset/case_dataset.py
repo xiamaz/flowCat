@@ -273,7 +273,7 @@ class CaseIterable(IterableMixin):
         """Get a list of markers and their presence ratio in the current
         dataset."""
         marker_counts = collections.Counter(
-            [m for c in self for m in c.get_tube(tube).markers])
+            [m for c in self for m in c.get_tube_markers(tube)])
         ratios = pd.Series({m: k / len(self) for m, k in marker_counts.items()})
         return ratios
 

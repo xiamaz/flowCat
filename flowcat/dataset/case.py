@@ -132,7 +132,13 @@ class Case:
 
     def get_markers(self, tubes):
         """Return a dictionary of markers."""
-        return {tube: self.get_tube(tube).markers for tube in tubes}
+        return {tube: self.get_tube_markers(tube) for tube in tubes}
+
+    def get_tube_markers(self, tube):
+        tube = self.get_tube(tube)
+        if tube is None:
+            return [];
+        return tube.markers
 
     def get_tube(self, tube, min_count=0, material=None):
         """Get the TubePath fulfilling the given requirements, return the
