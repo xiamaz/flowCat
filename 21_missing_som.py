@@ -17,3 +17,11 @@ ref = flowcat.SOMCollection.from_path("output/mll-sommaps/reference_maps/CLL_i10
 data = ref.get_tube(1)
 print(data)
 print(data.markers)
+
+model = flowcat.TFSom(
+    32, 32, data.markers, 1,
+    max_epochs=2,
+    batch_size=1,
+    initial_radius=4, end_radius=1, radius_cooling="linear",
+    initialization_method="reference", reference=data.data,
+)

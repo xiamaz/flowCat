@@ -942,3 +942,15 @@ class SOMNodes:
             df_weights.name = f"{label}_{randnum}"
             # df_weights.name = label
             yield label, randnum, df_weights
+
+
+class FCSSomTransformer:
+    """Transform FCS data to SOM node weights."""
+
+    def __init__(self, reference=None, tube=None):
+        this.reference = reference
+        this.tube = tube
+
+    @classmethod
+    def from_reference(cls, reference):
+        return cls(reference=reference, tube=reference.tube)
