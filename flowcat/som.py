@@ -6,6 +6,7 @@ These functions use configuration objects, as defined properly in configurations
 import logging
 import collections
 import time
+import re
 
 import numpy as np
 import pandas as pd
@@ -16,6 +17,100 @@ from .models import tfsom
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+class SOM:
+    """Holds self organizing map data with associated metadata."""
+    data = None
+    path = None
+    cases = None
+    tube = -1
+
+    def __init__(self, data, path=None, cases=None, tube=-1):
+        self.data = data
+        self.path = path
+        self.cases = cases
+        self.tube = tube
+
+    @classmethod
+    def from_path(cls, path, **kwargs):
+        data = utils.load_csv(path)
+        return cls(data, **kwargs)
+
+    @property
+    def dims(self):
+        rows = self.data.shape[0]
+        sq_size = int(np.sqrt(rows))
+        return (sq_size, sq_size)
+
+    @property
+    def markers(self):
+        return self.data.columns.values
+
+    def __repr__(self):
+        return f"<SOM {'x'.join(map(str, self.dims))} Tube:{self.tube}>"
+
+
+class SOMCollection:
+    """Holds multiple SOM, eg for different tubes for a single patient."""
+
+    path = None
+    config = None
+    cases = None
+    tubes = None
+
+    def __init__(self, path=None, tubes=None, cases=None, config=None):
+        self.path = path
+        self.cases = cases or []
+        self.tubes = tubes or {}
+        self.config = config
+
+        self._data = {}
+
+    @classmethod
+    def from_path(cls, path, **kwargs):
+        path = utils.URLPath(path)
+        paths = path.glob("t*.csv")
+        tubes = sorted([
+            int(m[1]) for m in
+            [re.search(r"t(\d+)\.csv", str(path)) for path in paths]
+            if m is not None
+        ])
+        # load config if exists
+        conf_path = path / "config.toml"
+        if conf_path.exists():
+            config = configuration.SOMConfig.from_file(conf_path)
+        else:
+            config = None
+        return cls(path=path, tubes=tubes, config=config)
+
+    def load(self):
+        """Load all tubes into cache."""
+        for tube in self.tubes:
+            self.get_tube(tube)
+
+    def get_tube(self, tube):
+        if tube in self._data:
+            return self._data[tube]
+        if tube not in self.tubes:
+            return None
+        path = self.path / f"t{tube}.csv"
+        data = SOM.from_path(path, tube=tube, cases=self.cases)
+        self._data[tube] = data
+        return data
+
+    @property
+    def dims(self):
+        if self.config:
+            m = self.config("tfsom", "m")
+            n = self.config("tfsom", "n")
+        else:
+            data = self.get_tube(self.tubes[0])
+            return data.dims
+        return (m, n)
+
+    def __repr__(self):
+        return f"<SOMCollection: Tubes: {self.tubes} Loaded: {len(self._data)}>"
 
 
 class ReferenceConfig(configuration.SOMConfig):
@@ -153,7 +248,7 @@ def create_som(cases, config, tensorboard_path=None, seed=None, reference=None):
     return somweights
 
 
-def load_som(path, tubes, suffix=False):
+def load_som(path, tubes=None, suffix=False):
     """Load SOM data from the given location.
 
     SOMs are saved to multiple files, each representing data from a different
@@ -169,6 +264,13 @@ def load_som(path, tubes, suffix=False):
     """
     path = utils.URLPath(path)
     data = {}
+    if tubes is None:
+        paths = path.glob("t*.csv")
+        tubes = [
+            int(m[1]) for m in
+            [re.search(r"t(\d+)\.csv", str(path)) for path in paths]
+            if m is not None
+        ]
     for tube in tubes:
         if suffix:
             tpath = path + f"_t{tube}.csv"

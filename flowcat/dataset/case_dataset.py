@@ -299,6 +299,11 @@ class CaseIterable(IterableMixin):
         }
         return paths
 
+    def search(self, markers=None):
+        if markers is not None:
+            selected = [case for case in self if case.has_selected_markers(markers)]
+        return self.__class__(selected)
+
     def filter(
             self,
             tubes=None,
