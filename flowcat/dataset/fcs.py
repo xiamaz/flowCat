@@ -52,6 +52,14 @@ class FCSData:
     def meta(self):
         return self._meta
 
+    def align(self, channels, missing_val=-1):
+        """Return aligned copy of FCS data."""
+        meta = self._meta
+        data = self.data
+        data = data.assign(**{k: -1 for k in channels if k not in data.columns})
+        data = data[channels]
+        return self.__class__((meta, data))
+
     def copy(self):
         return self.__class__(self)
 

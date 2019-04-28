@@ -1,5 +1,6 @@
 # Sanely handle missing values in SOM
 import flowcat
+from flowcat.models import tfsom
 
 cases = flowcat.CaseCollection.from_path("/data/flowcat-data/mll-flowdata/decCLL-9F")
 
@@ -18,10 +19,15 @@ data = ref.get_tube(1)
 print(data)
 print(data.markers)
 
-model = flowcat.TFSom(
-    32, 32, data.markers, 1,
+model = flowcat.FCSSomTransformer(
+    dims=(-1, -1, -1), init="reference", init_data=data,
     max_epochs=2,
-    batch_size=1,
+    batch_size=1024,
     initial_radius=4, end_radius=1, radius_cooling="linear",
-    initialization_method="reference", reference=data.data,
 )
+
+fcssamples = [r.get_tube(1).data for r in result]
+model.train(fcssamples)
+
+print(model.weights)
+#print(model)

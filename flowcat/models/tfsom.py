@@ -30,7 +30,8 @@ import pandas as pd
 
 import tensorflow as tf
 from ..utils import create_stamp
-from ..dataset import case as ccase
+from ..dataset import case as ccase, fcs
+from .. import som
 
 """
 Adapted from code by Chris Gorman.
@@ -197,6 +198,35 @@ def calculate_node_distance(matched_location, location_vectors, map_type, distan
     return bmu_distances
 
 
+def create_initializer(init, init_data, dims):
+    """Create initializer for weights.
+
+    Args:
+        init - Init method name
+        init_data - Additional data for method
+        dims - Tuple of (m, n, dim)
+    Returns:
+        Tuple of initializer and shape for weight initialization
+    """
+    m, n, dim = dims
+    shape = None
+    if init == "random":
+        initializer = tf.random_uniform_initializer(maxval=init_data)
+        shape = [m * n, dim]
+    elif init == "reference":
+        initializer = tf.convert_to_tensor(init_data.values, dtype=tf.float32)
+    elif init == "sample":
+        samples = init_data.values[np.random.choice(
+            init_data.shape[0], m * n, replace=False
+        ), :]
+        initializer = tf.convert_to_tensor(
+            samples, dtype=tf.float32
+        )
+    else:
+        raise TypeError
+    return initializer, shape
+
+
 class TFSom:
     """Tensorflow Model of a self-organizing map, without assumptions about
     usage.
@@ -206,12 +236,13 @@ class TFSom:
 
     def __init__(
             self,
-            m, n, channels, tube,
+            m, n, channels, initialization,
             max_epochs=10, batch_size=1,
             initial_radius=None, end_radius=None, radius_cooling="linear",
             initial_learning_rate=0.05, end_learning_rate=0.01, learning_cooling="linear",
             node_distance="euclidean", map_type="planar", std_coeff=0.5,
-            initialization_method="random", reference=None, max_random=1.0,
+            # initialization_method="random", reference=None, max_random=1.0,
+            graph=None,
             subsample_size=None,
             model_name="Self-Organizing-Map",
             tensorboard_dir=None, seed=None,
@@ -251,8 +282,8 @@ class TFSom:
         self._m = abs(int(m))
         self._n = abs(int(n))
         self.channels = list(channels)
-        self.tube = tube
         self._dim = len(channels)
+        self._initialization = initialization
 
         self._initial_radius = max(m, n) / 2.0 if initial_radius is None else float(initial_radius)
         self._end_radius = 1.0 if end_radius is None else float(end_radius)
@@ -261,11 +292,6 @@ class TFSom:
         self._initial_learning_rate = initial_learning_rate
         self._end_learning_rate = end_learning_rate
         self._learning_cooling = learning_cooling
-
-        # optional reference data that will be used as initial weights or for
-        # random sampling as initial node weights
-        self._reference = reference
-        self._max_random = max_random
 
         # node distance calculation option on the SOM map
         self._node_distance = node_distance
@@ -276,7 +302,7 @@ class TFSom:
         self._batch_size = abs(int(batch_size))
         self._model_name = str(model_name)
 
-        self._initialization_method = initialization_method
+        # self._initialization_method = initialization_method
 
         # Initialized later, just declaring up here for neatness and to avoid
         # warnings
@@ -314,7 +340,7 @@ class TFSom:
         # summaries to it and pass it to merge()
         self._input_tensor = None
 
-        self._graph = tf.Graph()
+        self._graph = graph or tf.Graph()
 
         self._seed = seed
         if self._seed is not None:
@@ -339,7 +365,7 @@ class TFSom:
     @property
     def config_tag(self):
         """Create config tag without model name."""
-        return f"t{self.tube}_s{self._m}_e{self._max_epochs}_m{self._map_type}_d{self._node_distance}"
+        return f"s{self._m}_e{self._max_epochs}_m{self._map_type}_d{self._node_distance}"
 
     def _initialize_tf_graph(self, batches_per_epoch):
         """Initialize the SOM on the TensorFlow graph"""
@@ -424,28 +450,7 @@ class TFSom:
         # Randomly initialized weights for all neurons, stored together
         # as a matrix Variable of shape [num_neurons, input_dims]
         with tf.name_scope('Weights'):
-            # Each tower will get its own copy of the weights variable. Since
-            # the towers are constructed sequentially, the handle to the
-            # Tensors will be different for each tower even if we reference
-            # "self"
-            if self._initialization_method == "random":
-                initializer = tf.random_uniform_initializer(maxval=self._max_random)
-                shape = [self._m * self._n, self._dim]
-            elif self._initialization_method == "sample":
-                samples = self._reference.values[np.random.choice(
-                    self._reference.shape[0], self._m * self._n, replace=False
-                ), :]
-                initializer = tf.convert_to_tensor(
-                    samples, dtype=tf.float32
-                )
-                shape = None
-            elif self._initialization_method == "reference":
-                initializer = tf.convert_to_tensor(
-                    self._reference.values, dtype=tf.float32
-                )
-                shape = None
-            else:
-                raise TypeError("Initialization method not supported.")
+            initializer, shape = self._initialization
 
             weights = tf.get_variable(
                 name='weights',
@@ -461,7 +466,7 @@ class TFSom:
         ), name='Location_Vectors')
 
         with tf.name_scope('Input'):
-            input_copy = tf.identity(input_tensor)
+            input_copy = tf.cast(input_tensor, tf.float32)
             if self._subsample_size:
                 # randomly select samples from the input for training
                 random_vals = tf.cast(
@@ -664,26 +669,24 @@ class TFSom:
                 yield arr_weights, event_mapping, event_mapping_prev
                 number += 1
 
-    def train(self, data_iterable, num_inputs):
+    def train(self, data):
         """Train the network on the data provided by the input tensor.
         Args:
             data_iterable: Iterable object returning single pandas dataframes.
             num_inputs: The total number of inputs in the data-set. Used to determine batches per epoch
         """
-        marker_generator = create_marker_generator(data_iterable, self.channels, batch_size=self._batch_size)
+        batches_per_epoch = int(data.shape[0] / self._batch_size + 1)
 
-        batches_per_epoch = int(num_inputs / self._batch_size + 0.5)
-
-        # initialize the input fitting dataset
-        # the fitting input tensor is directly integrated into the
-        # graph, which is why graph creation is postponed until fitting,
-        # when we know the actual data of our input
         with self._graph.as_default():
-            dataset = tf.data.Dataset.from_generator(
-                marker_generator, tf.float32
-            )
+            data_placeholder = tf.placeholder(data.dtype, data.shape)
 
-            self._input_tensor = dataset.make_one_shot_iterator().get_next()
+            dataset = tf.data.Dataset.from_tensor_slices(data_placeholder)
+            dataset = dataset.batch(self._batch_size)
+            dataset = dataset.shuffle(data.shape[0], seed=None, reshuffle_each_iteration=True)
+
+            iterator = dataset.make_initializable_iterator()
+
+            self._input_tensor = iterator.get_next()
 
             # Create the ops and put them on the graph
             self._initialize_tf_graph(batches_per_epoch)
@@ -709,23 +712,27 @@ class TFSom:
                 run_metadata = tf.RunMetadata()
 
             # reset metric variables after every batch
-            self._sess.run(metric_init)
-            for _ in range(batches_per_epoch):
+            self._sess.run(
+                [iterator.initializer, metric_init],
+                feed_dict={data_placeholder: data}
+            )
+            # self._sess.run(metric_init)
+            while True:
                 global_step += 1
-
-                # if recording summaries; initialize a run while recording, save after batch is done
-                if self._tensorboard:
-                    summary, _, = self._sess.run(
-                        [self._merged, self._training_op],
-                        options=run_options, run_metadata=run_metadata
-                    )
-                else:
-                    self._sess.run(self._training_op)
-
-                # save the summary if it has been tracked
-                if self._tensorboard:
-                    self._writer.add_run_metadata(run_metadata, f"step_{global_step}")
-                    self._writer.add_summary(summary, global_step)
+                try:
+                    if self._tensorboard:
+                        summary, _, = self._sess.run(
+                            [self._merged, self._training_op],
+                            options=run_options, run_metadata=run_metadata
+                        )
+                    else:
+                        self._sess.run(self._training_op)
+                    # save the summary if it has been tracked
+                    if self._tensorboard:
+                        self._writer.add_run_metadata(run_metadata, f"step_{global_step}")
+                        self._writer.add_summary(summary, global_step)
+                except tf.errors.OutOfRangeError:
+                    break
         return self
 
     @property
@@ -947,10 +954,52 @@ class SOMNodes:
 class FCSSomTransformer:
     """Transform FCS data to SOM node weights."""
 
-    def __init__(self, reference=None, tube=None):
-        this.reference = reference
-        this.tube = tube
+    def __init__(self, dims, init="random", init_data=None, tube=-1, channels=None, model_name="fcssom", **kwargs):
+        m, n, dim = dims
 
-    @classmethod
-    def from_reference(cls, reference):
-        return cls(reference=reference, tube=reference.tube)
+        if init == "random":
+            init_data = init_data or 1023
+        elif init == "reference":
+            assert isinstance(init_data, som.SOM)
+            channels = init_data.markers
+            tube = init_data.tube if tube == -1 else tube
+            rm, rn = init_data.dims
+            init_data = init_data.data
+            m = rm if m == -1 else m
+            n = rn if n == -1 else n
+            dim = len(channels) if dim == -1 else dim
+        elif init == "sample":
+            assert isinstance(init_data, fcs.FCSData)
+            channels = init_data.markers
+            init_data = init_data.data
+            dim = len(channels) if dim == -1 else dim
+
+        self.tube = tube
+        self.name = model_name
+        self.channels = channels
+        self._graph = tf.Graph()
+
+        with self._graph.as_default():
+            initialization = create_initializer(init, init_data, (m, n, dim))
+
+        self.model = TFSom(
+            m, n, channels=channels, graph=self._graph,
+            initialization=initialization,
+            model_name=f"{self.name}_t{self.tube}",
+            **kwargs)
+
+    @property
+    def weights(self):
+        data = self.model.output_weights
+        return som.SOM(data, tube=self.tube)
+
+    def train(self, data, length=None):
+        """Input an iterable with FCSData"""
+        if length is None:
+            length = len(data)
+
+        def prepare(data):
+            aligned = data.align(self.channels)
+            return aligned.data
+
+        self.model.train(np.concatenate([prepare(d) for d in data]))
