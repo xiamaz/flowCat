@@ -27,6 +27,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import sklearn as sk
 
 import tensorflow as tf
 from ..utils import create_stamp
@@ -42,48 +43,6 @@ https://codesachin.wordpress.com/2015/11/28/self-organizing-maps-with-googles-te
 """
 
 LOGGER = logging.getLogger(__name__)
-
-
-def create_marker_generator(data_iterable, channels, batch_size=1, loop=True):
-    """Create a generator applying marker channels to provided data and
-    optionally batching it to specified larger sizes.
-    Args:
-        data_iterable: Iterable data, for example a list of dataframes.
-        channels: Marker channels used to enforce alignment of data.
-        batch_size: Number of individual samples in a single batch If larger than one, multiple samples
-            will be concatenated.
-        loop: Indefinitely loop the generated data.
-    Returns:
-        Generator function.
-    """
-
-    def marker_generator():
-        buf = []
-        cache = []
-
-        for i, data in enumerate(data_iterable):
-            if i % batch_size == 0 and buf:
-                concat = np.concatenate(buf, axis=0)
-                yield concat
-                if loop:
-                    cache.append(concat)
-                buf = []
-            mdata = data[channels].values
-            buf.append(mdata)
-        if buf:
-            concat = np.concatenate(buf, axis=0)
-            yield concat
-            if loop:
-                cache.append(concat)
-
-        while True and loop:
-            # randomize the presentation of the batches, to prevent ecg like
-            # fitting to individual samples
-            random.shuffle(cache)
-            for cached in cache:
-                yield cached
-
-    return marker_generator
 
 
 def linear_cooling(initial, end, epoch, max_epochs):
@@ -612,7 +571,7 @@ class TFSom:
         return summary_image
 
     def fit_map(
-            self, data_iterable, num_inputs,
+            self, iterable,
             max_epochs=0,
             initial_learn=0.1, end_learn=0.01,
             initial_radius=3, end_radius=1
@@ -626,13 +585,12 @@ class TFSom:
         Yields:
             Tuple of node weights and event mapping
         """
-        marker_generator = create_marker_generator(data_iterable, self.channels, batch_size=1, loop=False)
 
         graph = tf.Graph()
         session = tf.Session(graph=graph)
         with graph.as_default():
             # data input as dataset from generator
-            dataset = tf.data.Dataset.from_generator(marker_generator, output_types=tf.float32)
+            dataset = tf.data.Dataset.from_generator(iter(iterable), output_types=tf.float32)
             data_tensor = dataset.make_one_shot_iterator().get_next()
             input_tensor = tf.Variable(data_tensor, validate_shape=False)
 
@@ -653,27 +611,29 @@ class TFSom:
             if self._tensorboard:
                 writer = tf.summary.FileWriter(
                     str(self._tensorboard_dir / f"self_{create_stamp()}"), graph)
-            for _ in range(num_inputs):
-                session.run([var_init, metric_init])
-                (event_mapping_prev,) = session.run([mapping])
-                for epoch in range(max_epochs):
-                    session.run([train_op])
-                # get final mapping and weights
-                if self._tensorboard:
-                    arr_weights, event_mapping, sum_res = session.run([weights, mapping, summary])
-                    writer.add_summary(sum_res, number)
-                else:
-                    arr_weights, event_mapping = session.run([weights, mapping])
+            while True:
+                try:
+                    session.run([var_init, metric_init])
+                    (event_mapping_prev,) = session.run([mapping])
+                    for epoch in range(max_epochs):
+                        session.run([train_op])
+                    # get final mapping and weights
+                    if self._tensorboard:
+                        arr_weights, event_mapping, sum_res = session.run([weights, mapping, summary])
+                        writer.add_summary(sum_res, number)
+                    else:
+                        arr_weights, event_mapping = session.run([weights, mapping])
 
-                # yield the result after training
-                yield arr_weights, event_mapping, event_mapping_prev
-                number += 1
+                    # yield the result after training
+                    yield arr_weights, event_mapping, event_mapping_prev
+                    number += 1
+                except tf.errors.OutOfRangeError:
+                    break
 
     def train(self, data):
         """Train the network on the data provided by the input tensor.
         Args:
             data_iterable: Iterable object returning single pandas dataframes.
-            num_inputs: The total number of inputs in the data-set. Used to determine batches per epoch
         """
         batches_per_epoch = int(data.shape[0] / self._batch_size + 1)
 
@@ -987,19 +947,17 @@ class FCSSomTransformer:
             initialization=initialization,
             model_name=f"{self.name}_t{self.tube}",
             **kwargs)
+        self.scaler = sk.preprocessing.StandardScaler()
 
     @property
     def weights(self):
         data = self.model.output_weights
         return som.SOM(data, tube=self.tube)
 
-    def train(self, data, length=None):
+    def train(self, data):
         """Input an iterable with FCSData"""
-        if length is None:
-            length = len(data)
+        aligned = [d.align(self.channels).data for d in data]
+        res = np.concatenate(aligned)
+        res = self.scaler.fit_transform(res)
 
-        def prepare(data):
-            aligned = data.align(self.channels)
-            return aligned.data
-
-        self.model.train(np.concatenate([prepare(d) for d in data]))
+        self.model.train(res)
