@@ -24,6 +24,7 @@ model = flowcat.FCSSomTransformer(
     max_epochs=2,
     batch_size=1024,
     initial_radius=4, end_radius=1, radius_cooling="linear",
+    tensorboard_dir="output/tensorboard",
 )
 
 fcssamples = [r.get_tube(1).data for r in result]

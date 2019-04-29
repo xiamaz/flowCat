@@ -196,7 +196,7 @@ class TFSom:
     def __init__(
             self,
             m, n, channels, initialization,
-            max_epochs=10, batch_size=1,
+            max_epochs=10, batch_size=1, buffer_size=1_000_000,
             initial_radius=None, end_radius=None, radius_cooling="linear",
             initial_learning_rate=0.05, end_learning_rate=0.01, learning_cooling="linear",
             node_distance="euclidean", map_type="planar", std_coeff=0.5,
@@ -212,7 +212,6 @@ class TFSom:
             m, n: Number of rows and columns.
             channels: Columns in the input data. Names will be used for
                 alignment of the input dataframe prior to training and prediction.
-            tube: Tube number only used in config name.
             max_epochs: Number of epochs in training.
             batch_size: Number of cases in a single batch. (Not the number of
                 rows in one FCS files, this is more akin to passing multiple FCS
@@ -226,10 +225,6 @@ class TFSom:
             node_distance: Distance metric between nodes on the SOM map.
             map_type: Behavior of map edges. Either toroid (wrap-around) or planar (no wrap).
             std_coeff: Coefficient of the neighborhood function.
-            initialization_method: Possible options are random (random numbers), sample (random choice from sample)
-                or reference (reference directly loaded as weights).
-            reference: Dataframe with matching channels to be used either as source for samples or loaded as weights.
-            max_random: Maximum value, when using random initialization.
             subsample_size: Size of subsamples from a single batch. None or a negative value will use the entire input
                 data.
             model_name: Name of the SOM model. Used for tensorboard directory names.
@@ -260,6 +255,7 @@ class TFSom:
         self._max_epochs = abs(int(max_epochs))
         self._batch_size = abs(int(batch_size))
         self._model_name = str(model_name)
+        self._buffer_size = buffer_size
 
         # self._initialization_method = initialization_method
 
@@ -268,6 +264,9 @@ class TFSom:
         self._weights = None
         self._location_vects = None
         self._global_step = None
+        self._global_step_op = None
+        self._epoch = None
+        self._epoch_op = None
         self._training_op = None
         self._centroid_grid = None
         self._locations = None
@@ -293,13 +292,16 @@ class TFSom:
         else:
             self._tensorboard_dir = None
 
-        self._summary_list = list()
+        self._summary_list = []
 
         # This will be the collection of summaries for this subgraph. Add new
         # summaries to it and pass it to merge()
         self._input_tensor = None
 
         self._graph = graph or tf.Graph()
+        with self._graph.as_default():
+            self._data, self._iter_init, self._input_tensor = self._create_input()
+            self._initialize_tf_graph()
 
         self._seed = seed
         if self._seed is not None:
@@ -326,13 +328,29 @@ class TFSom:
         """Create config tag without model name."""
         return f"s{self._m}_e{self._max_epochs}_m{self._map_type}_d{self._node_distance}"
 
-    def _initialize_tf_graph(self, batches_per_epoch):
+    def add_summary(self, summary):
+        if isinstance(summary, list):
+            self._summary_list += summary
+        else:
+            self._summary_list.append(summary)
+
+    def _create_input(self):
+        data_placeholder = tf.placeholder(tf.float64)
+
+        dataset = tf.data.Dataset.from_tensor_slices(data_placeholder)
+        dataset = dataset.batch(self._batch_size)
+        dataset = dataset.shuffle(self._buffer_size, seed=None, reshuffle_each_iteration=True)
+
+        iterator = dataset.make_initializable_iterator()
+        input_tensor = iterator.get_next()
+        return data_placeholder, iterator, input_tensor
+
+    def _initialize_tf_graph(self):
         """Initialize the SOM on the TensorFlow graph"""
         with self._graph.as_default(), tf.variable_scope(tf.get_variable_scope()):
             with tf.name_scope("Tower_0"):
-                numerators, denominators, self._global_step, self._weights, _, summaries = self._tower_som(
+                numerators, denominators, self._global_step, self._global_step_op, self._epoch, self._epoch_op, self._weights, _, summaries = self._tower_som(
                     input_tensor=self._input_tensor,
-                    batches_per_epoch=batches_per_epoch,
                     max_epochs=self._max_epochs,
                     initial_radius=self._initial_radius,
                     initial_learning_rate=self._initial_learning_rate,
@@ -340,6 +358,7 @@ class TFSom:
                     end_learning_rate=self._end_learning_rate,
                 )
                 tf.get_variable_scope().reuse_variables()
+                self.add_summary(summaries)
 
             with tf.name_scope("Weight_Update"):
                 # Divide them
@@ -356,9 +375,6 @@ class TFSom:
 
         with self._graph.as_default():
             self._prediction_variables(self._weights)
-            # merge all summaries
-            if self._tensorboard:
-                self._merged = tf.summary.merge(self._summary_list + summaries)
 
     def _prediction_variables(self, weights,):
         """Create prediction ops"""
@@ -394,14 +410,13 @@ class TFSom:
     def _tower_som(
             self,
             input_tensor,
-            batches_per_epoch, max_epochs,
+            max_epochs,
             initial_radius, end_radius,
             initial_learning_rate, end_learning_rate,
     ):
         """Build a single SOM tower on the TensorFlow graph
         Args:
             input_tensor: Input event data to be mapped to the SOM should have len(channel) width
-            batches_per_epoch: Number of batches per epoch, needed to correctly decay learn rate and radius
         Returns:
             (numerator, denominator) describe the weight changes and associated cumulative learn rate per
             node. This can be summed across towers, if we want to parallelize training.
@@ -438,7 +453,9 @@ class TFSom:
 
         with tf.name_scope('Epoch'):
             global_step = tf.Variable(-1.0, dtype=tf.float32)
-            epoch = tf.floor(tf.assign_add(global_step, 1.0) / batches_per_epoch)
+            global_step_op = tf.assign_add(global_step, 1.0)
+            epoch = tf.Variable(-1.0, dtype=tf.float32)
+            epoch_op = tf.assign_add(epoch, 1.0)
 
         # get best matching units for all events in batch
         with tf.name_scope('BMU_Indices'):
@@ -557,7 +574,7 @@ class TFSom:
                 event_image = tf.reshape(mapped_events_per_node, shape=(1, self._m, self._n, 1))
                 summaries.append(tf.summary.image("mapping_img", event_image))
 
-        return numerator, denominator, global_step, weights, mapped_events_per_node, summaries
+        return numerator, denominator, global_step, global_step_op, epoch, epoch_op, weights, mapped_events_per_node, summaries
 
     def _create_color_map(self, weights, channels, name="colormap"):
         """Create a color map using given channels. Also generate a small reference visualizing the
@@ -594,8 +611,8 @@ class TFSom:
             data_tensor = dataset.make_one_shot_iterator().get_next()
             input_tensor = tf.Variable(data_tensor, validate_shape=False)
 
-            numerator, denominator, global_step, weights, mapping, summaries = self._tower_som(
-                input_tensor=input_tensor, batches_per_epoch=1, max_epochs=max_epochs,
+            numerator, denominator, global_step, global_step_op, epoch, epoch_op, weights, mapping, summaries = self._tower_som(
+                input_tensor=input_tensor,  max_epochs=max_epochs,
                 initial_radius=initial_radius, end_radius=end_radius,
                 initial_learning_rate=initial_learn, end_learning_rate=end_radius,
             )
@@ -605,7 +622,7 @@ class TFSom:
             if self._tensorboard:
                 summary = tf.summary.merge(summaries)
 
-            var_init = tf.variables_initializer([weights, global_step, input_tensor])
+            var_init = tf.variables_initializer([weights, global_step, epoch, input_tensor])
             metric_init = tf.variables_initializer(graph.get_collection(tf.GraphKeys.METRIC_VARIABLES))
             number = 0
             if self._tensorboard:
@@ -616,6 +633,7 @@ class TFSom:
                     session.run([var_init, metric_init])
                     (event_mapping_prev,) = session.run([mapping])
                     for epoch in range(max_epochs):
+                        session.run([epoch_op, global_step_op])
                         session.run([train_op])
                     # get final mapping and weights
                     if self._tensorboard:
@@ -635,33 +653,23 @@ class TFSom:
         Args:
             data_iterable: Iterable object returning single pandas dataframes.
         """
-        batches_per_epoch = int(data.shape[0] / self._batch_size + 1)
+        assert data.shape[0] <= self._buffer_size, (
+            f"Data size {data.shape[0]} > Buffer size {self._buffer_size}. "
+            "Samples will be lost on reshuffling. "
+            "Increase buffer size to number of samples.")
 
         with self._graph.as_default():
-            data_placeholder = tf.placeholder(data.dtype, data.shape)
-
-            dataset = tf.data.Dataset.from_tensor_slices(data_placeholder)
-            dataset = dataset.batch(self._batch_size)
-            dataset = dataset.shuffle(data.shape[0], seed=None, reshuffle_each_iteration=True)
-
-            iterator = dataset.make_initializable_iterator()
-
-            self._input_tensor = iterator.get_next()
-
-            # Create the ops and put them on the graph
-            self._initialize_tf_graph(batches_per_epoch)
-
             init_op = tf.global_variables_initializer()
             self._sess.run([init_op])
 
             metric_init = tf.variables_initializer(self._graph.get_collection(tf.GraphKeys.METRIC_VARIABLES))
+            merged_summaries = tf.summary.merge(self._summary_list)
 
         if self._tensorboard:
             # Initialize the summary writer after the session has been initialized
             self._writer = tf.summary.FileWriter(
                 str(self._tensorboard_dir / f"train_{create_stamp()}"), self._sess.graph)
 
-        global_step = 0
         LOGGER.info("Training self-organizing Map")
         for epoch in range(self._max_epochs):
             LOGGER.info("Epoch: %d/%d", epoch + 1, self._max_epochs)
@@ -673,16 +681,16 @@ class TFSom:
 
             # reset metric variables after every batch
             self._sess.run(
-                [iterator.initializer, metric_init],
-                feed_dict={data_placeholder: data}
+                [self._iter_init.initializer, metric_init, self._epoch_op],
+                feed_dict={self._data: data}
             )
             # self._sess.run(metric_init)
             while True:
-                global_step += 1
+                global_step = int(self._sess.run(self._global_step_op))
                 try:
                     if self._tensorboard:
                         summary, _, = self._sess.run(
-                            [self._merged, self._training_op],
+                            [merged_summaries, self._training_op],
                             options=run_options, run_metadata=run_metadata
                         )
                     else:
