@@ -879,7 +879,7 @@ class SOMNodes:
 
     def fit(self, X, *_):
         """Optionally train the model on the provided data."""
-        self._model.train(X, num_inputs=len(X))
+        self._model.train(X)
         return self
 
     def get_weights(self):
