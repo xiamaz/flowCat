@@ -1,3 +1,4 @@
+import json
 import shutil
 import random
 import collections
@@ -19,6 +20,14 @@ for case in stratified:
     print(case.id)
     for filepath in case.filepaths:
         srcpath = filepath.localpath
-        dstpath = f"{output_path}/{case.id}_t{filepath.tube}.fcs"
-        print(srcpath, dstpath)
+        filename = f"{case.id}_t{filepath.tube}.fcs"
+        filepath.path = filename
+        dstpath = f"{output_path}/{filename}"
+        print("Copying ", srcpath, dstpath)
+        shutil.copy(srcpath, dstpath)
+    case.path = output_path
     print("----")
+
+caseinfo = [c.json for c in stratified]
+with open(f"{output_path}/case_info.json", "w") as fp:
+    json.dump(caseinfo, fp)
