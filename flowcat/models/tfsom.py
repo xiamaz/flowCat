@@ -195,13 +195,11 @@ class TFSom:
 
     def __init__(
             self,
-            m, n, channels, initialization,
+            m, n, channels, initialization=None, graph=None,
             max_epochs=10, batch_size=1, buffer_size=1_000_000,
             initial_radius=None, end_radius=None, radius_cooling="linear",
             initial_learning_rate=0.05, end_learning_rate=0.01, learning_cooling="linear",
             node_distance="euclidean", map_type="planar", std_coeff=0.5,
-            # initialization_method="random", reference=None, max_random=1.0,
-            graph=None,
             subsample_size=None,
             model_name="Self-Organizing-Map",
             tensorboard_dir=None, seed=None,
@@ -237,7 +235,6 @@ class TFSom:
         self._n = abs(int(n))
         self.channels = list(channels)
         self._dim = len(channels)
-        self._initialization = initialization
 
         self._initial_radius = max(m, n) / 2.0 if initial_radius is None else float(initial_radius)
         self._end_radius = 1.0 if end_radius is None else float(end_radius)
@@ -256,8 +253,6 @@ class TFSom:
         self._batch_size = abs(int(batch_size))
         self._model_name = str(model_name)
         self._buffer_size = buffer_size
-
-        # self._initialization_method = initialization_method
 
         # Initialized later, just declaring up here for neatness and to avoid
         # warnings
@@ -298,7 +293,15 @@ class TFSom:
         # summaries to it and pass it to merge()
         self._input_tensor = None
 
-        self._graph = graph or tf.Graph()
+        if graph is None:
+            self._graph = tf.Graph()
+            assert initialization is None, "Init needs to be on same graph"
+            with self._graph.as_default():
+                self._initialization = create_initializer("random", 1, (self._m, self._n, self._dim))
+        else:
+            self._graph = graph
+            self._initialization = initialization
+
         with self._graph.as_default():
             self._data, self._iter_init, self._input_tensor = self._create_input()
             self._initialize_tf_graph()
@@ -663,14 +666,15 @@ class TFSom:
             self._sess.run([init_op])
 
             metric_init = tf.variables_initializer(self._graph.get_collection(tf.GraphKeys.METRIC_VARIABLES))
-            merged_summaries = tf.summary.merge(self._summary_list)
 
         if self._tensorboard:
             # Initialize the summary writer after the session has been initialized
+            merged_summaries = tf.summary.merge(self._summary_list)
             self._writer = tf.summary.FileWriter(
                 str(self._tensorboard_dir / f"train_{create_stamp()}"), self._sess.graph)
 
         LOGGER.info("Training self-organizing Map")
+        global_step = 0
         for epoch in range(self._max_epochs):
             LOGGER.info("Epoch: %d/%d", epoch + 1, self._max_epochs)
 
@@ -688,6 +692,7 @@ class TFSom:
             while True:
                 global_step = int(self._sess.run(self._global_step_op))
                 try:
+                    LOGGER.info("Global step: %d", global_step)
                     if self._tensorboard:
                         summary, _, = self._sess.run(
                             [merged_summaries, self._training_op],
