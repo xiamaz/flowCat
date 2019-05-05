@@ -199,7 +199,7 @@ class LocalBackend(FileBackend):
         return files
 
     def glob(self, netloc, path, pattern):
-        return pathlib.Path(path).glob(pattern)
+        return [p.relative_to(path) for p in pathlib.Path(path).glob(pattern)]
 
 
 def get_backend(scheme):
@@ -208,7 +208,7 @@ def get_backend(scheme):
     elif scheme == "s3":
         backend = S3Backend()
     else:
-        raise TypeError(f"Unknown scheme {self.scheme}")
+        raise TypeError(f"Unknown scheme {scheme}")
     return backend
 
 
