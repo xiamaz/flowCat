@@ -1,17 +1,17 @@
 # Sanely handle missing values in SOM
 import logging
+import numpy as np
 import sklearn as sk
 import flowcat
-from flowcat.models import tfsom
 
 
 def configure_print_logging(rootname="flowcat"):
     """Configure default logging for visual output to stdout."""
     handlers = [
-        flowcat.create_handler(logging.StreamHandler(), level=logging.INFO)
+        flowcat.utils.create_handler(logging.StreamHandler(), level=logging.INFO)
     ]
 
-    flowcat.add_logger(rootname, handlers, level=logging.DEBUG)
+    flowcat.utils.add_logger(rootname, handlers, level=logging.DEBUG)
 
 
 def train_native():
@@ -19,37 +19,20 @@ def train_native():
     ds_subsample = flowcat.CaseCollection.from_path("output/subsample")
 
     tube = 1
-    markers = ds_subsample.get_markers(tube)
+    markers = ds_missing.get_markers(tube)
     markers_list = markers.index.values
 
     filepath = ds_missing.data[0].get_tube(tube)
     fcsdata = filepath.data
-    fcsdata = fcsdata.align(markers_list)
 
-    transformer = sk.preprocessing.MinMaxScaler()
-    data = transformer.fit_transform(fcsdata.data)
+    sample_size = 5000
 
-    model = tfsom.TFSom(32, 32, markers_list)
-    model.train(data)
+    model = flowcat.models.FCSSom(
+        (32, 32, -1), markers=markers_list,
+        batch_size=500,
+        tensorboard_dir="output/21-tensorboard/native")
+    model.train([fcsdata], sample=sample_size)
 
-
-# select reference som which doesnt have it
-# ref = flowcat.SOMCollection.from_path("output/mll-sommaps/reference_maps/CLL_i10")
-# data = ref.get_tube(1)
-#
-# model = flowcat.FCSSomTransformer(
-#     dims=(-1, -1, -1), init="reference", init_data=data,
-#     max_epochs=2,
-#     batch_size=1024,
-#     initial_radius=4, end_radius=1, radius_cooling="linear",
-#     tensorboard_dir="output/tensorboard",
-# )
-# 
-# fcssamples = [r.get_tube(1).data for r in result]
-# model.train(fcssamples)
-# 
-# print(model.weights)
-#print(model)
 
 if __name__ == "__main__":
     configure_print_logging()

@@ -45,6 +45,20 @@ https://codesachin.wordpress.com/2015/11/28/self-organizing-maps-with-googles-te
 LOGGER = logging.getLogger(__name__)
 
 
+MARKER_IMAGES = {
+    "cd45_ss": ["CD45-KrOr", "SS INT LIN", None],
+    "ss_cd19": [None, "SS INT LIN", "CD19-APCA750"],
+    "kappa_lambda": [None, "Kappa-FITC", "Lambda-PE"],
+    "zz_cd45_ss_cd19": ["CD45-KrOr", "SS INT LIN", "CD19-APCA750"],
+}
+
+
+class MarkerMissingError(Exception):
+    def __init__(self, markers, message):
+        self.markers = markers
+        self.message = message
+
+
 def linear_cooling(initial, end, epoch, max_epochs):
     """Implement linear decay of parameter depending on the current epoch."""
     result = tf.subtract(
@@ -157,6 +171,29 @@ def calculate_node_distance(matched_location, location_vectors, map_type, distan
     return bmu_distances
 
 
+def create_color_map(weights, cols, name="colormap", img_size=None):
+    """Create a color map using given cols. Also generate a small reference visualizing the given colorspace.
+    Params:
+        weights: Tensor of weights with nodes in rows and marker channels in columns.
+        cols: number of columns used for the image. needs to be of length 3
+        name: Name of the generated image
+        img_size: Size of generated image, otherwise will be inferred as sqrt of weight row count.
+    """
+    assert len(cols) == 3, "Needs one column for each color, use None to ignore a channel."
+    rows = weights.shape[0]
+    if img_size is None:
+        side_len = int(np.sqrt(rows))
+        img_size = (side_len, side_len)
+
+    slices = [
+        tf.zeros(weights.shape[0]) if col is None else weights[:, col]
+        for col in cols
+    ]
+    marker_image = tf.reshape(tf.stack(slices, axis=1), shape=(1, *img_size, 3))
+    summary_image = tf.summary.image(name, marker_image)
+    return summary_image
+
+
 def create_initializer(init, init_data, dims):
     """Create initializer for weights.
 
@@ -195,7 +232,7 @@ class TFSom:
 
     def __init__(
             self,
-            m, n, channels, initialization=None, graph=None,
+            dims, initialization=None, graph=None,
             max_epochs=10, batch_size=1, buffer_size=1_000_000,
             initial_radius=None, end_radius=None, radius_cooling="linear",
             initial_learning_rate=0.05, end_learning_rate=0.01, learning_cooling="linear",
@@ -207,9 +244,7 @@ class TFSom:
         """
         Initialize a self-organizing map on the tensorflow graph
         Args:
-            m, n: Number of rows and columns.
-            channels: Columns in the input data. Names will be used for
-                alignment of the input dataframe prior to training and prediction.
+            dims: Number of rows and columns and dims per node.
             max_epochs: Number of epochs in training.
             batch_size: Number of cases in a single batch. (Not the number of
                 rows in one FCS files, this is more akin to passing multiple FCS
@@ -231,12 +266,9 @@ class TFSom:
         # snapshot all local variables for config saving
         config = {k: v for k, v in locals().items() if k != "self"}
 
-        self._m = abs(int(m))
-        self._n = abs(int(n))
-        self.channels = list(channels)
-        self._dim = len(channels)
+        self._m, self._n, self._dim = dims
 
-        self._initial_radius = max(m, n) / 2.0 if initial_radius is None else float(initial_radius)
+        self._initial_radius = max(self._m, self._n) / 2.0 if initial_radius is None else float(initial_radius)
         self._end_radius = 1.0 if end_radius is None else float(end_radius)
         self._radius_cooling = radius_cooling
 
@@ -268,7 +300,7 @@ class TFSom:
 
         # prediction variables
         self._invar = None
-        self._prediction_input = None
+        self.__prediction_input = None
         self._squared_distances = None
         self._prediction_output = None
         self._prediction_distance = None
@@ -385,14 +417,14 @@ class TFSom:
             self._invar = tf.placeholder(tf.float32)
             dataset = tf.data.Dataset.from_tensors(self._invar)
 
-            self._prediction_input = dataset.make_initializable_iterator()
+            self.__prediction_input = dataset.make_initializable_iterator()
 
             # Get the index of the minimum distance for each input item,
             # shape will be [batch_size],
             self._squared_distances = tf.reduce_sum(
                 tf.pow(tf.subtract(
                     tf.expand_dims(weights, axis=0),
-                    tf.expand_dims(self._prediction_input.get_next(), axis=1)
+                    tf.expand_dims(self.__prediction_input.get_next(), axis=1)
                 ), 2), 2
             )
             self._prediction_output = tf.argmin(
@@ -561,34 +593,11 @@ class TFSom:
                     tf.reduce_mean(learning_rate_op, axis=0), shape=(1, self._m, self._n, 1))
                 summaries.append(tf.summary.image("learn_img", learn_image))
 
-            with tf.name_scope("WeightsSummary"):
-                # combined cd45 ss int lin plot using r and g color
-                summaries.append(
-                    self._create_color_map(weights, ["CD45-KrOr", "SS INT LIN", None], "cd45_ss"))
-                summaries.append(
-                    self._create_color_map(weights, [None, "SS INT LIN", "CD19-APCA750"], "ss_cd19"))
-                if "Kappa-FITC" in self.channels:
-                    summaries.append(
-                        self._create_color_map(weights, [None, "Kappa-FITC", "Lambda-PE"], "kappa_lambda"))
-                summaries.append(
-                    self._create_color_map(weights, ["CD45-KrOr", "SS INT LIN", "CD19-APCA750"], "zz_cd45_ss_cd19"))
-
             with tf.name_scope("MappingSummary"):
                 event_image = tf.reshape(mapped_events_per_node, shape=(1, self._m, self._n, 1))
                 summaries.append(tf.summary.image("mapping_img", event_image))
 
         return numerator, denominator, global_step, global_step_op, epoch, epoch_op, weights, mapped_events_per_node, summaries
-
-    def _create_color_map(self, weights, channels, name="colormap"):
-        """Create a color map using given channels. Also generate a small reference visualizing the
-        given colorspace."""
-        slices = [
-            tf.zeros(self._m * self._n) if channel is None else weights[:, self.channels.index(channel)]
-            for channel in channels
-        ]
-        marker_image = tf.reshape(tf.stack(slices, axis=1), shape=(1, self._m, self._n, 3))
-        summary_image = tf.summary.image(name, marker_image)
-        return summary_image
 
     def fit_map(
             self, iterable,
@@ -717,20 +726,20 @@ class TFSom:
         return np.array(self._sess.run(self._weights))
 
     @property
-    def prediction_input(self):
+    def _prediction_input(self):
         """Get the prediction input."""
-        return self._prediction_input
+        return self.__prediction_input
 
-    @prediction_input.setter
-    def prediction_input(self, value):
-        valuearr = value[self.channels].values
+    @_prediction_input.setter
+    def _prediction_input(self, value):
         self._sess.run(
-            self._prediction_input.initializer, feed_dict={self._invar: valuearr}
+            self.__prediction_input.initializer, feed_dict={self._invar: value}
         )
 
     def map_to_nodes(self, data):
-        """Map data to the closest node in the map."""
-        self.prediction_input = data
+        """Map data to the closest node in the map.
+        """
+        self._prediction_input = data
         results = []
         while True:
             try:
@@ -753,7 +762,7 @@ class TFSom:
         :return: Array of m x n length, eg number of mapped events for each
                     node.
         """
-        self.prediction_input = data
+        self._prediction_input = data
         results = np.zeros(self._m * self._n)
         while True:
             try:
@@ -770,7 +779,7 @@ class TFSom:
 
     def distance_to_map(self, data):
         """Return the summed loss of the current case."""
-        self.prediction_input = data
+        self._prediction_input = data
 
         # run in batches to get the result
         results = []
@@ -924,53 +933,99 @@ class SOMNodes:
             yield label, randnum, df_weights
 
 
-class FCSSomTransformer:
+class FCSSom:
     """Transform FCS data to SOM node weights."""
 
-    def __init__(self, dims, init="random", init_data=None, tube=-1, channels=None, model_name="fcssom", **kwargs):
-        m, n, dim = dims
+    def __init__(self, dims, init="random", init_data=None, tube=-1, markers=None, model_name="fcssom", **kwargs):
+        self.dims = dims
+        m, n, dim = self.dims
 
         if init == "random":
-            init_data = init_data or 1023
+            init_data = init_data or 1
         elif init == "reference":
             assert isinstance(init_data, som.SOM)
-            channels = init_data.markers
+            markers = init_data.markers
             tube = init_data.tube if tube == -1 else tube
             rm, rn = init_data.dims
             init_data = init_data.data
             m = rm if m == -1 else m
             n = rn if n == -1 else n
-            dim = len(channels) if dim == -1 else dim
         elif init == "sample":
             assert isinstance(init_data, fcs.FCSData)
-            channels = init_data.markers
+            markers = init_data.markers
             init_data = init_data.data
-            dim = len(channels) if dim == -1 else dim
+
+        dim = len(markers) if dim == -1 else dim
 
         self.tube = tube
         self.name = model_name
-        self.channels = channels
+        self.markers = list(markers)
         self._graph = tf.Graph()
 
         with self._graph.as_default():
             initialization = create_initializer(init, init_data, (m, n, dim))
 
         self.model = TFSom(
-            m, n, channels=channels, graph=self._graph,
+            (m, n, dim),
+            graph=self._graph,
             initialization=initialization,
             model_name=f"{self.name}_t{self.tube}",
             **kwargs)
-        self.scaler = sk.preprocessing.StandardScaler()
+
+        with self._graph.as_default():
+            self.add_weight_images(MARKER_IMAGES)
+
+        self.scaler = sk.preprocessing.MinMaxScaler()
+
+    def add_weight_images(self, marker_dict):
+        """
+        Params:
+            marker_dict: Dictionary of image name to 3-tuple of markers.
+        """
+        for name, markers in marker_dict.items():
+            try:
+                self.add_weight_image(name, markers)
+            except MarkerMissingError as m:
+                LOGGER.warning("Could not add %s missing %s", name, m.markers)
+
+    def add_weight_image(self, name, markers):
+        with tf.name_scope("WeightsSummary"):
+            cols = []
+            missing = []
+            for marker in markers:
+                if marker is None:
+                    index = None
+                else:
+                    try:
+                        index = self.markers.index(marker)
+                    except ValueError:
+                        missing.append(marker)
+                        continue
+                cols.append(index)
+            if missing:
+                raise MarkerMissingError(missing, "Failed to create weight image")
+
+            color_map = create_color_map(
+                self.model._weights, cols,
+                name=name, img_size=(*self.dims[:2],))
+            self.model.add_summary(color_map)
 
     @property
     def weights(self):
         data = self.model.output_weights
         return som.SOM(data, tube=self.tube)
 
-    def train(self, data):
-        """Input an iterable with FCSData"""
-        aligned = [d.align(self.channels).data for d in data]
+    def train(self, data, sample=None):
+        """Input an iterable with FCSData
+        Params:
+            data: FCSData object
+            sample: Optional subsample to be used in training
+        """
+        aligned = [d.align(self.markers).data for d in data]
         res = np.concatenate(aligned)
         res = self.scaler.fit_transform(res)
+
+        if sample:
+            res = res[np.random.choice(res.shape[0], sample, replace=False), :]
 
         self.model.train(res)
