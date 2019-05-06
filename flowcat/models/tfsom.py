@@ -455,7 +455,7 @@ class TFSom:
                 input_copy = tf.gather_nd(input_copy, random_vals)
 
         with tf.name_scope('Epoch'):
-            global_step = tf.Variable(-1.0, dtype=tf.float32)
+            global_step = tf.Variable(0.0, dtype=tf.float32)
             global_step_op = tf.assign_add(global_step, 1.0)
             epoch = tf.Variable(-1.0, dtype=tf.float32)
             epoch_op = tf.assign_add(epoch, 1.0)
@@ -690,7 +690,6 @@ class TFSom:
             )
             # self._sess.run(metric_init)
             while True:
-                global_step = int(self._sess.run(self._global_step_op))
                 try:
                     LOGGER.info("Global step: %d", global_step)
                     if self._tensorboard:
@@ -700,6 +699,7 @@ class TFSom:
                         )
                     else:
                         self._sess.run(self._training_op)
+                    global_step = int(self._sess.run(self._global_step_op))
                     # save the summary if it has been tracked
                     if self._tensorboard:
                         self._writer.add_run_metadata(run_metadata, f"step_{global_step}")
