@@ -1013,7 +1013,8 @@ class FCSSom:
     @property
     def weights(self):
         data = self.model.output_weights
-        return som.SOM(data, tube=self.tube)
+        dfdata = pd.DataFrame(data, columns=self.markers)
+        return som.SOM(dfdata, tube=self.tube)
 
     def train(self, data, sample=None):
         """Input an iterable with FCSData
