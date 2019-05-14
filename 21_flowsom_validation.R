@@ -47,6 +47,18 @@ get_fcs_data <- function(id, tube, dataset, ...) {
   ReadInput(fcspath, compensate=F, transform=F, scale=T)
 }
 
+fcs_to_som_weights <- function(fcs) {
+  fsom_ss <- ReadInput(fcs, transform=F, scale=T)
+  fsom_ss <- BuildSOM(fsom_ss)
+  weights_df <- fsom_ss$map$codes
+  colnames(weights_df) <- markernames(fcs)
+  weights_df
+}
+
+som_weights_csv <- function(weights_df, path) {
+  write.csv(weights_df, file=path)
+}
+
 plot_dir <- "output/21-flowsom-validation"
 dir.create(plot_dir, recursive=T)
 
@@ -66,8 +78,7 @@ ggsave(file.path(plot_dir, "test_sample01.png"), plot=plt)
 # -------------------------
 
 # create a simple SOM and extract the weights
-fsom_ss <- ReadInput(fcs_ss, transform=F, scale=T)
-fsom_ss <- BuildSOM(fsom_ss)
-weights_ss <- fsom_ss$map$codes
+weights_ss <- fcs_to_som_weights(fcs_ss)
+som_weights_csv(weights_ss, file.path(plot_dir, "sample_t1.csv"))
 
-# TODO: check train args, visualize nodes, check the same in python som
+# further processing and comparison now in python
