@@ -33,6 +33,10 @@ def train_native():
         tensorboard_dir="output/21-tensorboard/native")
     model.train([fcsdata], sample=sample_size)
 
+    weights = model.weights
+
+    flowcat.save_som(weights, "output/21-tfsom/native")
+
 
 if __name__ == "__main__":
     configure_print_logging()

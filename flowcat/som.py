@@ -19,6 +19,31 @@ from .models import tfsom
 LOGGER = logging.getLogger(__name__)
 
 
+def save_som(som, path, subdirectory=False):
+    """Save som object to the given destination.
+    Params:
+        som: Either a SOM collection or a single SOM object.
+        path: Destination path
+        subdirectory: Save files to separate files with path as directory name.
+    """
+    if isinstance(som, SOMCollection):
+        soms = som
+    elif isinstance(som, SOM):
+        soms = [som]
+    else:
+        raise TypeError
+
+    path = utils.URLPath(path)
+
+    for som in soms:
+        if subdirectory:
+            dest = path / f"t{som.tube}.csv"
+        else:
+            dest = path + f"_t{som.tube}.csv"
+        LOGGER.debug("Saving %s to %s", som, dest)
+        utils.save_csv(som.data, dest)
+
+
 class SOM:
     """Holds self organizing map data with associated metadata."""
     data = None
@@ -62,8 +87,10 @@ class SOMCollection:
     def __init__(self, path=None, tubes=None, cases=None, config=None):
         self.path = path
         self.cases = cases or []
-        self.tubes = tubes or {}
+        self.tubes = tubes or []
         self.config = config
+        self._index = 0
+        self._max_index = 0
 
         self._data = {}
 
@@ -108,6 +135,18 @@ class SOMCollection:
             data = self.get_tube(self.tubes[0])
             return data.dims
         return (m, n)
+
+    def __iter__(self):
+        self._index = self.tubes[0]
+        self._max_index = len(self.tubes)
+        return self
+
+    def __next__(self):
+        if self._index < self._max_index:
+            index = self._index
+            self._index += 1
+            return self.get_tube(index)
+        raise StopIteration
 
     def __repr__(self):
         return f"<SOMCollection: Tubes: {self.tubes} Loaded: {len(self._data)}>"
@@ -280,7 +319,7 @@ def load_som(path, tubes=None, suffix=False):
     return data
 
 
-def save_som(data, path, suffix=False):
+def save_som_dict(data, path, suffix=False):
     """Save SOM to the specified location.
     Args:
         data: Dict mapping tubes to SOM data.
@@ -295,7 +334,6 @@ def save_som(data, path, suffix=False):
             outpath = path + f"_t{tube}.csv"
         else:
             outpath = path / f"t{tube}.csv"
-        LOGGER.debug("Saving SOM tube %d to %s", tube, outpath)
         utils.save_csv(somdata, outpath)
 
 

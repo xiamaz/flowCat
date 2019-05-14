@@ -91,7 +91,7 @@ def generate_reference(args):
 
     data = create_new_reference(args)
     print(f"Saving reference SOM in {path}")
-    som.save_som(data, path, suffix=False)
+    som.save_som_dict(data, path, suffix=False)
     # Save reference configuration
     args.refconfig.to_file(som.get_config_path(path))
 
