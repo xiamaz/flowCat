@@ -100,10 +100,11 @@ class SOMCollection:
     cases = None
     tubes = None
 
-    def __init__(self, path=None, tubes=None, cases=None, config=None):
+    def __init__(self, path=None, tubes=None, tubepaths=None, cases=None, config=None):
         self.path = path
         self.cases = cases or []
         self.tubes = tubes or []
+        self._tubepaths = tubepaths or {}
         self.config = config
         self._index = 0
         self._max_index = 0
@@ -119,18 +120,19 @@ class SOMCollection:
             parent = path.local.parent
             paths = [p for p in parent.glob(f"{path.local.name}*.csv")]
 
-        tubes = sorted([
-            int(m[1]) for m in
-            [re.search(r"t(\d+)\.csv", str(path)) for path in paths]
+        tubepaths = {
+            int(m[1]): p for m, p in
+            [(re.search(r"t(\d+)\.csv", str(path)), path) for path in paths]
             if m is not None
-        ])
+        }
+        tubes = sorted(tubepaths.keys())
         # load config if exists
         conf_path = path / "config.toml"
         if conf_path.exists():
             config = configuration.SOMConfig.from_file(conf_path)
         else:
             config = None
-        return cls(path=path, tubes=tubes, config=config)
+        return cls(path=path, tubes=tubes, tubepaths=tubepaths, config=config)
 
     def load(self):
         """Load all tubes into cache."""
@@ -142,7 +144,7 @@ class SOMCollection:
             return self._data[tube]
         if tube not in self.tubes:
             return None
-        path = self.path / f"t{tube}.csv"
+        path = self._tubepaths[tube]
         data = SOM.from_path(path, tube=tube, cases=self.cases)
         self._data[tube] = data
         return data
