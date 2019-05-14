@@ -83,7 +83,7 @@ class SOMDataset:
         if reference:
             if pathconfig is not None:
                 reference = utils.get_path(reference, [pathconfig("output", "som-reference")])
-            refdata = som.load_som(reference, self.tubes)
+            refdata = som.load_som_dict(reference, self.tubes)
             som.save_som_dict(refdata, path / "reference", suffix=True)
 
     def get_randnums(self, labels):

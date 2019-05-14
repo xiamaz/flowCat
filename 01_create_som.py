@@ -74,7 +74,7 @@ def create_new_reference(args):
     # load reference if available
     reference = config("reference")
     if reference is not None:
-        reference = som.load_som(reference, config("dataset", "filters", "tubes"), suffix=False)
+        reference = som.load_som_dict(reference, config("dataset", "filters", "tubes"), suffix=False)
 
     return som.create_som(data, config, tensorboard_path, reference=reference)
 
@@ -87,7 +87,7 @@ def generate_reference(args):
     if path.exists():
         print(f"Loading existing references in {path}")
         tubes = args.refconfig("dataset", "filters", "tubes")
-        return som.load_som(path, tubes, suffix=False)
+        return som.load_som_dict(path, tubes, suffix=False)
 
     data = create_new_reference(args)
     print(f"Saving reference SOM in {path}")

@@ -273,7 +273,7 @@ def save_model(model, sequence, config, path, pathconfig=None, history=None, wei
 def load_som_model(path):
     """Load a model to generate individual SOMs."""
     config = configuration.SOMConfig.from_file(path / "config.toml")
-    reference = som.load_som(path / "reference", tubes=config("dataset", "filters", "tubes"), suffix=True)
+    reference = som.load_som_dict(path / "reference", tubes=config("dataset", "filters", "tubes"), suffix=True)
 
     # copy fitmap args into normal args
     fitmap_args = config.data["somnodes"]["fitmap_args"]

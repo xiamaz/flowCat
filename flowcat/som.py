@@ -19,6 +19,25 @@ from .models import tfsom
 LOGGER = logging.getLogger(__name__)
 
 
+def get_som_tube_path(path, tube, subdirectory):
+    path = utils.URLPath(path)
+    if subdirectory:
+        result = path / f"t{tube}.csv"
+    else:
+        result = path + f"_t{tube}.csv"
+    return result
+
+
+def load_som(path, subdirectory=False, tube=None):
+    """Load soms into a som collection or if tube specified into a single SOM."""
+    # Load single SOM
+    if tube:
+        inpath = get_som_tube_path(path, tube, subdirectory)
+        return SOM.from_path(inpath, tube=tube)
+    # Load multiple SOM into a SOM collection
+    return SOMCollection.from_path(path, subdirectory=subdirectory)
+
+
 def save_som(som, path, subdirectory=False):
     """Save som object to the given destination.
     Params:
@@ -36,10 +55,7 @@ def save_som(som, path, subdirectory=False):
     path = utils.URLPath(path)
 
     for som in soms:
-        if subdirectory:
-            dest = path / f"t{som.tube}.csv"
-        else:
-            dest = path + f"_t{som.tube}.csv"
+        dest = get_som_tube_path(path, som.tube, subdirectory)
         LOGGER.debug("Saving %s to %s", som, dest)
         utils.save_csv(som.data, dest)
 
@@ -95,9 +111,14 @@ class SOMCollection:
         self._data = {}
 
     @classmethod
-    def from_path(cls, path, **kwargs):
+    def from_path(cls, path, subdirectory, **kwargs):
         path = utils.URLPath(path)
-        paths = path.glob("t*.csv")
+        if subdirectory:
+            paths = path.glob("t*.csv")
+        else:
+            parent = path.local.parent
+            paths = [p for p in parent.glob(f"{path.local.name}*.csv")]
+
         tubes = sorted([
             int(m[1]) for m in
             [re.search(r"t(\d+)\.csv", str(path)) for path in paths]
@@ -280,14 +301,14 @@ def create_som(cases, config, tensorboard_path=None, seed=None, reference=None):
             seed=seed)
         # train the network
         with utils.timer("Training time"):
-            model.train(datagen(), num_inputs=length)
+            model.train(datagen())
 
         somweights[tube] = pd.DataFrame(model.output_weights, columns=tmarkers)
 
     return somweights
 
 
-def load_som(path, tubes=None, suffix=False):
+def load_som_dict(path, tubes=None, suffix=False):
     """Load SOM data from the given location.
 
     SOMs are saved to multiple files, each representing data from a different
@@ -311,10 +332,7 @@ def load_som(path, tubes=None, suffix=False):
             if m is not None
         ]
     for tube in tubes:
-        if suffix:
-            tpath = path + f"_t{tube}.csv"
-        else:
-            tpath = path / f"t{tube}.csv"
+        tpath = get_som_tube_path(path, tube, not suffix)
         data[tube] = utils.load_csv(tpath)
     return data
 
@@ -330,10 +348,7 @@ def save_som_dict(data, path, suffix=False):
     """
     path = utils.URLPath(path)
     for tube, somdata in data.items():
-        if suffix:
-            outpath = path + f"_t{tube}.csv"
-        else:
-            outpath = path / f"t{tube}.csv"
+        outpath = get_som_tube_path(path, tube, not suffix)
         utils.save_csv(somdata, outpath)
 
 
