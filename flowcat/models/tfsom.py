@@ -46,10 +46,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 MARKER_IMAGES = {
-    "cd45_ss": ["CD45-KrOr", "SS INT LIN", None],
-    "ss_cd19": [None, "SS INT LIN", "CD19-APCA750"],
-    "kappa_lambda": [None, "Kappa-FITC", "Lambda-PE"],
-    "zz_cd45_ss_cd19": ["CD45-KrOr", "SS INT LIN", "CD19-APCA750"],
+    "cd45_ss": ("CD45-KrOr", "SS INT LIN", None),
+    "ss_cd19": (None, "SS INT LIN", "CD19-APCA750"),
+    "kappa_lambda": (None, "Kappa-FITC", "Lambda-PE"),
+    "zz_cd45_ss_cd19": ("CD45-KrOr", "SS INT LIN", "CD19-APCA750"),
 }
 
 
