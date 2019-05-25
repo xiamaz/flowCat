@@ -1059,10 +1059,12 @@ class FCSSom:
         self.model.train(res)
         return self
 
-    def transform(self, data):
+    def transform(self, data, sample=None):
         """Transform input fcs into retrained SOM node weights."""
         aligned = data.align(self.markers).data
         aligned = self.scaler.transform(aligned)
+        if sample:
+            aligned = aligned[np.random.choice(res.shape[0], sample, replace=False), :]
         weights = self.model.transform(aligned)
         somweights = som.SOM(
             pd.DataFrame(weights, columns=self.markers), tube=self.tube)
