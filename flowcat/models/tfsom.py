@@ -22,6 +22,7 @@
 # SOFTWARE.
 # =================================================================================
 import random
+from typing import List
 import logging
 from pathlib import Path
 
@@ -31,7 +32,7 @@ import sklearn as sk
 
 import tensorflow as tf
 from ..utils import create_stamp
-from ..dataset import fcs
+from ..dataset.fcs import FCSData
 from .. import som
 
 """
@@ -975,7 +976,7 @@ class FCSSom:
             m = rm if m == -1 else m
             n = rn if n == -1 else n
         elif init_type == "sample":
-            assert isinstance(init_data, fcs.FCSData)
+            assert isinstance(init_data, FCSData)
             markers = init_data.markers
             init_data = init_data.data
 
@@ -1043,7 +1044,24 @@ class FCSSom:
         dfdata = pd.DataFrame(data, columns=self.markers)
         return som.SOM(dfdata, tube=self.tube)
 
-    def train(self, data, sample=None):
+    @property
+    def transform_args(self):
+        return [
+            (self.scaler.__class__, {
+                "data_min_": self.scaler.data_min_,
+                "data_max_": self.scaler.data_max_,
+            })
+        ]
+
+    def _create_som(self, weights: np.array):
+        return som.SOM(
+            weights,
+            tube=self.tube,
+            columns=self.markers,
+            transforms=self.transform_args
+        )
+
+    def train(self, data: List[FCSData], sample: int = -1):
         """Input an iterable with FCSData
         Params:
             data: FCSData object
@@ -1053,19 +1071,21 @@ class FCSSom:
         res = np.concatenate(aligned)
         res = self.scaler.fit_transform(res)
 
-        if sample:
+        if sample > 0:
             res = res[np.random.choice(res.shape[0], sample, replace=False), :]
 
         self.model.train(res)
         return self
 
-    def transform(self, data, sample=None):
+    def transform(self, data: FCSData, sample: int = -1):
         """Transform input fcs into retrained SOM node weights."""
-        aligned = data.align(self.markers).data
-        aligned = self.scaler.transform(aligned)
-        if sample:
-            aligned = aligned[np.random.choice(res.shape[0], sample, replace=False), :]
-        weights = self.model.transform(aligned)
+        mask = data.channel_mask(self.markers)
+        print(mask)
+        res = data.align(self.markers).data
+        res = self.scaler.transform(res)
+        if sample > 0:
+            res = res[np.random.choice(res.shape[0], sample, replace=False), :]
+        weights = self.model.transform(res)
         somweights = som.SOM(
             pd.DataFrame(weights, columns=self.markers), tube=self.tube)
         return somweights

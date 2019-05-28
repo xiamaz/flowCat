@@ -3,6 +3,9 @@ Functions to create SOMs.
 
 These functions use configuration objects, as defined properly in configurations.
 """
+from __future__ import annotations
+from typing import List, Union
+import dataclasses
 import logging
 import collections
 import time
@@ -19,26 +22,36 @@ from .models import tfsom
 LOGGER = logging.getLogger(__name__)
 
 
-def get_som_tube_path(path, tube, subdirectory):
+def get_som_tube_path(
+        path: Union[str, utils.URLPath],
+        tube: int,
+        subdirectory: bool) -> utils.URLPath:
     path = utils.URLPath(path)
     if subdirectory:
-        result = path / f"t{tube}.csv"
+        result = path / f"t{tube}"
     else:
-        result = path + f"_t{tube}.csv"
-    return result
+        result = path + f"_t{tube}"
+    return (result + ".csv", result + ".json")
 
 
-def load_som(path, subdirectory=False, tube=None):
+def load_som(
+        path: Union[str, utils.URLPath],
+        subdirectory: bool = False,
+        tube: int = None) -> Union[SOMCollection, SOM]:
     """Load soms into a som collection or if tube specified into a single SOM."""
     # Load single SOM
     if tube:
-        inpath = get_som_tube_path(path, tube, subdirectory)
-        return SOM.from_path(inpath, tube=tube)
+        inpaths = get_som_tube_path(path, tube, subdirectory)
+        return SOM.from_path(*inpaths, tube=tube)
     # Load multiple SOM into a SOM collection
     return SOMCollection.from_path(path, subdirectory=subdirectory)
 
 
-def save_som(som, path, subdirectory=False):
+def save_som(
+        som: Union[SOMCollection, SOM],
+        path: Union[str, utils.URLPath],
+        subdirectory: bool = False,
+        save_config: bool = True):
     """Save som object to the given destination.
     Params:
         som: Either a SOM collection or a single SOM object.
@@ -54,29 +67,31 @@ def save_som(som, path, subdirectory=False):
 
     path = utils.URLPath(path)
 
-    for som in soms:
-        dest = get_som_tube_path(path, som.tube, subdirectory)
-        LOGGER.debug("Saving %s to %s", som, dest)
-        utils.save_csv(som.data, dest)
+    for som_obj in soms:
+        data_dest, conf_dest = get_som_tube_path(path, som_obj.tube, subdirectory)
+        LOGGER.debug("Saving %s to %s", som_obj, data_dest)
+        utils.save_csv(som_obj.data, data_dest)
+        if save_config:
+            utils.save_json(som_obj.config, conf_dest)
 
 
+@dataclasses.dataclass
 class SOM:
     """Holds self organizing map data with associated metadata."""
-    data = None
-    path = None
-    cases = None
-    tube = -1
-
-    def __init__(self, data, path=None, cases=None, tube=-1):
-        self.data = data
-        self.path = path
-        self.cases = cases
-        self.tube = tube
+    data: 'typing.Any'
+    path: utils.URLPath = None
+    cases: List[str] = dataclasses.field(default_factory=list)
+    tube: int = -1
+    transforms: List[dict] = dataclasses.field(default_factory=list)
 
     @classmethod
-    def from_path(cls, path, **kwargs):
-        data = utils.load_csv(path)
-        return cls(data, **kwargs)
+    def from_path(cls, data_path, config_path, **kwargs):
+        data = utils.load_csv(data_path)
+        try:
+            config = utils.load_json(config_path)
+        except FileNotFoundError:
+            config = {}
+        return cls(data, **config, **kwargs)
 
     @property
     def dims(self):
@@ -87,6 +102,14 @@ class SOM:
     @property
     def markers(self):
         return self.data.columns.values
+
+    @property
+    def config(self):
+        return {
+            "cases": self.cases,
+            "tube": self.tube,
+            "transforms": self.transforms,
+        }
 
     def __repr__(self):
         return f"<SOM {'x'.join(map(str, self.dims))} Tube:{self.tube}>"
@@ -334,7 +357,7 @@ def load_som_dict(path, tubes=None, suffix=False):
             if m is not None
         ]
     for tube in tubes:
-        tpath = get_som_tube_path(path, tube, not suffix)
+        tpath, _ = get_som_tube_path(path, tube, not suffix)
         data[tube] = utils.load_csv(tpath)
     return data
 
@@ -350,7 +373,7 @@ def save_som_dict(data, path, suffix=False):
     """
     path = utils.URLPath(path)
     for tube, somdata in data.items():
-        outpath = get_som_tube_path(path, tube, not suffix)
+        outpath, _ = get_som_tube_path(path, tube, not suffix)
         utils.save_csv(somdata, outpath)
 
 
