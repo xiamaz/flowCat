@@ -49,7 +49,7 @@ def get_path(dname, dpaths):
         dpath = URLPath(path, dname)
         if dpath.exists():
             return dpath
-    raise RuntimeError(f"Could not find {dname} in {dpaths}")
+    raise FileNotFoundError(f"Could not find {dname} in {dpaths}")
 
 
 def get_paths(names, datasets):
@@ -182,7 +182,7 @@ class LocalBackend(FileBackend):
         if localpath.exists():
             return localpath
         else:
-            raise RuntimeError(f"File not found {localpath}")
+            raise FileNotFoundError(str(localpath))
 
     def put(self, localpath, netloc, path, clobber=False):
         """Local backend will never write anywhere, since localpath and path are the same."""
