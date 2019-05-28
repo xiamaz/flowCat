@@ -31,7 +31,7 @@ import pandas as pd
 import sklearn as sk
 
 import tensorflow as tf
-from ..utils import create_stamp
+from ..utils import create_stamp, URLPath
 from ..dataset.fcs import FCSData
 from .. import som
 
@@ -965,6 +965,7 @@ class FCSSom:
         m, n, dim = self.dims
 
         init_type, init_data = init
+        transform_configs = []
         if init_type == "random":
             init_data = init_data or 1
         elif init_type == "reference":
@@ -972,6 +973,7 @@ class FCSSom:
             markers = init_data.markers
             tube = init_data.tube if tube == -1 else tube
             rm, rn = init_data.dims
+            transform_configs = init_data.transforms
             init_data = init_data.data
             m = rm if m == -1 else m
             n = rn if n == -1 else n
@@ -1001,7 +1003,14 @@ class FCSSom:
             self.add_weight_images(MARKER_IMAGES)
 
         if scaler is None:
-            self.scaler = sk.preprocessing.MinMaxScaler()
+            if transform_configs:
+                assert len(transform_configs) == 1
+                tname, tconf = transform_configs[0]
+                assert tname == "MinMaxScaler"
+                self.scaler = sk.preprocessing.MinMaxScaler()
+                self.scaler.fit([tconf["data_min_"], tconf["data_max_"]])
+            else:
+                self.scaler = sk.preprocessing.MinMaxScaler()
         else:
             self.scaler = scaler
 
@@ -1042,24 +1051,28 @@ class FCSSom:
     def weights(self):
         data = self.model.output_weights
         dfdata = pd.DataFrame(data, columns=self.markers)
-        return som.SOM(dfdata, tube=self.tube)
+        return self._create_som(dfdata)
 
     @property
     def transform_args(self):
         return [
-            (self.scaler.__class__, {
-                "data_min_": self.scaler.data_min_,
-                "data_max_": self.scaler.data_max_,
+            ("MinMaxScaler", {
+                "data_min_": self.scaler.data_min_.tolist(),
+                "data_max_": self.scaler.data_max_.tolist(),
             })
         ]
 
     def _create_som(self, weights: np.array):
+        data = pd.DataFrame(weights, columns=self.markers)
         return som.SOM(
-            weights,
+            data,
             tube=self.tube,
-            columns=self.markers,
             transforms=self.transform_args
         )
+
+    def save(self, path: URLPath):
+        """Save the given model including scaler."""
+        pass
 
     def train(self, data: List[FCSData], sample: int = -1):
         """Input an iterable with FCSData
@@ -1086,6 +1099,5 @@ class FCSSom:
         if sample > 0:
             res = res[np.random.choice(res.shape[0], sample, replace=False), :]
         weights = self.model.transform(res)
-        somweights = som.SOM(
-            pd.DataFrame(weights, columns=self.markers), tube=self.tube)
+        somweights = self._create_som(weights)
         return somweights

@@ -78,7 +78,7 @@ def save_som(
 @dataclasses.dataclass
 class SOM:
     """Holds self organizing map data with associated metadata."""
-    data: 'typing.Any'
+    data: pd.DataFrame
     path: utils.URLPath = None
     cases: List[str] = dataclasses.field(default_factory=list)
     tube: int = -1
@@ -91,7 +91,9 @@ class SOM:
             config = utils.load_json(config_path)
         except FileNotFoundError:
             config = {}
-        return cls(data, **config, **kwargs)
+
+        kwargs = {**config, **kwargs}
+        return cls(data, **kwargs)
 
     @property
     def dims(self):
@@ -168,7 +170,7 @@ class SOMCollection:
         if tube not in self.tubes:
             return None
         path = self._tubepaths[tube]
-        data = SOM.from_path(path, tube=tube, cases=self.cases)
+        data = SOM.from_path(path, path[:-3] + "json", tube=tube, cases=self.cases)
         self._data[tube] = data
         return data
 
