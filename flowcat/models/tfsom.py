@@ -22,16 +22,17 @@
 # SOFTWARE.
 # =================================================================================
 import random
-from typing import List
+from typing import List, Union
 import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import sklearn as sk
+import joblib
 
 import tensorflow as tf
-from ..utils import create_stamp, URLPath
+from ..utils import create_stamp, URLPath, save_json, load_json
 from ..dataset.fcs import FCSData
 from .. import som
 
@@ -256,6 +257,8 @@ class TFSom:
     function.
     """
 
+    EPOCH_COLLECTION = "epoch_collection"
+
     def __init__(
             self,
             dims, initialization=None, graph=None,
@@ -316,12 +319,8 @@ class TFSom:
         # warnings
         self._weights = None
         self._ref_weights = None
-        self._location_vects = None
-        self._global_step = None
         self._epoch = None
 
-        self._global_step_op = None
-        self._epoch_op = None
         self._training_op = None
         self._assign_trained_op = None
         self._reset_weights_op = None
@@ -351,8 +350,6 @@ class TFSom:
 
         # This will be the collection of summaries for this subgraph. Add new
         # summaries to it and pass it to merge()
-        self._input_tensor = None
-
         if graph is None:
             self._graph = tf.Graph()
             assert initialization is None, "Init needs to be on same graph"
@@ -363,8 +360,8 @@ class TFSom:
             self._initialization = initialization
 
         with self._graph.as_default():
-            self._data, self._iter_init, self._input_tensor = self._create_input()
-            self._initialize_tf_graph()
+            self._data_placeholder = self._initialize_tf_graph()
+            self._saver = tf.train.Saver()
 
         self._seed = seed
         if self._seed is not None:
@@ -378,6 +375,10 @@ class TFSom:
             config=tf.ConfigProto(
                 allow_soft_placement=True,
                 log_device_placement=False,))
+
+        with self._graph.as_default():
+            init_op = tf.global_variables_initializer()
+            self._sess.run([init_op])
 
         self._writer = None
 
@@ -410,15 +411,18 @@ class TFSom:
 
     def _initialize_tf_graph(self):
         """Initialize the SOM on the TensorFlow graph"""
-        with self._graph.as_default(), tf.variable_scope(tf.get_variable_scope()):
+        data, iter_init, input_tensor = self._create_input()
+        tf.add_to_collection(self.EPOCH_COLLECTION, iter_init.initializer)
+
+        with tf.variable_scope(tf.get_variable_scope()):
 
             with tf.name_scope("Tower_0"):
                 (
                     numerators, denominators,
-                    self._global_step, self._global_step_op,
-                    self._epoch, self._epoch_op,
+                    self._epoch, epoch_op,
                     self._weights, _, summaries
-                ) = self._tower_som(input_tensor=self._input_tensor)
+                ) = self._tower_som(input_tensor=input_tensor)
+                tf.add_to_collection(self.EPOCH_COLLECTION, epoch_op)
 
                 self._ref_weights = tf.get_variable(
                     name="ref_weights", initializer=self._weights)
@@ -443,6 +447,7 @@ class TFSom:
 
         with self._graph.as_default():
             self._prediction_variables(self._weights)
+        return data
 
     def _prediction_variables(self, weights):
         """Create prediction ops"""
@@ -497,7 +502,7 @@ class TFSom:
         # Matrix of size [m*n, 2] for SOM grid locations of neurons.
         # Maps an index to an (x,y) coordinate of a neuron in the map for
         # calculating the neighborhood distance
-        self._location_vects = tf.constant(np.array(
+        location_vects = tf.constant(np.array(
             [[i, j] for i in range(self._m) for j in range(self._n)]
         ), name='Location_Vectors')
 
@@ -514,8 +519,6 @@ class TFSom:
                 input_copy = tf.gather_nd(input_copy, random_vals)
 
         with tf.name_scope('Epoch'):
-            global_step = tf.Variable(0.0, dtype=tf.float32)
-            global_step_op = tf.assign_add(global_step, 1.0)
             epoch = tf.Variable(-1.0, dtype=tf.float32)
             epoch_op = tf.assign_add(epoch, 1.0)
 
@@ -535,7 +538,7 @@ class TFSom:
         # get the locations of BMU for each event
         with tf.name_scope('BMU_Locations'):
             bmu_locs = tf.reshape(
-                tf.gather(self._location_vects, bmu_indices), [-1, 2]
+                tf.gather(location_vects, bmu_indices), [-1, 2]
             )
 
         with tf.name_scope('Learning_Rate'):
@@ -555,7 +558,7 @@ class TFSom:
             # distance will depend on the used metric and the type of the map
             map_size = tf.constant([self._m, self._n], dtype=tf.int64)
             bmu_distances = calculate_node_distance(
-                bmu_locs, self._location_vects, self._map_type, self._node_distance, map_size)
+                bmu_locs, location_vects, self._map_type, self._node_distance, map_size)
 
             # gaussian neighborhood, eg 67% neighborhood with 1std
             # keep in mind, that radius is decreasing with epoch
@@ -601,7 +604,7 @@ class TFSom:
                 summaries.append(tf.summary.scalar('radius', update_mean_radius))
 
                 summaries.append(summary_quantization_error(squared_distance))
-                summaries.append(summary_topographic_error(squared_distance, self._location_vects))
+                summaries.append(summary_topographic_error(squared_distance, location_vects))
 
                 summaries.append(summary_learning_image(learning_rate_op, self._m, self._n))
 
@@ -611,7 +614,6 @@ class TFSom:
 
         return (
             numerator, denominator,
-            global_step, global_step_op,
             epoch, epoch_op,
             weights, mapped_events_per_node, summaries
         )
@@ -635,8 +637,9 @@ class TFSom:
             data_tensor = dataset.make_one_shot_iterator().get_next()
             input_tensor = tf.Variable(data_tensor, validate_shape=False)
 
-            (numerator, denominator, global_step, global_step_op,
-             epoch, epoch_op, weights, mapping, summaries) = self._tower_som(input_tensor=input_tensor)
+            (numerator, denominator,
+             epoch, epoch_op,
+             weights, mapping, summaries) = self._tower_som(input_tensor=input_tensor)
 
             new_weights = tf.divide(numerator, denominator)
             train_op = tf.assign(weights, new_weights)
@@ -644,7 +647,7 @@ class TFSom:
             if self._tensorboard:
                 summary = tf.summary.merge(summaries)
 
-            var_init = tf.variables_initializer([weights, global_step, epoch, input_tensor])
+            var_init = tf.variables_initializer([weights, epoch, input_tensor])
             metric_init = tf.variables_initializer(graph.get_collection(tf.GraphKeys.METRIC_VARIABLES))
             number = 0
             if self._tensorboard:
@@ -655,7 +658,7 @@ class TFSom:
                     session.run([var_init, metric_init])
                     (event_mapping_prev,) = session.run([mapping])
                     for epoch in range(self._max_epochs):
-                        session.run([epoch_op, global_step_op])
+                        session.run([epoch_op])
                         session.run([train_op])
                     # get final mapping and weights
                     if self._tensorboard:
@@ -680,7 +683,10 @@ class TFSom:
             init_op = tf.global_variables_initializer()
             self._sess.run([init_op])
 
-            metric_init = tf.variables_initializer(self._graph.get_collection(tf.GraphKeys.METRIC_VARIABLES))
+            metric = tf.variables_initializer(
+                self._graph.get_collection(tf.GraphKeys.METRIC_VARIABLES)
+            )
+            epoch_collection = tf.get_collection(self.EPOCH_COLLECTION) + [metric]
 
         if self._tensorboard:
             # Initialize the summary writer after the session has been initialized
@@ -701,12 +707,7 @@ class TFSom:
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
 
-            # reset metric variables after every batch
-            self._sess.run(
-                [self._iter_init.initializer, metric_init, self._epoch_op],
-                feed_dict={self._data: data}
-            )
-            # self._sess.run(metric_init)
+            self._sess.run(epoch_collection, feed_dict={self._data_placeholder: data})
             while True:
                 try:
                     if self._tensorboard:
@@ -717,7 +718,7 @@ class TFSom:
                     else:
                         self._sess.run(self._training_op)
                     LOGGER.info("Global step: %d", global_step)
-                    global_step = int(self._sess.run(self._global_step_op))
+                    global_step += 1
                     # save the summary if it has been tracked
                     if self._tensorboard:
                         self._writer.add_run_metadata(run_metadata, f"step_{global_step}")
@@ -741,6 +742,13 @@ class TFSom:
         self._run_training(data, set_weights=False)
         return self._sess.run(self._weights)
 
+    def save(self, path: URLPath):
+        """Save the model to the given path."""
+        self._saver.save(self._sess, str(path))
+
+    def load(self, path: URLPath):
+        self._saver.restore(self._sess, str(path))
+
     @property
     def output_weights(self):
         """
@@ -748,6 +756,10 @@ class TFSom:
                     if the SOM hasn't been trained
         """
         return np.array(self._sess.run(self._weights))
+
+    @property
+    def ref_weights(self):
+        return np.array(self._sess.run(self._ref_weights))
 
     @property
     def _prediction_input(self):
@@ -960,7 +972,7 @@ class SOMNodes:
 class FCSSom:
     """Transform FCS data to SOM node weights."""
 
-    def __init__(self, dims, init=("random", None), tube=-1, markers=None, model_name="fcssom", scaler=None, **kwargs):
+    def __init__(self, dims, init=("random", None), tube=-1, markers=None, name="fcssom", scaler=None, **kwargs):
         self.dims = dims
         m, n, dim = self.dims
 
@@ -985,9 +997,14 @@ class FCSSom:
         dim = len(markers) if dim == -1 else dim
 
         self.tube = tube
-        self.name = model_name
+        self.name = name
         self.markers = list(markers)
         self._graph = tf.Graph()
+        self.trained = False
+        self.modelargs = {
+            "init": init_type,
+            "kwargs": kwargs,
+        }
 
         with self._graph.as_default():
             initialization = create_initializer(init_type, init_data, (m, n, dim))
@@ -1009,11 +1026,38 @@ class FCSSom:
                 assert tname == "MinMaxScaler"
                 self.scaler = sk.preprocessing.MinMaxScaler()
                 self.scaler.fit([tconf["data_min_"], tconf["data_max_"]])
-                print(self.scaler.data_max_, self.scaler.data_min_)
             else:
                 self.scaler = sk.preprocessing.MinMaxScaler()
         else:
             self.scaler = scaler
+
+    @classmethod
+    def load(cls, path: Union[str, URLPath]):
+        path = URLPath(path)
+        scaler = joblib.load(str(path / "scaler.joblib"))
+        config = load_json(path / "config.json")
+        obj = cls(
+            dims=config["dims"],
+            scaler=scaler,
+            name=config["name"],
+            tube=config["tube"],
+            markers=config["markers"],
+            **config["modelargs"]["kwargs"],
+        )
+        obj.model.load(path / "model.ckpt")
+        obj.trained = True
+        return obj
+
+    @property
+    def config(self):
+        return {
+            "dims": self.dims,
+            "name": self.name,
+            "tube": self.tube,
+            "markers": self.markers,
+            "trained": self.trained,
+            "modelargs": self.modelargs,
+        }
 
     def add_weight_images(self, marker_dict):
         """
@@ -1071,9 +1115,14 @@ class FCSSom:
             transforms=self.transform_args
         )
 
-    def save(self, path: URLPath):
+    def save(self, path: Union[str, URLPath]):
         """Save the given model including scaler."""
-        pass
+        assert self.trained, "Model has not been trained"
+        path = URLPath(path)
+        path.local.mkdir(parents=True, exist_ok=True)
+        self.model.save(path / "model.ckpt")
+        joblib.dump(self.scaler, str(path / "scaler.joblib"))
+        save_json(self.config, path / "config.json")
 
     def train(self, data: List[FCSData], sample: int = -1):
         """Input an iterable with FCSData
@@ -1089,12 +1138,12 @@ class FCSSom:
             res = res[np.random.choice(res.shape[0], sample, replace=False), :]
 
         self.model.train(res)
+        self.trained = True
         return self
 
     def transform(self, data: FCSData, sample: int = -1):
         """Transform input fcs into retrained SOM node weights."""
-        mask = data.channel_mask(self.markers)
-        print(mask)
+        # mask = data.channel_mask(self.markers)
         res = data.align(self.markers).data
         res = self.scaler.transform(res)
         if sample > 0:

@@ -55,9 +55,9 @@ def train_native(sample, outname):
         batch_size=5001, tube=sample.tube,
         max_epochs=3,
         tensorboard_dir=f"output/21-tensorboard/{outname}")
-    weights = model.transform([fcsdata], sample=sample_size)
+    model.train([fcsdata], sample=sample_size)
 
-    flowcat.save_som(weights, f"output/21-tfsom/{outname}")
+    flowcat.save_som(model.weights, f"output/21-tfsom/{outname}")
 
 
 def compare_weights(weight_a, weight_b):
@@ -95,6 +95,24 @@ def train_loaded_check(trainsample, transsample):
     print(weights)
 
 
+def test_model_save(trainsample, name):
+    model = flowcat.models.FCSSom(
+        (32, 32, -1), markers=trainsample.markers,
+        batch_size=5000, tube=trainsample.tube,
+        max_epochs=3,
+    )
+    model.train([trainsample.data])
+    model.save(f"output/test_model_save/{name}")
+    return model.transform(trainsample.data)
+
+
+def test_model_load(trainsample, name):
+
+    model = flowcat.models.FCSSom.load(f"output/test_model_save/{name}")
+    weights = model.transform(trainsample.data)
+    return weights
+
+
 if __name__ == "__main__":
     configure_print_logging()
 
@@ -107,4 +125,8 @@ if __name__ == "__main__":
     # train_native(sample_subsample, "native-subsample")
     # test_som_transformation(sample_subsample)
 
-    train_loaded_check(sample_subsample, sample_missing)
+    weights = test_model_save(sample_subsample, "native-subsample")
+    loaded_weights = test_model_load(sample_subsample, "native-subsample")
+    print(weights.data - loaded_weights.data)
+
+    # train_loaded_check(sample_subsample, sample_missing)
