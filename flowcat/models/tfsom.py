@@ -635,9 +635,9 @@ class TFSom:
             data_tensor = dataset.make_one_shot_iterator().get_next()
             input_tensor = tf.Variable(data_tensor, validate_shape=False)
 
-            numerator, denominator, global_step, global_step_op, epoch, epoch_op, weights, mapping, summaries = self._tower_som(
-                input_tensor=input_tensor
-            )
+            (numerator, denominator, global_step, global_step_op,
+             epoch, epoch_op, weights, mapping, summaries) = self._tower_som(input_tensor=input_tensor)
+
             new_weights = tf.divide(numerator, denominator)
             train_op = tf.assign(weights, new_weights)
 
@@ -1009,6 +1009,7 @@ class FCSSom:
                 assert tname == "MinMaxScaler"
                 self.scaler = sk.preprocessing.MinMaxScaler()
                 self.scaler.fit([tconf["data_min_"], tconf["data_max_"]])
+                print(self.scaler.data_max_, self.scaler.data_min_)
             else:
                 self.scaler = sk.preprocessing.MinMaxScaler()
         else:
