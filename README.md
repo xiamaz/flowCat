@@ -15,14 +15,24 @@ flowcat/
 
 ### Runnable scripts
 
-`./create_sommaps.py`
+#### 0x - main scripts
 
-:   Generate SOMmap references and individual SOM maps for single cases.
+Main scripts to generate SOMs and run the classification on the entire dataset.
 
-`./classify_cases.py`
+#### 1x - special cohorts
 
-:   Classify single cases to diagnoses using either direct FCS data,
-    histogram data or individual SOM data.
+Work on special cohorts. Such as AML or MM.
+
+#### 2x - som transformation comparisons
+
+Some scripts for testing modifications on the SOM implementation, as well
+as comparisons of the implementation to results obtained from flowSOM.
+
+#### 3x - classifier comparisons
+
+TODO. Does not yet exist
+
+#### Other scripts
 
 Run availble unittests with:
 
