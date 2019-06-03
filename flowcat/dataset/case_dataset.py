@@ -415,6 +415,14 @@ class CaseCollection(CaseIterable):
         view = CaseView(result)
         return view
 
+    def filter_failed(self, *args, **kwargs):
+        """Get all samples filtered out."""
+        result = super().filter(*args, **kwargs)
+        result_ids = [c.id for c in result]
+        failed = [case for case in self if case.id not in result_ids]
+        view = self.__class__(failed)
+        return view
+
 
 class CaseView(CaseIterable):
     """Filtered view into the base data. Perform all mutable

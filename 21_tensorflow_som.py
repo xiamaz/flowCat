@@ -113,6 +113,19 @@ def test_model_load(trainsample, name):
     return weights
 
 
+def test_batch_transform_speed(trainsamples: flowcat.CaseCollection):
+    """Test the speed for transforming a list of samples.
+
+    Take the time we need to get a whole sample.
+    """
+    print(trainsamples)
+    view = trainsamples.filter()
+    print(view)
+    print(trainsamples.filter_failed())
+    tube_1 = view.get_tube(1)
+    print(tube_1)
+
+
 if __name__ == "__main__":
     configure_print_logging()
 
@@ -125,8 +138,10 @@ if __name__ == "__main__":
     # train_native(sample_subsample, "native-subsample")
     # test_som_transformation(sample_subsample)
 
-    weights = test_model_save(sample_subsample, "native-subsample")
-    loaded_weights = test_model_load(sample_subsample, "native-subsample")
-    print(weights.data - loaded_weights.data)
+    # weights = test_model_save(sample_subsample, "native-subsample")
+    # loaded_weights = test_model_load(sample_subsample, "native-subsample")
+    # print(weights.data - loaded_weights.data)
 
     # train_loaded_check(sample_subsample, sample_missing)
+
+    test_batch_transform_speed(ds_subsample)
