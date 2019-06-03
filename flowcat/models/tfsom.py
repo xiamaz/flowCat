@@ -21,8 +21,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # =================================================================================
+from __future__ import annotations
 import random
-from typing import List, Union
+from typing import List, Union, Iterable, Generator
 import logging
 from pathlib import Path
 
@@ -34,6 +35,7 @@ import joblib
 import tensorflow as tf
 from ..utils import create_stamp, URLPath, save_json, load_json
 from ..dataset.fcs import FCSData
+from ..dataset.case import TubeSample
 from .. import som
 
 """
@@ -1141,7 +1143,7 @@ class FCSSom:
         self.trained = True
         return self
 
-    def transform(self, data: FCSData, sample: int = -1):
+    def transform(self, data: FCSData, sample: int = -1) -> som.SOM:
         """Transform input fcs into retrained SOM node weights."""
         # mask = data.channel_mask(self.markers)
         res = data.align(self.markers).data
@@ -1151,3 +1153,13 @@ class FCSSom:
         weights = self.model.transform(res)
         somweights = self._create_som(weights)
         return somweights
+
+    def transform_multiple(
+            self,
+            data: Iterable[FCSData],
+            sample: int = -1) -> Generator[som.SOM]:
+        """Transform multiple samples."""
+        for single in data:
+            if isinstance(single, TubeSample):
+                single = single.data
+            yield self.transform(single, sample=sample)

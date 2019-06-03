@@ -523,3 +523,6 @@ class TubeView(IterableMixin):
             pd.DataFrame.from_records(hists),
             pd.DataFrame.from_records(failures)
         )
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__} {len(self)} cases>"

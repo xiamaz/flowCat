@@ -2,6 +2,8 @@
 Generate SOMs from the tensorflow implementation of SOM.
 """
 import logging
+import collections
+import time
 import numpy as np
 import sklearn as sk
 import flowcat
@@ -113,6 +115,18 @@ def test_model_load(trainsample, name):
     return weights
 
 
+def time_generator_logger(generator):
+    circ_buffer = collections.deque(maxlen=20)
+    time_a = time.time()
+    for res in generator:
+        time_b = time.time()
+        time_d = time_b - time_a
+        circ_buffer.append(time_d)
+        print(f"Training time: {time_d}s Rolling avg: {np.mean(circ_buffer)}s")
+        time_a = time_b
+        yield res
+
+
 def test_batch_transform_speed(trainsamples: flowcat.CaseCollection):
     """Test the speed for transforming a list of samples.
 
@@ -124,6 +138,11 @@ def test_batch_transform_speed(trainsamples: flowcat.CaseCollection):
     print(trainsamples.filter_failed())
     tube_1 = view.get_tube(1)
     print(tube_1)
+
+    model = flowcat.models.FCSSom.load(f"output/test_model_save/native-subsample")
+    for somdata in time_generator_logger(
+            model.transform_multiple(tube_1, sample=5000)):
+        print(somdata)
 
 
 if __name__ == "__main__":
