@@ -10,6 +10,7 @@ import flowcat
 def main(args):
     cases = flowcat.CaseCollection.from_path(args.path)
     print(cases)
+    print(cases.group_count)
 
 
 if __name__ == "__main__":
