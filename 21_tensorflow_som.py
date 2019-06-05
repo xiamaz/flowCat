@@ -139,9 +139,8 @@ def test_batch_transform_speed(trainsamples: flowcat.CaseCollection):
     tube_1 = view.get_tube(1)
     print(tube_1)
 
-    model = flowcat.models.FCSSom.load(f"output/test_model_save/native-subsample")
-    for somdata in time_generator_logger(
-            model.transform_multiple(tube_1, sample=5000)):
+    model = flowcat.models.FCSSom.load(f"output/test_model_save/native-subsample", batch_size=50000)
+    for somdata in time_generator_logger(model.transform_multiple(tube_1)):
         print(somdata)
 
 

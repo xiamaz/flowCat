@@ -635,7 +635,7 @@ class TFSom:
         session = tf.Session(graph=graph)
         with graph.as_default():
             # data input as dataset from generator
-            dataset = tf.data.Dataset.from_generator(iter(iterable), output_types=tf.float32)
+            dataset = tf.data.Dataset.from_generator(iterable, output_types=tf.float32)
             data_tensor = dataset.make_one_shot_iterator().get_next()
             input_tensor = tf.Variable(data_tensor, validate_shape=False)
 
@@ -971,6 +971,14 @@ class SOMNodes:
             yield label, randnum, df_weights
 
 
+def gen_preprocess(self, data):
+    def inner():
+        for d in data:
+            res = d.data.align(self.markers).data
+            yield self.scaler.transform(res)
+    return inner
+
+
 class FCSSom:
     """Transform FCS data to SOM node weights."""
 
@@ -1034,7 +1042,7 @@ class FCSSom:
             self.scaler = scaler
 
     @classmethod
-    def load(cls, path: Union[str, URLPath]):
+    def load(cls, path: Union[str, URLPath], **kwargs):
         path = URLPath(path)
         scaler = joblib.load(str(path / "scaler.joblib"))
         config = load_json(path / "config.json")
@@ -1044,7 +1052,7 @@ class FCSSom:
             name=config["name"],
             tube=config["tube"],
             markers=config["markers"],
-            **config["modelargs"]["kwargs"],
+            **{**config["modelargs"]["kwargs"], **kwargs},
         )
         obj.model.load(path / "model.ckpt")
         obj.trained = True
@@ -1163,3 +1171,7 @@ class FCSSom:
             if isinstance(single, TubeSample):
                 single = single.data
             yield self.transform(single, sample=sample)
+
+    def transform_fitmap(self, data):
+        for res in self.model.fit_map(gen_preprocess(self, data)):
+            yield res
