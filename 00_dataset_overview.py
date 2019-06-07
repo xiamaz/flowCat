@@ -53,6 +53,14 @@ def main(args):
             tubes=(1, 2, 3))
     print(all_cases, len(reasons))
 
+    newest = None
+    for case in all_cases:
+        if not newest:
+            newest = case
+        elif newest.date < case.date:
+            newest = case
+    print(newest)
+
 
 if __name__ == "__main__":
     PARSER = ArgumentParser()
