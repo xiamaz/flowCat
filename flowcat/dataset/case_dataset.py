@@ -9,7 +9,7 @@ import datetime
 import pandas as pd
 from sklearn import model_selection
 
-from .case import Case
+from .case import Case, filter_case
 from .. import mappings, utils
 from ..utils import load_json, load_csv, URLPath
 
@@ -277,6 +277,9 @@ class CaseIterable(IterableMixin):
         ratios = pd.Series({m: k / len(self) for m, k in marker_counts.items()})
         return ratios
 
+    def get_selected_markers(self, tubes=None):
+        return {t: get_selected_markers(self, tube=t) for t in (tubes or self.tubes)}
+
     def get_label(self, label):
         for case in self:
             if case.id == label:
@@ -304,6 +307,17 @@ class CaseIterable(IterableMixin):
             selected = [case for case in self if case.has_selected_markers(markers)]
         return self.__class__(selected)
 
+    def filter_reasons(self, **kwargs):
+        data = []
+        failed = []
+        for case in self:
+            success, reasons = filter_case(case, **kwargs)
+            if success:
+                data.append(case)
+            else:
+                failed.append((case.id, reasons))
+        return self.__class__(data), failed
+
     def filter(
             self,
             tubes=None,
@@ -330,11 +344,16 @@ class CaseIterable(IterableMixin):
         # or a preselection of cases
         data = self._data
 
+        print("Init", len(data))
         data = filter_cases_groups(data, groups)
+        print("Groups", len(data))
         data = filter_cases_labels(data, labels)
+        print("Labels", len(data))
         data = filter_cases_date(data, date_min=date_min, date_max=date_max)
+        print("Date", len(data))
         data = filter_cases_infiltration(
             data, infiltration_min=infiltration, infiltration_max=infiltration_max)
+        print("Infil", len(data))
 
         # create copy since we will start modifying objects
         data = [d.copy() for d in data]
@@ -353,6 +372,7 @@ class CaseIterable(IterableMixin):
                     ccase.filepaths = [fp for fp in ccase.filepaths if fp.count >= counts]
                 ndata.append(ccase)
         data = ndata
+        print("Material", len(data))
 
         selected_markers = selected_markers or self.selected_markers
         if selected_markers is None:
@@ -360,6 +380,7 @@ class CaseIterable(IterableMixin):
 
         # filter files to have selected markers
         data = filter_cases_selected_markers(data, selected_markers)
+        print("Markers", len(data))
 
         # randomly sample num cases from each group
         if num:

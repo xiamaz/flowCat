@@ -3,8 +3,11 @@ Objects abstracting basic case information.
 
 Look at tests/test_case.py to see how cases can be defined from simple dicts.
 """
+from __future__ import annotations
+
 import logging
 import functools
+from typing import List, Dict, Union, Tuple
 from datetime import datetime
 
 import pandas as pd
@@ -31,6 +34,61 @@ def all_in(smaller, larger):
 def assert_in_dict(fields, data):
     for field in fields:
         assert field in data, f"{field} is required"
+
+
+def filter_case(
+        case: Case,
+        tubes: List[int] = None,
+        labels: List[str] = None,
+        groups: List[str] = None,
+        infiltration: Tuple[float, float] = None,
+        date: Tuple[Union[str], Union[str]] = None,
+        counts: int = None,
+        materials: List[str] = None,
+        selected_markers: Dict[int, List[str]] = None,
+) -> Tuple[bool, str]:
+    reasons = []
+    if groups and case.group not in groups:
+        reasons.append(f"groups")
+
+    if tubes and not case.has_tubes(tubes):
+        reasons.append(f"tubes")
+
+    if labels and case.id not in labels:
+        reasons.append(f"labels")
+
+    if infiltration:
+        infiltration_min, infiltration_max = infiltration
+        if infiltration_min and case.infiltration < infiltration_min:
+            reasons.append("infiltration_min")
+        if infiltration_max and case.infiltration > infiltration_max:
+            reasons.append("infiltration_max")
+
+    if date:
+        date_min, date_max = date
+        if date_min:
+            date_min = utils.str_to_date(date_min) if isinstance(date_min, str) else date
+            if case.date < date_min:
+                reasons.append("date_min")
+        if date_max:
+            date_max = utils.str_to_date(date_max) if isinstance(date_max, str) else date
+            if case.date > date_max:
+                reasons.append("date_max")
+
+    if counts:
+        assert tubes, "Tubes required for counts"
+        if not any(case.get_tube(t, min_count=counts) for t in tubes):
+            reasons.append("counts")
+
+    if materials:
+        assert tubes, "Tubes required for materials"
+        if not case.has_same_material(tubes, allowed_materials=materials):
+            reasons.append("materials")
+
+    if selected_markers and not case.has_selected_markers(selected_markers):
+        reasons.append("selected_markers")
+
+    return not bool(reasons), reasons
 
 
 class Case:

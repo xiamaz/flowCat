@@ -214,7 +214,9 @@ def create_initializer(init, init_data, dims):
         initializer = tf.random_uniform_initializer(maxval=init_data)
         shape = [m * n, dim]
     elif init == "reference":
-        initializer = tf.convert_to_tensor(init_data.values, dtype=tf.float32)
+        if isinstance(init_data, pd.DataFrame):
+            init_data = init_data.values
+        initializer = tf.convert_to_tensor(init_data, dtype=tf.float32)
     elif init == "sample":
         samples = init_data.values[np.random.choice(
             init_data.shape[0], m * n, replace=False
@@ -423,7 +425,7 @@ class TFSom:
                     numerators, denominators,
                     self._epoch, epoch_op,
                     self._weights, _, summaries
-                ) = self._tower_som(input_tensor=input_tensor)
+                ) = self._tower_som(input_tensor, self._initialization)
                 tf.add_to_collection(self.EPOCH_COLLECTION, epoch_op)
 
                 self._ref_weights = tf.get_variable(
@@ -482,7 +484,7 @@ class TFSom:
                 self._prediction_output, self._m * self._n
             ), 0)
 
-    def _tower_som(self, input_tensor):
+    def _tower_som(self, input_tensor, initialization):
         """Build a single SOM tower on the TensorFlow graph
         Args:
             input_tensor: Input event data to be mapped to the SOM should have len(channel) width
@@ -493,7 +495,7 @@ class TFSom:
         # Randomly initialized weights for all neurons, stored together
         # as a matrix Variable of shape [num_neurons, input_dims]
         with tf.name_scope('Weights'):
-            initializer, shape = self._initialization
+            initializer, shape = initialization
 
             weights = tf.get_variable(
                 name='weights',
@@ -639,9 +641,11 @@ class TFSom:
             data_tensor = dataset.make_one_shot_iterator().get_next()
             input_tensor = tf.Variable(data_tensor, validate_shape=False)
 
+            initialization = create_initializer(
+                "reference", self.ref_weights, (self._m, self._n, self._dim))
             (numerator, denominator,
              epoch, epoch_op,
-             weights, mapping, summaries) = self._tower_som(input_tensor=input_tensor)
+             weights, mapping, summaries) = self._tower_som(input_tensor, initialization)
 
             new_weights = tf.divide(numerator, denominator)
             train_op = tf.assign(weights, new_weights)
@@ -975,7 +979,8 @@ def gen_preprocess(self, data):
     def inner():
         for d in data:
             res = d.data.align(self.markers).data
-            yield self.scaler.transform(res)
+            res = self.scaler.transform(res)
+            yield res
     return inner
 
 
@@ -1173,5 +1178,5 @@ class FCSSom:
             yield self.transform(single, sample=sample)
 
     def transform_fitmap(self, data):
-        for res in self.model.fit_map(gen_preprocess(self, data)):
-            yield res
+        for weights, mapping, mapping_prev in self.model.fit_map(gen_preprocess(self, data)):
+            yield self._create_som(weights)
