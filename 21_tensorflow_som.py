@@ -122,26 +122,45 @@ def time_generator_logger(generator):
         time_b = time.time()
         time_d = time_b - time_a
         circ_buffer.append(time_d)
-        print(f"Training time: {time_d}s Rolling avg: {np.mean(circ_buffer)}s")
+        time_rolling = np.mean(circ_buffer)
+        print(f"Training time: {time_d}s Rolling avg: {time_rolling}s")
         time_a = time_b
-        yield res
+        yield time_d, time_rolling, res
 
 
-def test_batch_transform_speed(trainsamples: flowcat.CaseCollection):
+def test_batch_transform_speed(tubedata, fitmap: bool):
     """Test the speed for transforming a list of samples.
 
     Take the time we need to get a whole sample.
     """
-    print(trainsamples)
-    view = trainsamples.filter()
-    print(view)
-    print(trainsamples.filter_failed())
-    tube_1 = view.get_tube(1)
-    print(tube_1)
 
     model = flowcat.models.FCSSom.load(f"output/test_model_save/native-subsample", batch_size=50000)
-    for somdata in time_generator_logger(model.transform_multiple(tube_1)):
-        print(somdata)
+    res = []
+    if fitmap:
+        for _, mean, somdata in time_generator_logger(model.transform_fitmap(tubedata)):
+            res.append(somdata)
+    else:
+        for _, mean, somdata in time_generator_logger(model.transform_multiple(tubedata)):
+            res.append(somdata)
+
+    return mean, res
+
+
+def compare_som(som_a, som_b):
+    print(som_a.data - som_b.data)
+
+
+def compare_fitmap(dataset):
+    view = dataset.filter(num=3, groups=["CLL", "normal"])
+    print(view)
+    print(dataset.filter_failed())
+    tube_1 = view.get_tube(1)
+
+    mean_fitmap, res_fitmap = test_batch_transform_speed(tube_1, fitmap=True)
+    mean_direct, res_direct = test_batch_transform_speed(tube_1, fitmap=False)
+    print(f"Fitmap rolling mean: {mean_fitmap}s Direct mean: {mean_direct}")
+    for som_a, som_b in zip(res_fitmap, res_direct):
+        compare_som(som_a, som_b)
 
 
 if __name__ == "__main__":
@@ -162,4 +181,4 @@ if __name__ == "__main__":
 
     # train_loaded_check(sample_subsample, sample_missing)
 
-    test_batch_transform_speed(ds_subsample)
+    compare_fitmap(ds_subsample)
