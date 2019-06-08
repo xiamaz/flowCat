@@ -52,6 +52,19 @@ class FCSData:
     def meta(self):
         return self._meta
 
+    def channel_mask(self, channels):
+        """Return a 1/0 int array for the given channels, whether channels
+        exist or not."""
+        return np.array([c in self.data.columns for c in channels])
+
+    def align(self, channels, missing_val=np.nan):
+        """Return aligned copy of FCS data."""
+        meta = self._meta
+        data = self.data
+        data = data.assign(**{k: missing_val for k in channels if k not in data.columns})
+        data = data[channels]
+        return self.__class__((meta, data))
+
     def copy(self):
         return self.__class__(self)
 

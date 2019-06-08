@@ -21,16 +21,22 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # =================================================================================
+from __future__ import annotations
 import random
+from typing import List, Union, Iterable, Generator
 import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import sklearn as sk
+import joblib
 
 import tensorflow as tf
-from ..utils import create_stamp
-from ..dataset import case as ccase
+from ..utils import create_stamp, URLPath, save_json, load_json
+from ..dataset.fcs import FCSData
+from ..dataset.case import TubeSample
+from .. import som
 
 """
 Adapted from code by Chris Gorman.
@@ -43,46 +49,18 @@ https://codesachin.wordpress.com/2015/11/28/self-organizing-maps-with-googles-te
 LOGGER = logging.getLogger(__name__)
 
 
-def create_marker_generator(data_iterable, channels, batch_size=1, loop=True):
-    """Create a generator applying marker channels to provided data and
-    optionally batching it to specified larger sizes.
-    Args:
-        data_iterable: Iterable data, for example a list of dataframes.
-        channels: Marker channels used to enforce alignment of data.
-        batch_size: Number of individual samples in a single batch If larger than one, multiple samples
-            will be concatenated.
-        loop: Indefinitely loop the generated data.
-    Returns:
-        Generator function.
-    """
+MARKER_IMAGES = {
+    "cd45_ss": ("CD45-KrOr", "SS INT LIN", None),
+    "ss_cd19": (None, "SS INT LIN", "CD19-APCA750"),
+    "kappa_lambda": (None, "Kappa-FITC", "Lambda-PE"),
+    "zz_cd45_ss_cd19": ("CD45-KrOr", "SS INT LIN", "CD19-APCA750"),
+}
 
-    def marker_generator():
-        buf = []
-        cache = []
 
-        for i, data in enumerate(data_iterable):
-            if i % batch_size == 0 and buf:
-                concat = np.concatenate(buf, axis=0)
-                yield concat
-                if loop:
-                    cache.append(concat)
-                buf = []
-            mdata = data[channels].values
-            buf.append(mdata)
-        if buf:
-            concat = np.concatenate(buf, axis=0)
-            yield concat
-            if loop:
-                cache.append(concat)
-
-        while True and loop:
-            # randomize the presentation of the batches, to prevent ecg like
-            # fitting to individual samples
-            random.shuffle(cache)
-            for cached in cache:
-                yield cached
-
-    return marker_generator
+class MarkerMissingError(Exception):
+    def __init__(self, markers, message):
+        self.markers = markers
+        self.message = message
 
 
 def linear_cooling(initial, end, epoch, max_epochs):
@@ -197,6 +175,85 @@ def calculate_node_distance(matched_location, location_vectors, map_type, distan
     return bmu_distances
 
 
+def create_color_map(weights, cols, name="colormap", img_size=None):
+    """Create a color map using given cols. Also generate a small reference visualizing the given colorspace.
+    Params:
+        weights: Tensor of weights with nodes in rows and marker channels in columns.
+        cols: number of columns used for the image. needs to be of length 3
+        name: Name of the generated image
+        img_size: Size of generated image, otherwise will be inferred as sqrt of weight row count.
+    """
+    assert len(cols) == 3, "Needs one column for each color, use None to ignore a channel."
+    rows = weights.shape[0]
+    if img_size is None:
+        side_len = int(np.sqrt(rows))
+        img_size = (side_len, side_len)
+
+    slices = [
+        tf.zeros(weights.shape[0]) if col is None else weights[:, col]
+        for col in cols
+    ]
+    marker_image = tf.reshape(tf.stack(slices, axis=1), shape=(1, *img_size, 3))
+    summary_image = tf.summary.image(name, marker_image)
+    return summary_image
+
+
+def create_initializer(init, init_data, dims):
+    """Create initializer for weights.
+
+    Args:
+        init - Init method name
+        init_data - Additional data for method
+        dims - Tuple of (m, n, dim)
+    Returns:
+        Tuple of initializer and shape for weight initialization
+    """
+    m, n, dim = dims
+    shape = None
+    if init == "random":
+        initializer = tf.random_uniform_initializer(maxval=init_data)
+        shape = [m * n, dim]
+    elif init == "reference":
+        if isinstance(init_data, pd.DataFrame):
+            init_data = init_data.values
+        initializer = tf.convert_to_tensor(init_data, dtype=tf.float32)
+    elif init == "sample":
+        samples = init_data.values[np.random.choice(
+            init_data.shape[0], m * n, replace=False
+        ), :]
+        initializer = tf.convert_to_tensor(
+            samples, dtype=tf.float32
+        )
+    else:
+        raise TypeError(init)
+    return initializer, shape
+
+
+def summary_quantization_error(squared_distance):
+    """Create quantization error."""
+    mean_distance = tf.sqrt(tf.cast(tf.reduce_min(squared_distance, axis=1), tf.float32))
+    _, update_mean_dist = tf.metrics.mean(mean_distance)
+    return tf.summary.scalar('quantization_error', update_mean_dist)
+
+
+def summary_topographic_error(squared_distance, location_vects):
+    """Generate topographic error."""
+    _, top2_indices = tf.nn.top_k(tf.negative(squared_distance), k=2)
+    top2_locs = tf.gather(location_vects, top2_indices)
+    distances = tf.reduce_sum(tf.pow(tf.subtract(top2_locs[:, 0, :], top2_locs[:, 1, :]), 2), 1)
+    topographic_error = tf.divide(
+        tf.reduce_sum(tf.cast(distances > 1, tf.float32)),
+        tf.cast(tf.size(distances), tf.float32))
+    return tf.summary.scalar("topographic_error", topographic_error)
+
+
+def summary_learning_image(learning_rate, m, n):
+    """Create image visualization of learning rate across nodes."""
+    learn_image = tf.reshape(
+        tf.reduce_mean(learning_rate, axis=0), shape=(1, m, n, 1))
+    return tf.summary.image("learn_img", learn_image)
+
+
 class TFSom:
     """Tensorflow Model of a self-organizing map, without assumptions about
     usage.
@@ -204,14 +261,15 @@ class TFSom:
     function.
     """
 
+    EPOCH_COLLECTION = "epoch_collection"
+
     def __init__(
             self,
-            m, n, channels, tube,
-            max_epochs=10, batch_size=1,
+            dims, initialization=None, graph=None,
+            max_epochs=10, batch_size=1, buffer_size=1_000_000,
             initial_radius=None, end_radius=None, radius_cooling="linear",
             initial_learning_rate=0.05, end_learning_rate=0.01, learning_cooling="linear",
             node_distance="euclidean", map_type="planar", std_coeff=0.5,
-            initialization_method="random", reference=None, max_random=1.0,
             subsample_size=None,
             model_name="Self-Organizing-Map",
             tensorboard_dir=None, seed=None,
@@ -219,10 +277,7 @@ class TFSom:
         """
         Initialize a self-organizing map on the tensorflow graph
         Args:
-            m, n: Number of rows and columns.
-            channels: Columns in the input data. Names will be used for
-                alignment of the input dataframe prior to training and prediction.
-            tube: Tube number only used in config name.
+            dims: Number of rows and columns and dims per node.
             max_epochs: Number of epochs in training.
             batch_size: Number of cases in a single batch. (Not the number of
                 rows in one FCS files, this is more akin to passing multiple FCS
@@ -236,10 +291,6 @@ class TFSom:
             node_distance: Distance metric between nodes on the SOM map.
             map_type: Behavior of map edges. Either toroid (wrap-around) or planar (no wrap).
             std_coeff: Coefficient of the neighborhood function.
-            initialization_method: Possible options are random (random numbers), sample (random choice from sample)
-                or reference (reference directly loaded as weights).
-            reference: Dataframe with matching channels to be used either as source for samples or loaded as weights.
-            max_random: Maximum value, when using random initialization.
             subsample_size: Size of subsamples from a single batch. None or a negative value will use the entire input
                 data.
             model_name: Name of the SOM model. Used for tensorboard directory names.
@@ -248,24 +299,15 @@ class TFSom:
         # snapshot all local variables for config saving
         config = {k: v for k, v in locals().items() if k != "self"}
 
-        self._m = abs(int(m))
-        self._n = abs(int(n))
-        self.channels = list(channels)
-        self.tube = tube
-        self._dim = len(channels)
+        self._m, self._n, self._dim = dims
 
-        self._initial_radius = max(m, n) / 2.0 if initial_radius is None else float(initial_radius)
+        self._initial_radius = max(self._m, self._n) / 2.0 if initial_radius is None else float(initial_radius)
         self._end_radius = 1.0 if end_radius is None else float(end_radius)
         self._radius_cooling = radius_cooling
 
         self._initial_learning_rate = initial_learning_rate
         self._end_learning_rate = end_learning_rate
         self._learning_cooling = learning_cooling
-
-        # optional reference data that will be used as initial weights or for
-        # random sampling as initial node weights
-        self._reference = reference
-        self._max_random = max_random
 
         # node distance calculation option on the SOM map
         self._node_distance = node_distance
@@ -275,21 +317,21 @@ class TFSom:
         self._max_epochs = abs(int(max_epochs))
         self._batch_size = abs(int(batch_size))
         self._model_name = str(model_name)
-
-        self._initialization_method = initialization_method
+        self._buffer_size = buffer_size
 
         # Initialized later, just declaring up here for neatness and to avoid
         # warnings
         self._weights = None
-        self._location_vects = None
-        self._global_step = None
+        self._ref_weights = None
+        self._epoch = None
+
         self._training_op = None
-        self._centroid_grid = None
-        self._locations = None
+        self._assign_trained_op = None
+        self._reset_weights_op = None
 
         # prediction variables
         self._invar = None
-        self._prediction_input = None
+        self.__prediction_input = None
         self._squared_distances = None
         self._prediction_output = None
         self._prediction_distance = None
@@ -308,13 +350,22 @@ class TFSom:
         else:
             self._tensorboard_dir = None
 
-        self._summary_list = list()
+        self._summary_list = []
 
         # This will be the collection of summaries for this subgraph. Add new
         # summaries to it and pass it to merge()
-        self._input_tensor = None
+        if graph is None:
+            self._graph = tf.Graph()
+            assert initialization is None, "Init needs to be on same graph"
+            with self._graph.as_default():
+                self._initialization = create_initializer("random", 1, (self._m, self._n, self._dim))
+        else:
+            self._graph = graph
+            self._initialization = initialization
 
-        self._graph = tf.Graph()
+        with self._graph.as_default():
+            self._data_placeholder = self._initialize_tf_graph()
+            self._saver = tf.train.Saver()
 
         self._seed = seed
         if self._seed is not None:
@@ -329,6 +380,10 @@ class TFSom:
                 allow_soft_placement=True,
                 log_device_placement=False,))
 
+        with self._graph.as_default():
+            init_op = tf.global_variables_initializer()
+            self._sess.run([init_op])
+
         self._writer = None
 
     @property
@@ -339,22 +394,43 @@ class TFSom:
     @property
     def config_tag(self):
         """Create config tag without model name."""
-        return f"t{self.tube}_s{self._m}_e{self._max_epochs}_m{self._map_type}_d{self._node_distance}"
+        return f"s{self._m}_e{self._max_epochs}_m{self._map_type}_d{self._node_distance}"
 
-    def _initialize_tf_graph(self, batches_per_epoch):
+    def add_summary(self, summary):
+        if isinstance(summary, list):
+            self._summary_list += summary
+        else:
+            self._summary_list.append(summary)
+
+    def _create_input(self):
+        data_placeholder = tf.placeholder(tf.float64)
+
+        dataset = tf.data.Dataset.from_tensor_slices(data_placeholder)
+        dataset = dataset.batch(self._batch_size)
+        dataset = dataset.shuffle(self._buffer_size, seed=None, reshuffle_each_iteration=True)
+
+        iterator = dataset.make_initializable_iterator()
+        input_tensor = iterator.get_next()
+        return data_placeholder, iterator, input_tensor
+
+    def _initialize_tf_graph(self):
         """Initialize the SOM on the TensorFlow graph"""
-        with self._graph.as_default(), tf.variable_scope(tf.get_variable_scope()):
+        data, iter_init, input_tensor = self._create_input()
+        tf.add_to_collection(self.EPOCH_COLLECTION, iter_init.initializer)
+
+        with tf.variable_scope(tf.get_variable_scope()):
+
             with tf.name_scope("Tower_0"):
-                numerators, denominators, self._global_step, self._weights, _, summaries = self._tower_som(
-                    input_tensor=self._input_tensor,
-                    batches_per_epoch=batches_per_epoch,
-                    max_epochs=self._max_epochs,
-                    initial_radius=self._initial_radius,
-                    initial_learning_rate=self._initial_learning_rate,
-                    end_radius=self._end_radius,
-                    end_learning_rate=self._end_learning_rate,
-                )
+                (
+                    numerators, denominators,
+                    self._epoch, self._weights, _, summaries
+                ) = self._tower_som(input_tensor, self._initialization)
+
+                self._ref_weights = tf.get_variable(
+                    name="ref_weights", initializer=self._weights)
+
                 tf.get_variable_scope().reuse_variables()
+                self.add_summary(summaries)
 
             with tf.name_scope("Weight_Update"):
                 # Divide them
@@ -368,27 +444,27 @@ class TFSom:
                         summaries.append(tf.summary.image("WeightDiff", diff_weights))
                 # Assign them
                 self._training_op = tf.assign(self._weights, new_weights)
+                self._assign_trained_op = tf.assign(self._ref_weights, self._weights)
+                self._reset_weights_op = tf.assign(self._weights, self._ref_weights)
 
         with self._graph.as_default():
             self._prediction_variables(self._weights)
-            # merge all summaries
-            if self._tensorboard:
-                self._merged = tf.summary.merge(self._summary_list + summaries)
+        return data
 
-    def _prediction_variables(self, weights,):
+    def _prediction_variables(self, weights):
         """Create prediction ops"""
         with tf.name_scope("Prediction"):
             self._invar = tf.placeholder(tf.float32)
             dataset = tf.data.Dataset.from_tensors(self._invar)
 
-            self._prediction_input = dataset.make_initializable_iterator()
+            self.__prediction_input = dataset.make_initializable_iterator()
 
             # Get the index of the minimum distance for each input item,
             # shape will be [batch_size],
             self._squared_distances = tf.reduce_sum(
                 tf.pow(tf.subtract(
                     tf.expand_dims(weights, axis=0),
-                    tf.expand_dims(self._prediction_input.get_next(), axis=1)
+                    tf.expand_dims(self.__prediction_input.get_next(), axis=1)
                 ), 2), 2
             )
             self._prediction_output = tf.argmin(
@@ -406,17 +482,10 @@ class TFSom:
                 self._prediction_output, self._m * self._n
             ), 0)
 
-    def _tower_som(
-            self,
-            input_tensor,
-            batches_per_epoch, max_epochs,
-            initial_radius, end_radius,
-            initial_learning_rate, end_learning_rate,
-    ):
+    def _tower_som(self, input_tensor, initialization):
         """Build a single SOM tower on the TensorFlow graph
         Args:
             input_tensor: Input event data to be mapped to the SOM should have len(channel) width
-            batches_per_epoch: Number of batches per epoch, needed to correctly decay learn rate and radius
         Returns:
             (numerator, denominator) describe the weight changes and associated cumulative learn rate per
             node. This can be summed across towers, if we want to parallelize training.
@@ -424,28 +493,7 @@ class TFSom:
         # Randomly initialized weights for all neurons, stored together
         # as a matrix Variable of shape [num_neurons, input_dims]
         with tf.name_scope('Weights'):
-            # Each tower will get its own copy of the weights variable. Since
-            # the towers are constructed sequentially, the handle to the
-            # Tensors will be different for each tower even if we reference
-            # "self"
-            if self._initialization_method == "random":
-                initializer = tf.random_uniform_initializer(maxval=self._max_random)
-                shape = [self._m * self._n, self._dim]
-            elif self._initialization_method == "sample":
-                samples = self._reference.values[np.random.choice(
-                    self._reference.shape[0], self._m * self._n, replace=False
-                ), :]
-                initializer = tf.convert_to_tensor(
-                    samples, dtype=tf.float32
-                )
-                shape = None
-            elif self._initialization_method == "reference":
-                initializer = tf.convert_to_tensor(
-                    self._reference.values, dtype=tf.float32
-                )
-                shape = None
-            else:
-                raise TypeError("Initialization method not supported.")
+            initializer, shape = initialization
 
             weights = tf.get_variable(
                 name='weights',
@@ -456,12 +504,12 @@ class TFSom:
         # Matrix of size [m*n, 2] for SOM grid locations of neurons.
         # Maps an index to an (x,y) coordinate of a neuron in the map for
         # calculating the neighborhood distance
-        self._location_vects = tf.constant(np.array(
+        location_vects = tf.constant(np.array(
             [[i, j] for i in range(self._m) for j in range(self._n)]
         ), name='Location_Vectors')
 
         with tf.name_scope('Input'):
-            input_copy = tf.identity(input_tensor)
+            input_copy = tf.cast(input_tensor, tf.float32)
             if self._subsample_size:
                 # randomly select samples from the input for training
                 random_vals = tf.cast(
@@ -472,9 +520,9 @@ class TFSom:
                     tf.int32)
                 input_copy = tf.gather_nd(input_copy, random_vals)
 
+        # Feed epoch via feed dict, makes everything much simpler
         with tf.name_scope('Epoch'):
-            global_step = tf.Variable(-1.0, dtype=tf.float32)
-            epoch = tf.floor(tf.assign_add(global_step, 1.0) / batches_per_epoch)
+            epoch = tf.placeholder(tf.float32, ())
 
         # get best matching units for all events in batch
         with tf.name_scope('BMU_Indices'):
@@ -492,7 +540,7 @@ class TFSom:
         # get the locations of BMU for each event
         with tf.name_scope('BMU_Locations'):
             bmu_locs = tf.reshape(
-                tf.gather(self._location_vects, bmu_indices), [-1, 2]
+                tf.gather(location_vects, bmu_indices), [-1, 2]
             )
 
         with tf.name_scope('Learning_Rate'):
@@ -501,18 +549,19 @@ class TFSom:
             # same for radius
             radius = apply_cooling(
                 self._radius_cooling,
-                initial_radius, end_radius,
-                epoch, max_epochs)
+                self._initial_radius, self._end_radius,
+                epoch, self._max_epochs)
+            self._radius = radius
             alpha = apply_cooling(
                 self._learning_cooling,
-                initial_learning_rate, end_learning_rate,
-                epoch, max_epochs)
+                self._initial_learning_rate, self._end_learning_rate,
+                epoch, self._max_epochs)
 
             # calculate the node distances between BMU and all other nodes
             # distance will depend on the used metric and the type of the map
             map_size = tf.constant([self._m, self._n], dtype=tf.int64)
             bmu_distances = calculate_node_distance(
-                bmu_locs, self._location_vects, self._map_type, self._node_distance, map_size)
+                bmu_locs, location_vects, self._map_type, self._node_distance, map_size)
 
             # gaussian neighborhood, eg 67% neighborhood with 1std
             # keep in mind, that radius is decreasing with epoch
@@ -551,67 +600,27 @@ class TFSom:
         summaries = []
         if self._tensorboard:
             with tf.name_scope('Summary'):
-                # All summary ops are added to a list and then the merge() function is called at the end of
-                # this method
-                # learning parameters
                 _, update_mean_alpha = tf.metrics.mean(alpha)
-                _, update_mean_radius = tf.metrics.mean(radius)
-
                 summaries.append(tf.summary.scalar('alpha', update_mean_alpha))
+
+                _, update_mean_radius = tf.metrics.mean(radius)
                 summaries.append(tf.summary.scalar('radius', update_mean_radius))
 
-                mean_distance = tf.sqrt(tf.cast(tf.reduce_min(squared_distance, axis=1), tf.float32))
-                _, update_mean_dist = tf.metrics.mean(mean_distance)
-                summaries.append(tf.summary.scalar('quantization_error', update_mean_dist))
+                summaries.append(summary_quantization_error(squared_distance))
+                summaries.append(summary_topographic_error(squared_distance, location_vects))
 
-                # proportion of events where 1st and 2nd bmu are not adjacent
-                _, top2_indices = tf.nn.top_k(tf.negative(squared_distance), k=2)
-                top2_locs = tf.gather(self._location_vects, top2_indices)
-                distances = tf.reduce_sum(tf.pow(tf.subtract(top2_locs[:, 0, :], top2_locs[:, 1, :]), 2), 1)
-                topographic_error = tf.divide(
-                    tf.reduce_sum(tf.cast(distances > 1, tf.float32)),
-                    tf.cast(tf.size(distances), tf.float32))
-                summaries.append(tf.summary.scalar("topographic_error", topographic_error))
-
-                learn_image = tf.reshape(
-                    tf.reduce_mean(learning_rate_op, axis=0), shape=(1, self._m, self._n, 1))
-                summaries.append(tf.summary.image("learn_img", learn_image))
-
-            with tf.name_scope("WeightsSummary"):
-                # combined cd45 ss int lin plot using r and g color
-                summaries.append(
-                    self._create_color_map(weights, ["CD45-KrOr", "SS INT LIN", None], "cd45_ss"))
-                summaries.append(
-                    self._create_color_map(weights, [None, "SS INT LIN", "CD19-APCA750"], "ss_cd19"))
-                if "Kappa-FITC" in self.channels:
-                    summaries.append(
-                        self._create_color_map(weights, [None, "Kappa-FITC", "Lambda-PE"], "kappa_lambda"))
-                summaries.append(
-                    self._create_color_map(weights, ["CD45-KrOr", "SS INT LIN", "CD19-APCA750"], "zz_cd45_ss_cd19"))
+                summaries.append(summary_learning_image(learning_rate_op, self._m, self._n))
 
             with tf.name_scope("MappingSummary"):
                 event_image = tf.reshape(mapped_events_per_node, shape=(1, self._m, self._n, 1))
                 summaries.append(tf.summary.image("mapping_img", event_image))
 
-        return numerator, denominator, global_step, weights, mapped_events_per_node, summaries
+        return (
+            numerator, denominator, epoch,
+            weights, mapped_events_per_node, summaries
+        )
 
-    def _create_color_map(self, weights, channels, name="colormap"):
-        """Create a color map using given channels. Also generate a small reference visualizing the
-        given colorspace."""
-        slices = [
-            tf.zeros(self._m * self._n) if channel is None else weights[:, self.channels.index(channel)]
-            for channel in channels
-        ]
-        marker_image = tf.reshape(tf.stack(slices, axis=1), shape=(1, self._m, self._n, 3))
-        summary_image = tf.summary.image(name, marker_image)
-        return summary_image
-
-    def fit_map(
-            self, data_iterable, num_inputs,
-            max_epochs=0,
-            initial_learn=0.1, end_learn=0.01,
-            initial_radius=3, end_radius=1
-    ):
+    def fit_map(self, iterable):
         """Map new data to the existing weights. Optionally refit the map to the data.
         Args:
             data_iterable: Iterable container yielding dataframes.
@@ -621,85 +630,74 @@ class TFSom:
         Yields:
             Tuple of node weights and event mapping
         """
-        marker_generator = create_marker_generator(data_iterable, self.channels, batch_size=1, loop=False)
 
         graph = tf.Graph()
         session = tf.Session(graph=graph)
         with graph.as_default():
             # data input as dataset from generator
-            dataset = tf.data.Dataset.from_generator(marker_generator, output_types=tf.float32)
+            dataset = tf.data.Dataset.from_generator(iterable, output_types=tf.float32)
             data_tensor = dataset.make_one_shot_iterator().get_next()
             input_tensor = tf.Variable(data_tensor, validate_shape=False)
 
-            numerator, denominator, global_step, weights, mapping, summaries = self._tower_som(
-                input_tensor=input_tensor, batches_per_epoch=1, max_epochs=max_epochs,
-                initial_radius=initial_radius, end_radius=end_radius,
-                initial_learning_rate=initial_learn, end_learning_rate=end_radius,
-            )
+            initialization = create_initializer(
+                "reference", self.ref_weights, (self._m, self._n, self._dim))
+            (numerator, denominator, epoch_place,
+             weights, mapping, summaries) = self._tower_som(input_tensor, initialization)
+
             new_weights = tf.divide(numerator, denominator)
             train_op = tf.assign(weights, new_weights)
 
             if self._tensorboard:
                 summary = tf.summary.merge(summaries)
 
-            var_init = tf.variables_initializer([weights, global_step, input_tensor])
+            var_init = tf.variables_initializer([weights, input_tensor])
             metric_init = tf.variables_initializer(graph.get_collection(tf.GraphKeys.METRIC_VARIABLES))
             number = 0
             if self._tensorboard:
                 writer = tf.summary.FileWriter(
                     str(self._tensorboard_dir / f"self_{create_stamp()}"), graph)
-            for _ in range(num_inputs):
-                session.run([var_init, metric_init])
-                (event_mapping_prev,) = session.run([mapping])
-                for epoch in range(max_epochs):
-                    session.run([train_op])
-                # get final mapping and weights
-                if self._tensorboard:
-                    arr_weights, event_mapping, sum_res = session.run([weights, mapping, summary])
-                    writer.add_summary(sum_res, number)
-                else:
-                    arr_weights, event_mapping = session.run([weights, mapping])
+            while True:
+                try:
+                    session.run([var_init, metric_init])
+                    (event_mapping_prev,) = session.run([mapping])
+                    for epoch in range(self._max_epochs):
+                        session.run([train_op], {epoch_place: epoch})
+                    # get final mapping and weights
+                    if self._tensorboard:
+                        arr_weights, event_mapping, sum_res = session.run([weights, mapping, summary])
+                        writer.add_summary(sum_res, number)
+                    else:
+                        arr_weights, event_mapping = session.run([weights, mapping])
 
-                # yield the result after training
-                yield arr_weights, event_mapping, event_mapping_prev
-                number += 1
+                    # yield the result after training
+                    yield arr_weights, event_mapping, event_mapping_prev
+                    number += 1
+                except tf.errors.OutOfRangeError:
+                    break
 
-    def train(self, data_iterable, num_inputs):
-        """Train the network on the data provided by the input tensor.
-        Args:
-            data_iterable: Iterable object returning single pandas dataframes.
-            num_inputs: The total number of inputs in the data-set. Used to determine batches per epoch
-        """
-        marker_generator = create_marker_generator(data_iterable, self.channels, batch_size=self._batch_size)
+    def _run_training(self, data, set_weights=False, label=""):
+        assert data.shape[0] <= self._buffer_size, (
+            f"Data size {data.shape[0]} > Buffer size {self._buffer_size}. "
+            "Samples will be lost on reshuffling. "
+            "Increase buffer size to number of samples.")
 
-        batches_per_epoch = int(num_inputs / self._batch_size + 0.5)
-
-        # initialize the input fitting dataset
-        # the fitting input tensor is directly integrated into the
-        # graph, which is why graph creation is postponed until fitting,
-        # when we know the actual data of our input
         with self._graph.as_default():
-            dataset = tf.data.Dataset.from_generator(
-                marker_generator, tf.float32
+            metric = tf.variables_initializer(
+                self._graph.get_collection(tf.GraphKeys.METRIC_VARIABLES)
             )
-
-            self._input_tensor = dataset.make_one_shot_iterator().get_next()
-
-            # Create the ops and put them on the graph
-            self._initialize_tf_graph(batches_per_epoch)
-
-            init_op = tf.global_variables_initializer()
-            self._sess.run([init_op])
-
-            metric_init = tf.variables_initializer(self._graph.get_collection(tf.GraphKeys.METRIC_VARIABLES))
+            epoch_collection = tf.get_collection(self.EPOCH_COLLECTION) + [metric]
 
         if self._tensorboard:
             # Initialize the summary writer after the session has been initialized
+            merged_summaries = tf.summary.merge(self._summary_list)
             self._writer = tf.summary.FileWriter(
-                str(self._tensorboard_dir / f"train_{create_stamp()}"), self._sess.graph)
+                str(self._tensorboard_dir / f"train_{label}_{create_stamp()}"), self._sess.graph)
+
+        LOGGER.info("Training self-organizing Map")
+        if not set_weights:
+            self._sess.run(self._reset_weights_op)
 
         global_step = 0
-        LOGGER.info("Training self-organizing Map")
         for epoch in range(self._max_epochs):
             LOGGER.info("Epoch: %d/%d", epoch + 1, self._max_epochs)
 
@@ -708,25 +706,54 @@ class TFSom:
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
 
-            # reset metric variables after every batch
-            self._sess.run(metric_init)
-            for _ in range(batches_per_epoch):
-                global_step += 1
-
-                # if recording summaries; initialize a run while recording, save after batch is done
-                if self._tensorboard:
-                    summary, _, = self._sess.run(
-                        [self._merged, self._training_op],
-                        options=run_options, run_metadata=run_metadata
-                    )
-                else:
-                    self._sess.run(self._training_op)
-
-                # save the summary if it has been tracked
-                if self._tensorboard:
-                    self._writer.add_run_metadata(run_metadata, f"step_{global_step}")
-                    self._writer.add_summary(summary, global_step)
+            self._sess.run(
+                epoch_collection,
+                feed_dict={self._data_placeholder: data, self._epoch: epoch}
+            )
+            while True:
+                try:
+                    if self._tensorboard:
+                        summary, _, = self._sess.run(
+                            [merged_summaries, self._training_op],
+                            options=run_options, run_metadata=run_metadata,
+                            feed_dict={self._epoch: epoch}
+                        )
+                    else:
+                        self._sess.run(
+                            self._training_op,
+                            feed_dict={self._epoch: epoch}
+                        )
+                    LOGGER.info("Global step: %d", global_step)
+                    global_step += 1
+                    # save the summary if it has been tracked
+                    if self._tensorboard:
+                        self._writer.add_run_metadata(run_metadata, f"step_{global_step}")
+                        self._writer.add_summary(summary, global_step)
+                except tf.errors.OutOfRangeError:
+                    if set_weights:
+                        self._sess.run(self._assign_trained_op)
+                    break
         return self
+
+    def train(self, data, label="learn"):
+        """Train the network on the data provided by the input tensor.
+        Args:
+            data_iterable: Iterable object returning single pandas dataframes.
+        """
+        self._run_training(data, set_weights=True, label=label)
+        return self
+
+    def transform(self, data, label="transform"):
+        """Train data using given parameters from initial values transiently."""
+        self._run_training(data, set_weights=False, label=label)
+        return self._sess.run(self._weights)
+
+    def save(self, path: URLPath):
+        """Save the model to the given path."""
+        self._saver.save(self._sess, str(path))
+
+    def load(self, path: URLPath):
+        self._saver.restore(self._sess, str(path))
 
     @property
     def output_weights(self):
@@ -737,20 +764,24 @@ class TFSom:
         return np.array(self._sess.run(self._weights))
 
     @property
-    def prediction_input(self):
-        """Get the prediction input."""
-        return self._prediction_input
+    def ref_weights(self):
+        return np.array(self._sess.run(self._ref_weights))
 
-    @prediction_input.setter
-    def prediction_input(self, value):
-        valuearr = value[self.channels].values
+    @property
+    def _prediction_input(self):
+        """Get the prediction input."""
+        return self.__prediction_input
+
+    @_prediction_input.setter
+    def _prediction_input(self, value):
         self._sess.run(
-            self._prediction_input.initializer, feed_dict={self._invar: valuearr}
+            self.__prediction_input.initializer, feed_dict={self._invar: value}
         )
 
     def map_to_nodes(self, data):
-        """Map data to the closest node in the map."""
-        self.prediction_input = data
+        """Map data to the closest node in the map.
+        """
+        self._prediction_input = data
         results = []
         while True:
             try:
@@ -773,7 +804,7 @@ class TFSom:
         :return: Array of m x n length, eg number of mapped events for each
                     node.
         """
-        self.prediction_input = data
+        self._prediction_input = data
         results = np.zeros(self._m * self._n)
         while True:
             try:
@@ -790,7 +821,7 @@ class TFSom:
 
     def distance_to_map(self, data):
         """Return the summed loss of the current case."""
-        self.prediction_input = data
+        self._prediction_input = data
 
         # run in batches to get the result
         results = []
@@ -904,7 +935,7 @@ class SOMNodes:
 
     def fit(self, X, *_):
         """Optionally train the model on the provided data."""
-        self._model.train(X, num_inputs=len(X))
+        self._model.train(X)
         return self
 
     def get_weights(self):
@@ -942,3 +973,210 @@ class SOMNodes:
             df_weights.name = f"{label}_{randnum}"
             # df_weights.name = label
             yield label, randnum, df_weights
+
+
+def gen_preprocess(self, data):
+    def inner():
+        for d in data:
+            res = d.data.align(self.markers).data
+            res = self.scaler.transform(res)
+            yield res
+    return inner
+
+
+class FCSSom:
+    """Transform FCS data to SOM node weights."""
+
+    def __init__(self, dims, init=("random", None), tube=-1, markers=None, name="fcssom", scaler=None, **kwargs):
+        self.dims = dims
+        m, n, dim = self.dims
+
+        init_type, init_data = init
+        transform_configs = []
+        if init_type == "random":
+            init_data = init_data or 1
+        elif init_type == "reference":
+            assert isinstance(init_data, som.SOM)
+            markers = init_data.markers
+            tube = init_data.tube if tube == -1 else tube
+            rm, rn = init_data.dims
+            transform_configs = init_data.transforms
+            init_data = init_data.data
+            m = rm if m == -1 else m
+            n = rn if n == -1 else n
+        elif init_type == "sample":
+            assert isinstance(init_data, FCSData)
+            markers = init_data.markers
+            init_data = init_data.data
+
+        dim = len(markers) if dim == -1 else dim
+
+        self.tube = tube
+        self.name = name
+        self.markers = list(markers)
+        self._graph = tf.Graph()
+        self.trained = False
+        self.modelargs = {
+            "init": init_type,
+            "kwargs": kwargs,
+        }
+
+        with self._graph.as_default():
+            initialization = create_initializer(init_type, init_data, (m, n, dim))
+
+        self.model = TFSom(
+            (m, n, dim),
+            graph=self._graph,
+            initialization=initialization,
+            model_name=f"{self.name}_t{self.tube}",
+            **kwargs)
+
+        with self._graph.as_default():
+            self.add_weight_images(MARKER_IMAGES)
+
+        if scaler is None:
+            if transform_configs:
+                assert len(transform_configs) == 1
+                tname, tconf = transform_configs[0]
+                assert tname == "MinMaxScaler"
+                self.scaler = sk.preprocessing.MinMaxScaler()
+                self.scaler.fit([tconf["data_min_"], tconf["data_max_"]])
+            else:
+                self.scaler = sk.preprocessing.MinMaxScaler()
+        else:
+            self.scaler = scaler
+
+    @classmethod
+    def load(cls, path: Union[str, URLPath], **kwargs):
+        path = URLPath(path)
+        scaler = joblib.load(str(path / "scaler.joblib"))
+        config = load_json(path / "config.json")
+        obj = cls(
+            dims=config["dims"],
+            scaler=scaler,
+            name=config["name"],
+            tube=config["tube"],
+            markers=config["markers"],
+            **{**config["modelargs"]["kwargs"], **kwargs},
+        )
+        obj.model.load(path / "model.ckpt")
+        obj.trained = True
+        return obj
+
+    @property
+    def config(self):
+        return {
+            "dims": self.dims,
+            "name": self.name,
+            "tube": self.tube,
+            "markers": self.markers,
+            "trained": self.trained,
+            "modelargs": self.modelargs,
+        }
+
+    def add_weight_images(self, marker_dict):
+        """
+        Params:
+            marker_dict: Dictionary of image name to 3-tuple of markers.
+        """
+        for name, markers in marker_dict.items():
+            try:
+                self.add_weight_image(name, markers)
+            except MarkerMissingError as m:
+                LOGGER.warning("Could not add %s missing %s", name, m.markers)
+
+    def add_weight_image(self, name, markers):
+        with tf.name_scope("WeightsSummary"):
+            cols = []
+            missing = []
+            for marker in markers:
+                if marker is None:
+                    index = None
+                else:
+                    try:
+                        index = self.markers.index(marker)
+                    except ValueError:
+                        missing.append(marker)
+                        continue
+                cols.append(index)
+            if missing:
+                raise MarkerMissingError(missing, "Failed to create weight image")
+
+            color_map = create_color_map(
+                self.model._weights, cols,
+                name=name, img_size=(*self.dims[:2],))
+            self.model.add_summary(color_map)
+
+    @property
+    def weights(self):
+        data = self.model.output_weights
+        dfdata = pd.DataFrame(data, columns=self.markers)
+        return self._create_som(dfdata)
+
+    @property
+    def transform_args(self):
+        return [
+            ("MinMaxScaler", {
+                "data_min_": self.scaler.data_min_.tolist(),
+                "data_max_": self.scaler.data_max_.tolist(),
+            })
+        ]
+
+    def _create_som(self, weights: np.array):
+        data = pd.DataFrame(weights, columns=self.markers)
+        return som.SOM(
+            data,
+            tube=self.tube,
+            transforms=self.transform_args
+        )
+
+    def save(self, path: Union[str, URLPath]):
+        """Save the given model including scaler."""
+        assert self.trained, "Model has not been trained"
+        path = URLPath(path)
+        path.local.mkdir(parents=True, exist_ok=True)
+        self.model.save(path / "model.ckpt")
+        joblib.dump(self.scaler, str(path / "scaler.joblib"))
+        save_json(self.config, path / "config.json")
+
+    def train(self, data: List[FCSData], sample: int = -1):
+        """Input an iterable with FCSData
+        Params:
+            data: FCSData object
+            sample: Optional subsample to be used in training
+        """
+        aligned = [d.align(self.markers).data for d in data]
+        res = np.concatenate(aligned)
+        res = self.scaler.fit_transform(res)
+
+        if sample > 0:
+            res = res[np.random.choice(res.shape[0], sample, replace=False), :]
+
+        self.model.train(res)
+        self.trained = True
+        return self
+
+    def transform(self, data: FCSData, sample: int = -1, label: str = "") -> som.SOM:
+        """Transform input fcs into retrained SOM node weights."""
+        # mask = data.channel_mask(self.markers)
+        res = data.align(self.markers).data
+        res = self.scaler.transform(res)
+        if sample > 0:
+            res = res[np.random.choice(res.shape[0], sample, replace=False), :]
+        weights = self.model.transform(res, label=label)
+        somweights = self._create_som(weights)
+        return somweights
+
+    def transform_multiple(
+            self,
+            data: Iterable[FCSData],
+            sample: int = -1) -> Generator[som.SOM]:
+        """Transform multiple samples."""
+        for single in data:
+            if isinstance(single, TubeSample):
+                single = single.data
+            yield self.transform(single, sample=sample)
+
+    def transform_fitmap(self, data):
+        for weights, mapping, mapping_prev in self.model.fit_map(gen_preprocess(self, data)):
+            yield self._create_som(weights)

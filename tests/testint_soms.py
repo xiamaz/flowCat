@@ -129,7 +129,7 @@ class TestSOMCreation(unittest.TestCase):
         """Generate SOM using weights from previous SOM for initialization."""
         tcase = create_single_case("cll2")
         config = create_configuration_reference(shared.DATAPATH / "som_seed42")
-        reference = som.load_som(shared.DATAPATH / "som_seed42", [1, 2], suffix=False)
+        reference = som.load_som_dict(shared.DATAPATH / "som_seed42", [1, 2], suffix=False)
 
         with self.subTest("seeded"):
             result_a = som.create_som([tcase], config, seed=42, reference=reference)
