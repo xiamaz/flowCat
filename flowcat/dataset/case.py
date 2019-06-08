@@ -198,7 +198,7 @@ class Case:
             return [];
         return tube.markers
 
-    def get_tube(self, tube, min_count=0, material=None):
+    def get_tube(self, tube, min_count=0, materials=None):
         """Get the TubePath fulfilling the given requirements, return the
         last on the list if multiple are available.
         Args:
@@ -208,13 +208,13 @@ class Case:
         Returns:
             TubePath or None.
         """
-        if self.used_material and not material:
-            material = self.used_material
+        if self.used_material and not materials:
+            materials = [self.used_material]
 
         tubecases = [
             p for p in self.filepaths
             if p.tube == tube and (
-                material is None or material == p.material
+                (not materials) or (p.material in materials)
             ) and (
                 not min_count or min_count <= p.count)
         ]
