@@ -28,23 +28,32 @@ def test_som_transformation(sample):
         batch_size=5001, tube=sample.tube,
         max_epochs=3)
     model.train([fcsdata], sample=sample_size)
+    print(model.model.output_weights)
+    model.save("output/test_model_save/som_transformation")
 
     weights = model.weights
     model2 = flowcat.models.FCSSom(
         (32, 32, -1), init=("reference", weights),
         max_epochs=2, scaler=model.scaler,
-        batch_size=50000)
-    result = model2.transform(fcsdata)
-    result2 = model2.transform(fcsdata)
-
-    model3 = flowcat.models.FCSSom(
-        (32, 32, -1), init=("reference", weights),
-        max_epochs=2, scaler=model.scaler,
-        batch_size=50000)
-    result3 = model3.transform(fcsdata)
-
+        tensorboard_dir="output/21-tensorboard/test_som_transformation",
+        batch_size=100000)
+    result = model2.transform(fcsdata, label="t1")
+    result2 = model2.transform(fcsdata, label="t2")
     print(result.data - result2.data)
-    print(result.data - result3.data)
+    print("------")
+
+    # model3 = flowcat.models.FCSSom(
+    #     (32, 32, -1), init=("reference", weights),
+    #     max_epochs=2, scaler=model.scaler,
+    #     batch_size=50000)
+    # result3 = model3.transform(fcsdata)
+
+    # models = flowcat.models.FCSSom.load("output/test_model_save/som_transformation", batch_size=50000, max_epochs=2)
+    # results = models.transform(fcsdata)
+
+    # print(result.data - result2.data)
+    # print(result.data - result3.data)
+    # print(result.data - results.data)
 
 
 def train_native(sample, outname):
@@ -156,8 +165,8 @@ def compare_fitmap(dataset):
     print(dataset.filter_failed())
     tube_1 = view.get_tube(1)
 
-    mean_fitmap, res_fitmap = test_batch_transform_speed(tube_1, fitmap=True)
-    mean_direct, res_direct = test_batch_transform_speed(tube_1, fitmap=False)
+    mean_fitmap, res_fitmap = test_batch_transform_speed(tube_1, fitmap=False)
+    mean_direct, res_direct = test_batch_transform_speed(tube_1, fitmap=True)
     print(f"Fitmap rolling mean: {mean_fitmap}s Direct mean: {mean_direct}")
     for som_a, som_b in zip(res_fitmap, res_direct):
         compare_som(som_a, som_b)

@@ -423,10 +423,8 @@ class TFSom:
             with tf.name_scope("Tower_0"):
                 (
                     numerators, denominators,
-                    self._epoch, epoch_op,
-                    self._weights, _, summaries
+                    self._epoch, self._weights, _, summaries
                 ) = self._tower_som(input_tensor, self._initialization)
-                tf.add_to_collection(self.EPOCH_COLLECTION, epoch_op)
 
                 self._ref_weights = tf.get_variable(
                     name="ref_weights", initializer=self._weights)
@@ -522,9 +520,9 @@ class TFSom:
                     tf.int32)
                 input_copy = tf.gather_nd(input_copy, random_vals)
 
+        # Feed epoch via feed dict, makes everything much simpler
         with tf.name_scope('Epoch'):
-            epoch = tf.Variable(-1.0, dtype=tf.float32)
-            epoch_op = tf.assign_add(epoch, 1.0)
+            epoch = tf.placeholder(tf.float32, ())
 
         # get best matching units for all events in batch
         with tf.name_scope('BMU_Indices'):
@@ -553,6 +551,7 @@ class TFSom:
                 self._radius_cooling,
                 self._initial_radius, self._end_radius,
                 epoch, self._max_epochs)
+            self._radius = radius
             alpha = apply_cooling(
                 self._learning_cooling,
                 self._initial_learning_rate, self._end_learning_rate,
@@ -617,8 +616,7 @@ class TFSom:
                 summaries.append(tf.summary.image("mapping_img", event_image))
 
         return (
-            numerator, denominator,
-            epoch, epoch_op,
+            numerator, denominator, epoch,
             weights, mapped_events_per_node, summaries
         )
 
@@ -643,8 +641,7 @@ class TFSom:
 
             initialization = create_initializer(
                 "reference", self.ref_weights, (self._m, self._n, self._dim))
-            (numerator, denominator,
-             epoch, epoch_op,
+            (numerator, denominator, epoch_place,
              weights, mapping, summaries) = self._tower_som(input_tensor, initialization)
 
             new_weights = tf.divide(numerator, denominator)
@@ -653,7 +650,7 @@ class TFSom:
             if self._tensorboard:
                 summary = tf.summary.merge(summaries)
 
-            var_init = tf.variables_initializer([weights, epoch, input_tensor])
+            var_init = tf.variables_initializer([weights, input_tensor])
             metric_init = tf.variables_initializer(graph.get_collection(tf.GraphKeys.METRIC_VARIABLES))
             number = 0
             if self._tensorboard:
@@ -664,8 +661,7 @@ class TFSom:
                     session.run([var_init, metric_init])
                     (event_mapping_prev,) = session.run([mapping])
                     for epoch in range(self._max_epochs):
-                        session.run([epoch_op])
-                        session.run([train_op])
+                        session.run([train_op], {epoch_place: epoch})
                     # get final mapping and weights
                     if self._tensorboard:
                         arr_weights, event_mapping, sum_res = session.run([weights, mapping, summary])
@@ -679,16 +675,13 @@ class TFSom:
                 except tf.errors.OutOfRangeError:
                     break
 
-    def _run_training(self, data, set_weights=False):
+    def _run_training(self, data, set_weights=False, label=""):
         assert data.shape[0] <= self._buffer_size, (
             f"Data size {data.shape[0]} > Buffer size {self._buffer_size}. "
             "Samples will be lost on reshuffling. "
             "Increase buffer size to number of samples.")
 
         with self._graph.as_default():
-            init_op = tf.global_variables_initializer()
-            self._sess.run([init_op])
-
             metric = tf.variables_initializer(
                 self._graph.get_collection(tf.GraphKeys.METRIC_VARIABLES)
             )
@@ -698,7 +691,7 @@ class TFSom:
             # Initialize the summary writer after the session has been initialized
             merged_summaries = tf.summary.merge(self._summary_list)
             self._writer = tf.summary.FileWriter(
-                str(self._tensorboard_dir / f"train_{create_stamp()}"), self._sess.graph)
+                str(self._tensorboard_dir / f"train_{label}_{create_stamp()}"), self._sess.graph)
 
         LOGGER.info("Training self-organizing Map")
         if not set_weights:
@@ -713,16 +706,23 @@ class TFSom:
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
 
-            self._sess.run(epoch_collection, feed_dict={self._data_placeholder: data})
+            self._sess.run(
+                epoch_collection,
+                feed_dict={self._data_placeholder: data, self._epoch: epoch}
+            )
             while True:
                 try:
                     if self._tensorboard:
                         summary, _, = self._sess.run(
                             [merged_summaries, self._training_op],
-                            options=run_options, run_metadata=run_metadata
+                            options=run_options, run_metadata=run_metadata,
+                            feed_dict={self._epoch: epoch}
                         )
                     else:
-                        self._sess.run(self._training_op)
+                        self._sess.run(
+                            self._training_op,
+                            feed_dict={self._epoch: epoch}
+                        )
                     LOGGER.info("Global step: %d", global_step)
                     global_step += 1
                     # save the summary if it has been tracked
@@ -735,17 +735,17 @@ class TFSom:
                     break
         return self
 
-    def train(self, data):
+    def train(self, data, label="learn"):
         """Train the network on the data provided by the input tensor.
         Args:
             data_iterable: Iterable object returning single pandas dataframes.
         """
-        self._run_training(data, set_weights=True)
+        self._run_training(data, set_weights=True, label=label)
         return self
 
-    def transform(self, data):
+    def transform(self, data, label="transform"):
         """Train data using given parameters from initial values transiently."""
-        self._run_training(data, set_weights=False)
+        self._run_training(data, set_weights=False, label=label)
         return self._sess.run(self._weights)
 
     def save(self, path: URLPath):
@@ -1156,14 +1156,14 @@ class FCSSom:
         self.trained = True
         return self
 
-    def transform(self, data: FCSData, sample: int = -1) -> som.SOM:
+    def transform(self, data: FCSData, sample: int = -1, label: str = "") -> som.SOM:
         """Transform input fcs into retrained SOM node weights."""
         # mask = data.channel_mask(self.markers)
         res = data.align(self.markers).data
         res = self.scaler.transform(res)
         if sample > 0:
             res = res[np.random.choice(res.shape[0], sample, replace=False), :]
-        weights = self.model.transform(res)
+        weights = self.model.transform(res, label=label)
         somweights = self._create_som(weights)
         return somweights
 
