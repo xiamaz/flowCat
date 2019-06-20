@@ -36,6 +36,29 @@ def assert_in_dict(fields, data):
         assert field in data, f"{field} is required"
 
 
+def filter_tubesamples(
+        tubesamples: List[TubeSample],
+        tubes: List[int] = None,
+        materials: List[str] = None,
+        selected_markers: Dict[int, List[str]] = None,
+        counts: int = None,
+        **_
+) -> List[TubeSample]:
+    filtered = []
+    for tubesample in tubesamples:
+        if tubes and tubesample.tube not in tubes:
+            continue
+        if materials and tubesample.material not in materials:
+            continue
+        if counts and tubesample.count < counts:
+            continue
+        tube_markers = selected_markers.get(tubesample.tube) if selected_markers else None
+        if tube_markers and not tubesample.has_markers(tube_markers):
+            continue
+        filtered.append(tubesample)
+    return filtered
+
+
 def filter_case(
         case: Case,
         tubes: List[int] = None,

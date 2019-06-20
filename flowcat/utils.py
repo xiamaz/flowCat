@@ -16,6 +16,8 @@ import toml
 import pandas as pd
 import boto3
 
+from . import mappings
+
 
 LOGGER = logging.getLogger(__name__)
 TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
@@ -338,7 +340,7 @@ def put_urlpath(fun):
 def load_json(path):
     """Load json data from a path as a simple function."""
     with open(str(path), "r") as jspath:
-        data = json.load(jspath)
+        data = json.load(jspath, object_hook=mappings.as_enum)
     return data
 
 
@@ -346,7 +348,7 @@ def load_json(path):
 def save_json(data, path):
     """Write json data to a file as a simple function."""
     with open(str(path), "w") as jsfile:
-        json.dump(data, jsfile)
+        json.dump(data, jsfile, cls=mappings.EnumEncoder)
 
 
 @get_urlpath

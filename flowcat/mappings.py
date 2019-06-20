@@ -12,6 +12,7 @@ Each map is a dictionary containing:
   confusion matrix, in most cases this should translate into the number classes
   contained in each label
 """
+import json
 import enum
 
 
@@ -38,14 +39,32 @@ class Material(enum.Enum):
         return Material.OTHER
 
 
+PUBLIC_ENUMS = {
+    "Sureness": Sureness,
+    "Material": Material,
+}
+
+
+class EnumEncoder(json.JSONEncoder):
+    def default(self, obj):  # pylint: disable=E0202
+        if type(obj) in PUBLIC_ENUMS.values():
+            return {"__enum__": str(obj)}
+        return json.JSONEncoder.default(self, obj)
+
+
+def as_enum(d):
+    if "__enum__" in d:
+        name, member = d["__enum__"].split(".")
+        return getattr(PUBLIC_ENUMS[name], member)
+    else:
+        return d
+
+
 # probe materials allowed in further processing
-ALLOWED_MATERIALS = {Material.PERIPHERAL_BLOOD, Material.BONE_MARROW}
+ALLOWED_MATERIALS = (Material.PERIPHERAL_BLOOD, Material.BONE_MARROW)
 
 # groups without usable infiltration values
-NO_INFILTRATION = {"normal"}
-
-# threshold of marker availability for inclusion in dataset
-MARKER_THRESHOLD = 0.9
+NO_INFILTRATION = ("normal")
 
 # mapping of some legacy cohort names in order to correctly import older
 # formats

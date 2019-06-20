@@ -12,8 +12,9 @@ import re
 
 import numpy as np
 
-from .dataset import case_dataset
-from .models import tfsom
+from . import tfsom
+from ..dataset import case_dataset
+from .. import configuration, mappings, utils
 
 
 LOGGER = logging.getLogger(__name__)
