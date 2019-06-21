@@ -206,6 +206,27 @@ class CaseIterable(IterableMixin):
         }
         return paths
 
+    def sample(self, count: int, groups: List[str] = None):
+        """Select a sample from each group.
+        Params:
+            count: Number of cases in a single group.
+            groups: Optionally limit to given groups.
+        """
+        group_labels = collections.defaultdict(list)
+        for case in self.data:
+            group_labels[case.group].append(case.id)
+        if groups is None:
+            groups = group_labels.keys()
+        labels = []
+        for group in groups:
+            glabels = group_labels[group]
+            if len(glabels) > count:
+                labels += random.sample(glabels, count)
+            else:
+                labels += glabels
+        filtered, _ = self.filter_reasons(labels=labels)
+        return filtered
+
     def filter_reasons(self, **kwargs):
         data = []
         failed = []
