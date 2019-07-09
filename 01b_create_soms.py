@@ -6,6 +6,8 @@ visualization and classification.
 import argparse
 import logging
 
+import pandas as pd
+
 import flowcat
 from flowcat import utils
 
@@ -29,13 +31,12 @@ def main(args):
     cases = cases.sample(1000)
     model = flowcat.som.CaseSingleSom.load(
         args.model, max_epochs=4, batch_size=50000, initial_radius=4, subsample_size=1000, tensorboard_dir=None)
-    print(cases)
-    print(cases.group_count)
-    print(model)
-    print(model.model.markers)
-    for res in model.transform_generator(cases):
-        print(res)
-        flowcat.som.save_som(res, args.output / res.cases[0], save_config=False, subdirectory=False)
+    labels = []
+    for case, res in model.transform_generator(cases):
+        flowcat.som.save_som(res, args.output / case.id, save_config=False, subdirectory=False)
+        labels.append({"label": case.id, "randnum": 0, "group": case.group})
+    metadata = pd.DataFrame(labels)
+    utils.save_csv(metadata, args.output + ".csv")
 
 
 if __name__ == "__main__":

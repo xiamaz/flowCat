@@ -77,7 +77,7 @@ class CaseSingleSom:
 
     def transform_generator(self, data: Iterable[case.Case], *args, **kwargs):
         for casedata in data:
-            yield self.transform(casedata, *args, **kwargs)
+            yield casedata, self.transform(casedata, *args, **kwargs)
 
 
 class CaseSom:
