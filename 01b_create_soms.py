@@ -25,6 +25,7 @@ def configure_print_logging(rootname="flowcat"):
 
 def main(args):
     cases = flowcat.CaseCollection.from_path(args.input, metapath=args.meta)
+    cases, _ = cases.filter_reasons(materials=flowcat.ALLOWED_MATERIALS, tubes=(1, 2))
     cases = cases.sample(1000)
     model = flowcat.som.CaseSingleSom.load(
         args.model, max_epochs=4, batch_size=50000, initial_radius=4, subsample_size=1000, tensorboard_dir=None)
