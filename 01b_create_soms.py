@@ -23,13 +23,18 @@ def configure_print_logging(rootname="flowcat"):
     utils.add_logger(LOGGER, handlers, level=logging.DEBUG)
 
 
-def load_dataset(input_dir, metapath):
-    return flowcat.CaseCollection.from_path(input_dir, metapath=metapath)
-
-
 def main(args):
-    dataset = load_dataset(args.input, args.meta)
-    print(dataset)
+    cases = flowcat.CaseCollection.from_path(args.input, metapath=args.meta)
+    cases = cases.sample(1000)
+    model = flowcat.som.CaseSingleSom.load(
+        args.model, max_epochs=4, batch_size=50000, initial_radius=4, subsample_size=1000, tensorboard_dir=None)
+    print(cases)
+    print(cases.group_count)
+    print(model)
+    print(model.model.markers)
+    for res in model.transform_generator(cases):
+        print(res)
+        flowcat.som.save_som(res, args.output / res.cases[0], save_config=False, subdirectory=False)
 
 
 if __name__ == "__main__":
@@ -40,5 +45,11 @@ if __name__ == "__main__":
         default=utils.URLPath("/data/flowcat-data/mll-flowdata/decCLL-9F"),
         type=utils.URLPath)
     PARSER.add_argument("-m", "--meta", type=utils.URLPath)
+    PARSER.add_argument(
+        "model",
+        type=utils.URLPath)
+    PARSER.add_argument(
+        "output",
+        type=utils.URLPath)
     configure_print_logging()
     main(PARSER.parse_args())

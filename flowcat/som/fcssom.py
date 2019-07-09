@@ -142,8 +142,8 @@ class FCSSom:
             dims=config["dims"],
             scaler=scaler,
             name=config["name"],
-            tube=config["tube"],
             markers=config["markers"],
+            marker_name_only=config["marker_name_only"],
             **{**config["modelargs"]["kwargs"], **kwargs},
         )
         obj.model.load(path / "model.ckpt")
@@ -158,6 +158,7 @@ class FCSSom:
             "markers": self.markers,
             "trained": self.trained,
             "modelargs": self.modelargs,
+            "marker_name_only": self.marker_name_only,
         }
 
     def add_weight_images(self, marker_dict):

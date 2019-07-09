@@ -34,9 +34,9 @@ class CaseSingleSom:
         self.model = model or FCSSom(*args, **kwargs)
 
     @classmethod
-    def load(cls, path: utils.URLPath):
+    def load(cls, path: utils.URLPath, **kwargs):
         config = utils.load_json(path / cls.config_name)
-        model = FCSSom.load(path)
+        model = FCSSom.load(path, **kwargs)
         return cls(model=model, **config)
 
     @property
