@@ -23,6 +23,13 @@ MARKER_IMAGES = {
     "zz_cd45_ss_cd19": ("CD45-KrOr", "SS INT LIN", "CD19-APCA750"),
 }
 
+MARKER_IMAGES_NAME_ONLY = {
+    "cd45_ss": ("CD45", "SS INT LIN", None),
+    "ss_cd19": (None, "SS INT LIN", "CD19"),
+    "kappa_lambda": (None, "kappa", "lambda"),
+    "zz_cd45_ss_cd19": ("CD45", "SS INT LIN", "CD19"),
+}
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -58,7 +65,16 @@ def create_color_map(weights, cols, name="colormap", img_size=None):
 class FCSSom:
     """Transform FCS data to SOM node weights."""
 
-    def __init__(self, dims, init=("random", None), markers=None, name="fcssom", scaler=None, **kwargs):
+    def __init__(
+            self,
+            dims,
+            init=("random", None),
+            markers=None,
+            marker_name_only=False,
+            marker_images=None,
+            name="fcssom",
+            scaler=None,
+            **kwargs):
         self.dims = dims
         m, n, dim = self.dims
 
@@ -69,7 +85,6 @@ class FCSSom:
         elif init_type == "reference":
             assert isinstance(init_data, SOM)
             markers = init_data.markers
-            tube = init_data.tube if tube == -1 else tube
             rm, rn = init_data.dims
             transform_configs = init_data.transforms
             init_data = init_data.data
@@ -82,6 +97,7 @@ class FCSSom:
 
         dim = len(markers) if dim == -1 else dim
 
+        self.marker_name_only = marker_name_only
         self.name = name
         self.markers = list(markers)
         self._graph = tf.Graph()
@@ -101,8 +117,9 @@ class FCSSom:
             model_name=f"{self.name}",
             **kwargs)
 
-        with self._graph.as_default():
-            self.add_weight_images(MARKER_IMAGES)
+        if marker_images:
+            with self._graph.as_default():
+                self.add_weight_images(marker_images)
 
         if scaler is None:
             if transform_configs:
@@ -213,7 +230,7 @@ class FCSSom:
             data: FCSData object
             sample: Optional subsample to be used in training
         """
-        aligned = [d.align(self.markers).data for d in data]
+        aligned = [d.align(self.markers, name_only=self.marker_name_only).data for d in data]
         res = np.concatenate(aligned)
         res = self.scaler.fit_transform(res)
 
@@ -227,7 +244,7 @@ class FCSSom:
     def transform(self, data: FCSData, sample: int = -1, label: str = "") -> SOM:
         """Transform input fcs into retrained SOM node weights."""
         # mask = data.channel_mask(self.markers)
-        res = data.align(self.markers).data
+        res = data.align(self.markers, name_only=self.marker_name_only).data
         res = self.scaler.transform(res)
         if sample > 0:
             res = res[np.random.choice(res.shape[0], sample, replace=False), :]

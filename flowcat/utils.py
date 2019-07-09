@@ -39,6 +39,25 @@ else:
     CLOBBER = False
 
 
+class FCEncoder(json.JSONEncoder):
+    def default(self, obj):  # pylint: disable=E0202
+        if type(obj) in mappings.PUBLIC_ENUMS.values():
+            return {"__enum__": str(obj)}
+        if isinstance(obj, URLPath):
+            return {"__urlpath__": str(obj)}
+        return json.JSONEncoder.default(self, obj)
+
+
+def as_fc(d):
+    if "__enum__" in d:
+        name, member = d["__enum__"].split(".")
+        return getattr(mappings.PUBLIC_ENUMS[name], member)
+    elif "__urlpath__" in d:
+        return URLPath(d["__urlpath__"])
+    else:
+        return d
+
+
 def str_to_date(strdate):
     return datetime.datetime.strptime(strdate, "%Y-%m-%d").date()
 
@@ -340,15 +359,20 @@ def put_urlpath(fun):
 def load_json(path):
     """Load json data from a path as a simple function."""
     with open(str(path), "r") as jspath:
-        data = json.load(jspath, object_hook=mappings.as_enum)
+        data = json.load(jspath, object_hook=as_fc)
     return data
 
 
 @put_urlpath
 def save_json(data, path):
     """Write json data to a file as a simple function."""
-    with open(str(path), "w") as jsfile:
-        json.dump(data, jsfile, cls=mappings.EnumEncoder)
+    try:
+        with open(str(path), "w") as jsfile:
+            json.dump(data, jsfile, cls=FCEncoder)
+    except TypeError as err:
+        print(err)
+        print(data)
+        raise err
 
 
 @get_urlpath

@@ -151,13 +151,11 @@ def export_filtered(
 
 def main(args):
     cases = flowcat.CaseCollection.from_path(args.path)
-    print(cases)
     selected = get_selected_markers(cases, (1, 2), marker_threshold=0.9)
     selected, _ = selected.filter_reasons(groups=["normal", "CLL"])
-    print(cases.group_count)
-    return
-    flowcat.utils.save_json(selected.json, args.output / "bonn.json")
-    flowcat.utils.save_json(selected.config, args.output / "bonn_config.json")
+    print(selected.group_count)
+    flowcat.utils.save_json(selected.json, args.output / "munich.json")
+    flowcat.utils.save_json(selected.config, args.output / "munich_config.json")
 
 
 if __name__ == "__main__":

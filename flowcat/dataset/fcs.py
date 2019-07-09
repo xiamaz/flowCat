@@ -7,6 +7,19 @@ from sklearn import preprocessing, base
 import fcsparser
 
 
+def extract_name(marker):
+    splitted = marker.split("-")
+    if len(splitted) == 2:
+        name, _ = splitted
+    else:
+        name = marker
+    if name == "Kappa":
+        name = "kappa"
+    elif name == "Lambda":
+        name = "lambda"
+    return name
+
+
 class FCSData:
     """Wrap FCS data with additional metadata"""
 
@@ -57,10 +70,13 @@ class FCSData:
         exist or not."""
         return np.array([c in self.data.columns for c in channels])
 
-    def align(self, channels, missing_val=np.nan):
+    def align(self, channels, missing_val=np.nan, name_only=False):
         """Return aligned copy of FCS data."""
         meta = self._meta
         data = self.data
+        if name_only:
+            mapping = {c: extract_name(c) for c in data.columns}
+            data.rename(mapping, axis=1, inplace=True)
         data = data.assign(**{k: missing_val for k in channels if k not in data.columns})
         data = data[channels]
         return self.__class__((meta, data))

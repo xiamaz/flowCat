@@ -27,14 +27,32 @@ def main(args):
     output_dir = args.output / args.name
 
     dataset = flowcat.CaseCollection.from_path(args.input, metapath=args.meta)
-    normal_labels = utils.load_json("data/normals.json")
-    normals, _ = dataset.filter_reasons(labels=normal_labels)
-    print(normals.labels)
+    selected_labels = utils.load_json("data/selected_cases.json")
+    selected, _ = dataset.filter_reasons(labels=selected_labels)
+    selected = dataset.sample(count=1, groups=["CLL", "normal"])
+    print(selected.labels)
+
+    joined_tubes = utils.load_json("output/00-dataset-test/munich_bonn_tubes.json")
+    print(joined_tubes)
 
     # TODO: Generate a SOM for all tubes for the given labels.
     # Visualize using tensorboard
     # Save everything into a single, folder which we can use in the next script
     # to create single SOMs
+    model = som.CaseSingleSom(
+        tube=1,
+        materials=flowcat.ALLOWED_MATERIALS,
+        markers=joined_tubes["1"],
+        marker_name_only=True,
+        max_epochs=10,
+        batch_size=10000,
+        marker_images=som.fcssom.MARKER_IMAGES_NAME_ONLY,
+        map_type="toroid",
+        tensorboard_dir=output_dir / "tensorboard",
+        dims=(32, 32, -1)
+    )
+    model.train(selected)
+    model.save(output_dir / "model")
 
 
 if __name__ == "__main__":

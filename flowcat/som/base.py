@@ -113,6 +113,11 @@ class SOMCollection:
         self._data[tube] = data
         return data
 
+    def add_som(self, data):
+        self._data[data.tube] = data
+        if data.tube not in self.tubes:
+            self.tubes.append(data.tube)
+
     @property
     def dims(self):
         if self.config:
