@@ -19,7 +19,8 @@ class SOMDataset:
         self.counts = None
         self.data = data
         self.tubes = tubes
-        self.set_counts(self.tubes)
+        if len(tubes) > 1:
+            self.set_counts(self.tubes)
 
         self.path = path
 

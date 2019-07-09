@@ -52,6 +52,16 @@ class SOM:
             "transforms": self.transforms,
         }
 
+    def np_array(self, pad_width=0):
+        data = np.reshape(self.data.values, (*self.dims, -1))
+        if pad_width:
+            data = np.pad(data, pad_width=[
+                (pad_width, pad_width),
+                (pad_width, pad_width),
+                (0, 0),
+            ], mode="wrap")
+        return data
+
     def __repr__(self):
         return f"<SOM {'x'.join(map(str, self.dims))} Tube:{self.tube}>"
 
@@ -76,19 +86,24 @@ class SOMCollection:
         self._data = {}
 
     @classmethod
-    def from_path(cls, path, subdirectory, **kwargs):
+    def from_path(cls, path, subdirectory, tubes=None, **kwargs):
         path = utils.URLPath(path)
-        if subdirectory:
-            paths = path.glob("t*.csv")
+        if tubes:
+            tubepaths = {
+                tube: get_som_tube_path(path, tube, subdirectory)[0] for tube in tubes
+            }
         else:
-            parent = path.local.parent
-            paths = [p for p in parent.glob(f"{path.local.name}*.csv")]
+            if subdirectory:
+                paths = path.glob("t*.csv")
+            else:
+                parent = path.local.parent
+                paths = [p for p in parent.glob(f"{path.local.name}*.csv")]
 
-        tubepaths = {
-            int(m[1]): p for m, p in
-            [(re.search(r"t(\d+)\.csv", str(path)), path) for path in paths]
-            if m is not None
-        }
+            tubepaths = {
+                int(m[1]): p for m, p in
+                [(re.search(r"t(\d+)\.csv", str(path)), path) for path in paths]
+                if m is not None
+            }
         tubes = sorted(tubepaths.keys())
         # load config if exists
         conf_path = path / "config.toml"
@@ -109,7 +124,7 @@ class SOMCollection:
         if tube not in self.tubes:
             return None
         path = self._tubepaths[tube]
-        data = SOM.from_path(path, path[:-3] + "json", tube=tube, cases=self.cases)
+        data = SOM.from_path(path, str(path)[:-3] + "json", tube=tube, cases=self.cases)
         self._data[tube] = data
         return data
 
@@ -159,14 +174,14 @@ def get_som_tube_path(
 def load_som(
         path: Union[str, utils.URLPath],
         subdirectory: bool = False,
-        tube: int = None) -> Union[SOMCollection, SOM]:
+        tube: Union[int, list] = None) -> Union[SOMCollection, SOM]:
     """Load soms into a som collection or if tube specified into a single SOM."""
     # Load single SOM
-    if tube:
+    if isinstance(tube, int):
         inpaths = get_som_tube_path(path, tube, subdirectory)
         return SOM.from_path(*inpaths, tube=tube)
     # Load multiple SOM into a SOM collection
-    return SOMCollection.from_path(path, subdirectory=subdirectory)
+    return SOMCollection.from_path(path, tubes=tube, subdirectory=subdirectory)
 
 
 def save_som(
