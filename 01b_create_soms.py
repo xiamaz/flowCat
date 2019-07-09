@@ -37,6 +37,12 @@ def main(args):
         labels.append({"label": case.id, "randnum": 0, "group": case.group})
     metadata = pd.DataFrame(labels)
     utils.save_csv(metadata, args.output + ".csv")
+    utils.save_json(
+        {
+            "tubes": [model.tube],
+            "dims": model.model.dims,
+            "channels": model.model.markers,
+        }, args.output + ".json")
 
 
 if __name__ == "__main__":
