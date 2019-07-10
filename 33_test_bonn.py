@@ -22,6 +22,11 @@ def main(args):
     print(test.group_counts)
     binarizer, model = load_model(args.model)
 
+    dataseq = flowcat.SOMSequence(dataset, binarizer, tube=1)
+    preds = binarizer.inverse_transform(model.predict_generator(dataseq))
+    result = dataset.labels == preds
+    print("Untrained accuracy:", sum(result) / len(result))
+
     trainseq = flowcat.SOMSequence(train, binarizer, tube=1)
     testseq = flowcat.SOMSequence(test, binarizer, tube=1)
 
