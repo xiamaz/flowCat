@@ -15,6 +15,7 @@ from functools import wraps
 import toml
 import pandas as pd
 import boto3
+import joblib
 
 from . import mappings
 
@@ -387,6 +388,16 @@ def save_pickle(data, path):
     """Write data to the given path as a pickle."""
     with open(str(path), "wb") as pfile:
         pickle.dump(data, pfile)
+
+
+@get_urlpath
+def load_joblib(path):
+    return joblib.load(str(path))
+
+
+@put_urlpath
+def save_joblib(data, path):
+    joblib.dump(data, str(path))
 
 
 @get_urlpath

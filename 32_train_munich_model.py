@@ -22,26 +22,26 @@ def create_model(xshape, yshape, global_decay=5e-4):
     x = layers.Conv2D(
         filters=32, kernel_size=2, activation="relu", strides=1,
         kernel_regularizer=regularizers.l2(global_decay))(ix)
-    x = layers.Conv2D(
-        filters=32, kernel_size=2, activation="relu", strides=1,
-        kernel_regularizer=regularizers.l2(global_decay))(x)
+    # x = layers.Conv2D(
+    #     filters=32, kernel_size=2, activation="relu", strides=1,
+    #     kernel_regularizer=regularizers.l2(global_decay))(x)
     x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
-    x = layers.BatchNormalization()(x)
+    # x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
 
     x = layers.Flatten()(ix)
 
-    x = layers.Dense(
-        units=128, activation="relu", kernel_initializer="uniform",
-        kernel_regularizer=regularizers.l2(global_decay)
-    )(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.Dropout(0.2)(x)
+    # x = layers.Dense(
+    #     units=128, activation="relu", kernel_initializer="uniform",
+    #     kernel_regularizer=regularizers.l2(global_decay)
+    # )(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.Dropout(0.2)(x)
     x = layers.Dense(
         units=64, activation="relu", kernel_initializer="uniform",
         kernel_regularizer=regularizers.l2(global_decay)
     )(x)
-    x = layers.BatchNormalization()(x)
+    # x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.2)(x)
 
     final = layers.Dense(
@@ -79,7 +79,7 @@ def main(args):
 
     train, validate = munich.split(ratio=0.9, stratified=True)
 
-    model = create_model(munich.dims, 1)
+    model = create_model(munich.dims, 1, global_decay=5e-3)
 
     model.compile(
         # loss="categorical_crossentropy",
@@ -103,6 +103,7 @@ def main(args):
         generator=trainseq, validation_data=validseq)
 
     args.output.local.mkdir(parents=True, exist_ok=True)
+    utils.save_joblib(binarizer, args.output / "binarizer.joblib")
     model.save(str(args.output / "model.h5"))
 
 
