@@ -5,6 +5,8 @@ from typing import List, Tuple
 import numpy as np
 import pandas as pd
 
+from keras.utils import Sequence
+
 from flowcat import utils
 from flowcat.som.base import load_som, SOMCollection, SOM
 
@@ -71,7 +73,9 @@ class SOMDataset:
             validate = data[:pivot]
 
         train.reset_index(drop=True, inplace=True)
+        train = train.reindex(np.random.permutation(train.index))
         validate.reset_index(drop=True, inplace=True)
+        validate = validate.reindex(np.random.permutation(validate.index))
 
         return train, validate
 
@@ -80,3 +84,22 @@ class SOMDataset:
 
     def __repr__(self):
         return f"<SOMDataset {len(self)} cases>"
+
+
+class SOMSequence(Sequence):
+
+    def __init__(self, data: SOMDataset, binarizer, batch_size: int = 32, tube=1):
+        self.data = data
+        self.tube = tube
+        self.batch_size = batch_size
+        self.binarizer = binarizer
+
+    def __len__(self):
+        return int(np.ceil(len(self.data) / float(self.batch_size)))
+
+    def __getitem__(self, idx):
+        batch = self.data[idx * self.batch_size:(idx + 1) * self.batch_size]
+        x_batch = np.array([s.get_tube(self.tube).np_array() for s in batch])
+        y_labels = [s.group for s in batch]
+        y_batch = self.binarizer.transform(y_labels)
+        return x_batch, y_batch

@@ -1,31 +1,33 @@
 """
 Train models on Munich data and attempt to classify Bonn data.
 """
+from argparse import ArgumentParser
+
 import numpy as np
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.manifold import TSNE
 from keras import layers, regularizers, models
-from keras.utils import Sequence
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from flowcat.som_dataset import SOMDataset
+from flowcat import utils, SOMSequence
 
 
 def create_model(xshape, yshape, global_decay=5e-4):
     ix = layers.Input(shape=xshape)
 
-    # x = layers.Conv2D(
-    #     filters=32, kernel_size=2, activation="relu", strides=1,
-    #     kernel_regularizer=regularizers.l2(global_decay))(ix)
-    # x = layers.Conv2D(
-    #     filters=32, kernel_size=2, activation="relu", strides=1,
-    #     kernel_regularizer=regularizers.l2(global_decay))(x)
-    # x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
-    # x = layers.BatchNormalization()(x)
-    # x = layers.Dropout(0.2)(x)
+    x = layers.Conv2D(
+        filters=32, kernel_size=2, activation="relu", strides=1,
+        kernel_regularizer=regularizers.l2(global_decay))(ix)
+    x = layers.Conv2D(
+        filters=32, kernel_size=2, activation="relu", strides=1,
+        kernel_regularizer=regularizers.l2(global_decay))(x)
+    x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Dropout(0.2)(x)
 
     x = layers.Flatten()(ix)
 
@@ -43,29 +45,11 @@ def create_model(xshape, yshape, global_decay=5e-4):
     x = layers.Dropout(0.2)(x)
 
     final = layers.Dense(
-        units=yshape, activation="softmax"
+        units=yshape, activation="sigmoid"
     )(x)
 
     model = models.Model(inputs=ix, outputs=final)
     return model
-
-
-class SOMSequence(Sequence):
-
-    def __init__(self, data: SOMDataset, binarizer, batch_size: int = 32, tube=1):
-        self.data = data
-        self.tube = tube
-        self.batch_size = batch_size
-        self.binarizer = binarizer
-
-    def __len__(self):
-        return int(np.ceil(len(self.data) / float(self.batch_size)))
-
-    def __getitem__(self, idx):
-        batch = self.data[idx * self.batch_size:(idx + 1) * self.batch_size]
-        x_batch = np.array([s.get_tube(self.tube).np_array() for s in batch])
-        y_batch = self.binarizer.transform([s.group for s in batch])
-        return x_batch, y_batch
 
 
 def visualize_tsne(data, output):
@@ -85,14 +69,13 @@ def visualize_tsne(data, output):
     fix.savefig(output)
 
 
-def main():
-    munich = SOMDataset.from_path("output/01b-create-soms/testmll")
-    bonn = SOMDataset.from_path("output/01b-create-soms/testbonn")
+def main(args):
+    munich = SOMDataset.from_path(args.input)
+    # bonn = SOMDataset.from_path("output/01b-create-soms/testbonn")
 
     # visualize tsne first
-    visualize_tsne(munich, "testmunich.png")
-    visualize_tsne(bonn, "testbonn.png")
-    return
+    # visualize_tsne(munich, "testmunich.png")
+    # visualize_tsne(bonn, "testbonn.png")
 
     train, validate = munich.split(ratio=0.9, stratified=True)
 
@@ -112,13 +95,19 @@ def main():
     binarizer = LabelBinarizer()
     binarizer.fit(["CLL", "normal"])
 
-    trainseq = SOMSequence(train, binarizer)
-    validseq = SOMSequence(validate, binarizer)
+    trainseq = SOMSequence(train, binarizer, tube=1)
+    validseq = SOMSequence(validate, binarizer, tube=1)
 
     model.fit_generator(
-        epochs=10,
+        epochs=20,
         generator=trainseq, validation_data=validseq)
+
+    args.output.local.mkdir(parents=True, exist_ok=True)
+    model.save(str(args.output / "model.h5"))
 
 
 if __name__ == "__main__":
-    main()
+    PARSER = ArgumentParser()
+    PARSER.add_argument("input", type=utils.URLPath)
+    PARSER.add_argument("output", type=utils.URLPath)
+    main(PARSER.parse_args())
