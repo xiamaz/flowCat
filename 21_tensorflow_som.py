@@ -172,6 +172,25 @@ def compare_fitmap(dataset):
         compare_som(som_a, som_b)
 
 
+def test_refactor(dataset):
+    view = dataset.filter(num=3, groups=["CLL", "normal"])
+    sample = view.data[0]
+
+    model = flowcat.som.casesom.CaseSingleSom(
+        dims=(32, 32, -1),
+        markers=sample.get_tube(1).markers,
+        tube=1,
+        materials=flowcat.ALLOWED_MATERIALS,
+        max_epochs=3,
+        batch_size=50000)
+    model.train([sample])
+
+    for res in time_generator_logger(model.transform_generator(view)):
+        print(res)
+
+    print(model.weights)
+
+
 if __name__ == "__main__":
     configure_print_logging()
 
@@ -190,4 +209,5 @@ if __name__ == "__main__":
 
     # train_loaded_check(sample_subsample, sample_missing)
 
-    compare_fitmap(ds_subsample)
+    # compare_fitmap(ds_subsample)
+    test_refactor(ds_subsample)

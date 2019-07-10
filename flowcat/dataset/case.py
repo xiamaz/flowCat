@@ -36,6 +36,29 @@ def assert_in_dict(fields, data):
         assert field in data, f"{field} is required"
 
 
+def filter_tubesamples(
+        tubesamples: List[TubeSample],
+        tubes: List[int] = None,
+        materials: List[str] = None,
+        selected_markers: Dict[int, List[str]] = None,
+        counts: int = None,
+        **_
+) -> List[TubeSample]:
+    filtered = []
+    for tubesample in tubesamples:
+        if tubes and tubesample.tube not in tubes:
+            continue
+        if materials and tubesample.material not in materials:
+            continue
+        if counts and tubesample.count < counts:
+            continue
+        tube_markers = selected_markers.get(tubesample.tube) if selected_markers else None
+        if tube_markers and not tubesample.has_markers(tube_markers):
+            continue
+        filtered.append(tubesample)
+    return filtered
+
+
 def filter_case(
         case: Case,
         tubes: List[int] = None,
@@ -198,7 +221,7 @@ class Case:
             return [];
         return tube.markers
 
-    def get_tube(self, tube, min_count=0, material=None):
+    def get_tube(self, tube, min_count=0, materials=None):
         """Get the TubePath fulfilling the given requirements, return the
         last on the list if multiple are available.
         Args:
@@ -208,13 +231,13 @@ class Case:
         Returns:
             TubePath or None.
         """
-        if self.used_material and not material:
-            material = self.used_material
+        if self.used_material and not materials:
+            materials = [self.used_material]
 
         tubecases = [
             p for p in self.filepaths
             if p.tube == tube and (
-                material is None or material == p.material
+                (not materials) or (p.material in materials)
             ) and (
                 not min_count or min_count <= p.count)
         ]
