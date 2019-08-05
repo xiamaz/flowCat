@@ -145,21 +145,11 @@ def preprocess_cases(cases: flowcat.CaseCollection, tubes=(1, 2, 3)):
     return train_cases, test_cases
 
 
-def export_filtered(
-        train_cases: flowcat.CaseCollection,
-        test_cases: flowcat.CaseCollection,
-        output: flowcat.utils.URLPath):
-    """Export metadata after filtering to the given output directory."""
-    flowcat.utils.save_json(train_cases.json, output / "train.json")
-    flowcat.utils.save_json(train_cases.config, output / "train_config.json")
-    flowcat.utils.save_json(test_cases.json, output / "test.json")
-    flowcat.utils.save_json(test_cases.config, output / "test_config.json")
-
-
 def main(args):
-    cases = flowcat.CaseCollection.from_path(args.path)
+    cases = flowcat.CaseCollection.load(args.path, args.meta)
     train, test = preprocess_cases(cases)
-    export_filtered(train, test, args.output)
+    train.save(args.output / "train")
+    test.save(args.output / "test")
 
 
 if __name__ == "__main__":
@@ -171,6 +161,10 @@ if __name__ == "__main__":
         type=flowcat.utils.URLPath,
         help="Path to dataset",
     )
+    PARSER.add_argument(
+        "meta",
+        type=flowcat.utils.URLPath,
+        help="Path to dataset metadata")
     PARSER.add_argument(
         "output", type=flowcat.utils.URLPath,
         help="Path to save output metadata",

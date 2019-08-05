@@ -80,10 +80,10 @@ class SOMCollection:
     """Holds multiple SOM, eg for different tubes for a single patient."""
 
     path: utils.URLPath
+    config: dict
     cases: List[str] = field(default_factory=list)
     tubes: List[int] = field(default_factory=list)
     tubepaths: dict = field(default_factory=dict)
-    config: dict
 
     def __post_init__(self):
         self._index = 0

@@ -19,31 +19,6 @@ from ..utils import load_json, load_csv, URLPath
 LOGGER = logging.getLogger(__name__)
 
 
-def get_meta(path, how):
-    """Choose strategy on how to select for metadata."""
-    if how == "latest":
-        case_info = sorted(path.glob("*.json"))[-1]
-    elif how == "oldest":
-        case_info = sorted(path.glob("*.json"))[0]
-    else:
-        # use how as the complete name
-        case_info = path / how
-        assert case_info.exists()
-    return case_info
-
-
-def load_meta(path, transfun=None):
-    if str(path).endswith(".json"):
-        data = load_json(path)
-    elif str(path).endswith(".csv"):
-        data = load_csv(path, index_col=None)
-    else:
-        raise TypeError(f"Unsupported filetype for metadata {path}")
-    if transfun is not None:
-        data = transfun(data)
-    return data
-
-
 class NoTubeSelectedError(Exception):
     pass
 
@@ -157,6 +132,16 @@ class CaseIterable(IterableMixin):
         index = pd.MultiIndex.from_tuples(list(zip(self.labels, self.groups)), names=["label", "group"])
         return pd.DataFrame(1, index=index, columns=["count"])
 
+    def save(self, path: URLPath):
+        """Save the given dataset metadata to the given path.
+
+        Files will be saved with <path>.json and <path>_config.json name.
+        """
+        config_path = path + "_config.json"
+        utils.save_json(self.config, config_path)
+        data_path = path + ".json"
+        utils.save_json(self.json, data_path)
+
     def add_filter_step(self, step: dict):
         self.filterconfig = [*self.filterconfig, step]
 
@@ -259,29 +244,20 @@ class CaseCollection(CaseIterable):
         self.metapath = utils.URLPath(metapath)
 
     @classmethod
-    def from_path(cls, inputpath, how="latest", metapath=None, transfun=None, **kwargs):
+    def load(cls, inputpath: URLPath, metapath: URLPath, **kwargs):
         """
         Initialize on datadir with info json.
         Args:
             inputpath: Input directory containing cohorts and a info file.
         """
-        inputpath = URLPath(inputpath)
-        if metapath is None:
-            metapath = get_meta(inputpath, how=how)
-        else:
-            metapath = URLPath(metapath)
-        metadata = load_meta(metapath, transfun=transfun)
+        metadata = load_json(metapath + ".json")
+        try:
+            metaconfig = load_json(metapath + "_config.json")
+        except FileNotFoundError:
+            metaconfig = {}
         data = [Case(d, path=inputpath) for d in metadata]
 
-        return cls(data, inputpath, metapath, **kwargs)
-
-    @property
-    def config(self):
-        return {
-            **super().config,
-            "path": str(self.path),
-            "metapath": str(self.metapath)
-        }
+        return cls(data, inputpath, metapath, **{**metaconfig, **kwargs})
 
     def get_tube(self, tube: int) -> "TubeView":
         if self.selected_markers is None:
