@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Overview of cases dataset:
 
@@ -51,6 +52,12 @@ def deduplicate_cases_by_sureness(cases):
     return deduplicated_cases
 
 
+def print_marker_ratios(counts, num, tube):
+    print(f"Tube {tube}")
+    for marker, count in counts.items():
+        print(f"\t{marker}\t\t{count}/{num} ({count / num:.2})")
+
+
 def get_selected_markers(cases, tubes, marker_threshold=0.9):
     """Get a list of marker channels available in all tubes."""
     selected_markers = {}
@@ -58,6 +65,7 @@ def get_selected_markers(cases, tubes, marker_threshold=0.9):
         marker_counts = collections.Counter(
             marker for t in [case.get_tube(tube) for case in cases]
             if t is not None for marker in t.markers)
+        print_marker_ratios(marker_counts, len(cases), tube)
         # get ratio of availability vs all cases
         selected_markers[tube] = [
             marker for marker, count in marker_counts.items()
@@ -164,8 +172,7 @@ if __name__ == "__main__":
         help="Path to dataset",
     )
     PARSER.add_argument(
-        "-o", "--output", type=flowcat.utils.URLPath,
+        "output", type=flowcat.utils.URLPath,
         help="Path to save output metadata",
-        default=flowcat.utils.URLPath("output/00-dataset-test")
     )
     main(PARSER.parse_args())
