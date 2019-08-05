@@ -53,6 +53,32 @@ There is a helper script to make syncing this bucket a bit easier.
 ./update_tests.sh down  # download all test data to tests/data
 ```
 
+Running the main project
+------------------------
+
+1. `00_dataset_prepare.py`
+    
+    Split a given dataset directory into a test and a training set. The
+    splitting parameters are hardcoded in `preprocess_cases`.
+
+    The default will generate a dataset split on the data 2018-06-30.
+
+    The generated output are two new metadata json files as well as config
+    files.
+
+    Usage:
+    
+    ```{.sh}
+    ./00_dataset_prepare.py [-h] <PATH_TO_DATASET> <OUTPUT>
+    ```
+
+    Generated datsets in the output directory can be loaded into new python
+    datasets.
+
+    ```python
+    flowcat.CaseCollection.from_path(path=<PATH_TO_DATASET>, metapath=<PATH_OUTPUT>)
+    ```
+
 Performance considerations
 --------------------------
 
