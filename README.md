@@ -28,9 +28,13 @@ Work on special cohorts. Such as AML or MM.
 Some scripts for testing modifications on the SOM implementation, as well
 as comparisons of the implementation to results obtained from flowSOM.
 
-#### 3x - classifier comparisons
+#### 3x - POC on CLL/normal for Bonn/Munich
 
-TODO. Does not yet exist
+Simple comparison of Bonn data vs Munich by creating a classification Model for
+Munich data and trying it on the Bonn data.
+
+Afterwards try to improve the Bonn model by retraining the initial convolutional
+layers on a part of the new Bonn data.
 
 #### Other scripts
 
