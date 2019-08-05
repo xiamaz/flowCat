@@ -1,8 +1,10 @@
+# pylint: skip-file
+# flake8: noqa
 from __future__ import annotations
 from typing import List, Union
 import re
 import logging
-import dataclasses
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -13,15 +15,15 @@ from flowcat import utils, configuration, mappings
 LOGGER = logging.getLogger(__name__)
 
 
-@dataclasses.dataclass
+@dataclass
 class SOM:
     """Holds self organizing map data with associated metadata."""
     data: pd.DataFrame
     path: utils.URLPath = None
-    cases: List[str] = dataclasses.field(default_factory=list)
+    cases: List[str] = field(default_factory=list)
     tube: int = -1
     material: mappings.Material = None
-    transforms: List[dict] = dataclasses.field(default_factory=list)
+    transforms: List[dict] = field(default_factory=list)
 
     @classmethod
     def from_path(cls, data_path, config_path, **kwargs):
@@ -53,6 +55,13 @@ class SOM:
         }
 
     def np_array(self, pad_width=0):
+        """Return as new numpy array. Optionally with padding by adding zeros
+        to the borders of the SOM.
+
+        Args:
+            pad_width: Additional padding for SOM on borders. The width is
+                       added to each border.
+        """
         data = np.reshape(self.data.values, (*self.dims, -1))
         if pad_width:
             data = np.pad(data, pad_width=[
@@ -66,23 +75,19 @@ class SOM:
         return f"<SOM {'x'.join(map(str, self.dims))} Tube:{self.tube}>"
 
 
+@dataclass
 class SOMCollection:
     """Holds multiple SOM, eg for different tubes for a single patient."""
 
-    path = None
-    config = None
-    cases = None
-    tubes = None
+    path: utils.URLPath
+    cases: List[str] = field(default_factory=list)
+    tubes: List[int] = field(default_factory=list)
+    tubepaths: dict = field(default_factory=dict)
+    config: dict
 
-    def __init__(self, path=None, tubes=None, tubepaths=None, cases=None, config=None):
-        self.path = path
-        self.cases = cases or []
-        self.tubes = tubes or []
-        self._tubepaths = tubepaths or {}
-        self.config = config
+    def __post_init__(self):
         self._index = 0
         self._max_index = 0
-
         self._data = {}
 
     @classmethod
@@ -123,7 +128,7 @@ class SOMCollection:
             return self._data[tube]
         if tube not in self.tubes:
             return None
-        path = self._tubepaths[tube]
+        path = self.tubepaths[tube]
         data = SOM.from_path(path, str(path)[:-3] + "json", tube=tube, cases=self.cases)
         self._data[tube] = data
         return data

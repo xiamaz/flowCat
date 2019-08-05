@@ -24,45 +24,57 @@ def configure_print_logging(rootname="flowcat"):
 
 
 def main(args):
-    output_dir = args.output / args.name
+    output_dir = args.output
 
     dataset = flowcat.CaseCollection.from_path(args.input, metapath=args.meta)
-    selected_labels = utils.load_json("data/selected_cases.json")
+    selected_labels = utils.load_json(args.cases)
     selected, _ = dataset.filter_reasons(labels=selected_labels)
-    selected = dataset.sample(count=1, groups=["CLL", "normal"])
-    print(selected.labels)
 
-    joined_tubes = utils.load_json("output/00-dataset-test/munich_bonn_tubes.json")
-    print(joined_tubes)
+    if args.markers:
+        selected_markers = utils.load_json(args.markers)
+    else:
+        selected_markers = dataset.selected_markers
 
-    # TODO: Generate a SOM for all tubes for the given labels.
-    # Visualize using tensorboard
-    # Save everything into a single, folder which we can use in the next script
-    # to create single SOMs
-    model = som.CaseSingleSom(
-        tube=1,
+    if args.tensorboard:
+        tensorboard_dir = output_dir / "tensorboard"
+    else:
+        tensorboard_dir = None
+
+    model = som.CaseSom(
+        tubes=selected_markers,
         materials=flowcat.ALLOWED_MATERIALS,
-        markers=joined_tubes["1"],
-        marker_name_only=True,
-        max_epochs=10,
-        batch_size=10000,
-        marker_images=som.fcssom.MARKER_IMAGES_NAME_ONLY,
-        map_type="toroid",
-        tensorboard_dir=output_dir / "tensorboard",
-        dims=(32, 32, -1)
-    )
+        modelargs={
+            "marker_name_only": True,
+            "max_epochs": 10,
+            "batch_size": 10000,
+            "marker_images": som.fcssom.MARKER_IMAGES_NAME_ONLY,
+            "map_type": "toroid",
+            "tensorboard_dir": tensorboard_dir,
+            "dims": (32, 32, -1),
+        })
     model.train(selected)
     model.save(output_dir / "model")
 
 
 if __name__ == "__main__":
     PARSER = argparse.ArgumentParser(usage="Generate references and individual SOMs.")
-    PARSER.add_argument("-o", "--output", default=utils.URLPath("output/01a-ref-som"), type=utils.URLPath)
     PARSER.add_argument(
         "-i", "--input",
-        default=utils.URLPath("/data/flowcat-data/mll-flowdata/decCLL-9F"),
+        desc="Input directory containing FCS files",
         type=utils.URLPath)
-    PARSER.add_argument("-m", "--meta", type=utils.URLPath)
-    PARSER.add_argument("name")
+    PARSER.add_argument(
+        "--tensorboard",
+        desc="Flag to enable tensorboard logging",
+        action="store_true")
+    PARSER.add_argument(
+        "--markers",
+        desc="Input json file mapping tube number to markers",
+        type=utils.URLPath)
+    PARSER.add_argument(
+        "-m", "--meta",
+        desc="Metadata file for the dataset",
+        type=utils.URLPath)
+    PARSER.add_argument("cases", type=utils.URLPath)
+    PARSER.add_argument("output", type=utils.URLPath)
     configure_print_logging()
     main(PARSER.parse_args())

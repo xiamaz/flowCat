@@ -1,9 +1,9 @@
 from __future__ import annotations
-from typing import Iterable, List, Generator
+from typing import Iterable, List, Generator, Dict, Union
 from flowcat.mappings import Material
 from flowcat.dataset import case, case_dataset, fcs
 from flowcat import utils
-from .base import SOMCollection
+from .base import SOMCollection, SOM
 from .fcssom import FCSSom
 
 
@@ -59,13 +59,13 @@ class CaseSingleSom:
         self.model.save(path)
         utils.save_json(self.config, path / self.config_name)
 
-    def train(self, data: Iterable[case.Case], *args, **kwargs):
+    def train(self, data: Iterable[case.Case], *args, **kwargs) -> CaseSingleSom:
         tsamples = [c.get_tube(self.tube, materials=self.materials).data for c in data]
         self.model.train(tsamples)
         self.train_labels = [c.id for c in data]
         return self
 
-    def transform(self, data: case.Case, *args, **kwargs):
+    def transform(self, data: case.Case, *args, **kwargs) -> SOM:
         tsample = data.get_tube(self.tube, materials=self.materials)
         if tsample is None:
             raise CaseSomSampleException(data.id, self.tube, self.materials)
@@ -75,27 +75,69 @@ class CaseSingleSom:
         somdata.material = tsample.material
         return somdata
 
-    def transform_generator(self, data: Iterable[case.Case], *args, **kwargs):
+    def transform_generator(self, data: Iterable[case.Case], *args, **kwargs) -> Generator[SOM]:
         for casedata in data:
             yield casedata, self.transform(casedata, *args, **kwargs)
 
 
 class CaseSom:
-    def __init__(self, tubes, materials, modelargs):
+    """Create a SOM for a single case."""
+
+    def __init__(
+            self,
+            tubes: Union[List[int], Dict[int, list]],
+            materials: list,
+            modelargs: dict,
+            tensorboard_dir: utils.URLPath = None,
+    ):
+        """
+        Args:
+            tubes: List of tube numbers or a dict mapping tube numbers to list of markers.
+            materials: List of allowed materials, as enum of MATERIAL
+            tensorboard_dir: Path for logging data. Each tube will be saved separately.
+            modelargs: Dict of args to the CaseSingleSom class.
+        """
         self.tubes = tubes
         self.materials = materials
-        self.models = {
-            t: CaseSingleSom(tube=t, materials=materials, **modelargs)
-            for t in self.tubes
-        }
-
-    def train(self, data: Iterable[case.Case], *args, **kwargs):
+        self.models = {}
         for tube in self.tubes:
-            print(f"Training tube {tube}")
-            self.models[tube].train(data, *args, **kwargs)
+            markers = self.tubes[tube] if isinstance(self.tubes, dict) else None
+            self.models[tube] = CaseSingleSom(
+                tube=tube,
+                selected_markers=markers,
+                tensorboard_dir=tensorboard_dir / f"tube{tube}" if tensorboard_dir else None,
+                materials=materials,
+                **modelargs)
 
-    def transform(self, data: case.Case, *args, **kwargs):
-        casesoms = SOMCollection(case=data.id)
+        if isinstance(self.tubes, dict):
+            self.models = {
+                tube: CaseSingleSom(
+                    tube=tube,
+                    selected_markers=markers,
+                    materials=materials,
+                    **modelargs)
+                for tube, markers in self.tubes.items()
+            }
+        else:
+            self.models = {
+                tube: CaseSingleSom(tube=tube, materials=materials, **modelargs)
+                for tube in self.tubes
+            }
+
+    def save(self, path: utils.URLPath):
+        """Save the model to the given directory"""
+        for tube, model in self.models.items():
+            output_path = path / f"tube{tube}"
+            model.save(output_path)
+
+    def train(self, data: Iterable[case.Case], *args, **kwargs) -> CaseSom:
+        for tube, model in self.models.items():
+            print(f"Training tube {tube}")
+            model.train(data, *args, **kwargs)
+        return self
+
+    def transform(self, data: case.Case, *args, **kwargs) -> SOMCollection:
+        casesoms = SOMCollection(cases=[data.id])
         for tube in self.tubes:
             print(f"Transforming tube {tube}")
             tsom = self.models[tube].transform(data, *args, **kwargs)

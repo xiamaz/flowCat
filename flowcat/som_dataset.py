@@ -33,14 +33,14 @@ def load_som_cases(row, path, tubes):
     return SOMCase(som=som, group=row["group"], label=row["label"])
 
 
+@dataclass
 class SOMDataset:
     """Simple wrapper for reading dataset metadata."""
 
-    def __init__(self, data, tubes, dims, channels):
-        self.data = data
-        self.tubes = tubes
-        self.dims = dims
-        self.channels = channels
+    data: pd.DataFrame
+    tubes: List[int]
+    dims: Tuple[int]
+    channels: List[str]
 
     @classmethod
     def from_path(cls, path):
