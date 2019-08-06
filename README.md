@@ -6,57 +6,10 @@ Organization and general discussion at:
 
 Discussion channel: [Mattermost](https://mm.meb.uni-bonn.de).
 
-Module structure
-----------------
-
-``` {.}
-flowcat/
-```
-
-### Runnable scripts
-
-#### 0x - main scripts
-
-Main scripts to generate SOMs and run the classification on the entire dataset.
-
-#### 1x - special cohorts
-
-Work on special cohorts. Such as AML or MM.
-
-#### 2x - som transformation comparisons
-
-Some scripts for testing modifications on the SOM implementation, as well
-as comparisons of the implementation to results obtained from flowSOM.
-
-#### 3x - POC on CLL/normal for Bonn/Munich
-
-Simple comparison of Bonn data vs Munich by creating a classification Model for
-Munich data and trying it on the Bonn data.
-
-Afterwards try to improve the Bonn model by retraining the initial convolutional
-layers on a part of the new Bonn data.
-
-#### Other scripts
-
-Run availble unittests with:
-
-``` {.sh}
-./test.py
-```
-
-Unittests require some data saved in a separate S3 bucket flowcat-test.
-
-There is a helper script to make syncing this bucket a bit easier.
-
-``` {.sh}
-./update_tests.sh  # will show usage
-./update_tests.sh down  # download all test data to tests/data
-```
-
 Running the main project
 ------------------------
 
-1. `00_dataset_prepare.py`
+1. `00a_dataset_prepare.py`
     
     Split a given dataset directory into a test and a training set. The
     splitting parameters are hardcoded in `preprocess_cases`.
@@ -69,7 +22,7 @@ Running the main project
     Usage:
     
     ```{.sh}
-    ./00_dataset_prepare.py [-h] <PATH_TO_DATASET> <OUTPUT>
+    ./00a_dataset_prepare.py [-h] <PATH_TO_DATASET> <OUTPUT>
     ```
 
     Generated datsets in the output directory can be loaded into new python
@@ -78,6 +31,42 @@ Running the main project
     ```python
     flowcat.CaseCollection.from_path(path=<PATH_TO_DATASET>, metapath=<PATH_OUTPUT>)
     ```
+
+2. `00b_select_ref_cases.py`
+
+    A reference SOM needs to be created for transforming single cases on the
+    basis of a selection of cases.
+
+    The given script will output a list of case ids for a given dataset and
+    given selection parameters. These directly map to the parameters for the
+    `filter_reasons` function.
+
+    ```{.sh}
+    ./00b_select_ref_cases.py --input /data/flowdata --meta /data/flowdata/meta --groups CLL,normal test.json
+    ```
+
+    The metadata should point to a basename for both a meta.json and a optional
+    meta_config.json.
+
+3. `01a_generate_ref_som.py`
+
+    Create a reference SOM using the previously generated test.json.
+
+4. `01b_create_soms.py`
+
+    Generate SOMs for all cases in the initial dataset.
+
+5. `02_train_model.py`
+
+    Train a CNN model with validation split.
+
+6. `03a_create_soms_test.py`
+
+    Generate test-set SOMs using the same reference.
+
+7. `03b_test_model.py`
+
+    Get prediction accuracy using the previously generated model.
 
 Performance considerations
 --------------------------
