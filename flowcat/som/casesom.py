@@ -85,27 +85,42 @@ class CaseSom:
 
     def __init__(
             self,
-            tubes: Dict[str, list],
-            modelargs: dict,
+            tubes: Dict[str, list] = None,
+            modelargs: dict = None,
+            models: Dict[str, CaseSingleSom] = None,
             materials: list = None,
             tensorboard_dir: utils.URLPath = None,
     ):
         """
         Args:
             tubes: List of tube numbers or a dict mapping tube numbers to list of markers.
-            tensorboard_dir: Path for logging data. Each tube will be saved separately.
             modelargs: Dict of args to the CaseSingleSom class.
+            models: Alternatively directly give a dictionary mapping tubes to SOM models.
+            tensorboard_dir: Path for logging data. Each tube will be saved separately.
             materials: List of allowed materials, as enum of MATERIAL
         """
         self.materials = materials
-        self.models = {}
-        for tube, markers in tubes.items():
-            self.models[tube] = CaseSingleSom(
-                tube=tube,
-                markers=markers,
-                tensorboard_dir=tensorboard_dir / f"tube{tube}" if tensorboard_dir else None,
-                materials=materials,
-                **modelargs)
+        if models is None:
+            self.models = {}
+            for tube, markers in tubes.items():
+                self.models[tube] = CaseSingleSom(
+                    tube=tube,
+                    markers=markers,
+                    tensorboard_dir=tensorboard_dir / f"tube{tube}" if tensorboard_dir else None,
+                    materials=materials,
+                    **modelargs)
+        else:
+            self.models = models
+
+    @classmethod
+    def load(cls, path: utils.URLPath, tensorboard_dir: utils.URLPath = None, **kwargs):
+        """Load a saved SOM model."""
+        singlepaths = {p.name.lstrip("tube"): p for p in path.ls() if "tube" in str(p)}
+        models = {}
+        for tube, mpath in sorted(singlepaths.items()):
+            tbdir = tensorboard_dir / f"tube{tube}" if tensorboard_dir else None
+            models[tube] = CaseSingleSom.load(mpath, tensorboard_dir=tbdir, **kwargs)
+        return cls(models=models)
 
     def save(self, path: utils.URLPath):
         """Save the model to the given directory"""

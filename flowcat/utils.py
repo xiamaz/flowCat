@@ -92,6 +92,16 @@ class Singleton(abc.ABCMeta):
 class FileBackend(metaclass=Singleton):
 
     @abc.abstractmethod
+    def name(self, path):
+        """Get name from given path."""
+        pass
+
+    @abc.abstractmethod
+    def suffix(self, path):
+        """Get suffix from given path."""
+        pass
+
+    @abc.abstractmethod
     def get(self, localpath, netloc, path):
         """Get data from remote location."""
         pass
@@ -117,6 +127,12 @@ class S3Backend(FileBackend):
 
     def __init__(self):
         self.client = boto3.client("s3")
+
+    def name(self, path):
+        return pathlib.PurePath(path).name
+
+    def suffix(self, path):
+        return pathlib.PurePath(path).suffix
 
     def extend(self, path, *args):
         """Concatenate given elements and return a string representation."""
@@ -196,6 +212,12 @@ class S3Backend(FileBackend):
 
 class LocalBackend(FileBackend):
 
+    def name(self, path):
+        return pathlib.PurePath(path).name
+
+    def suffix(self, path):
+        return pathlib.PurePath(path).suffix
+
     def extend(self, path, *args):
         """Concatenate given elements and return a string representation."""
         return str(pathlib.PurePath(path, *[str(a) for a in args]))
@@ -261,6 +283,14 @@ class URLPath:
         self._local = None
 
     @property
+    def name(self):
+        return self._backend.name(self.path)
+
+    @property
+    def suffix(self):
+        return self._backend.suffix
+
+    @property
     def local(self):
         if self._local is None:
             if self.scheme:
@@ -287,7 +317,8 @@ class URLPath:
             writefun: Function writing data to a given path.
         """
         if self.local.exists() and not CLOBBER:
-            raise RuntimeError(f"{self} already exists and clobber is {CLOBBER}. Use env var flowCat_clobber to overwrite files.")
+            raise RuntimeError(
+                f"{self} already exists and clobber is {CLOBBER}. Use env var flowCat_clobber to overwrite files.")
         self.local.parent.mkdir(parents=True, exist_ok=True)
         writefun(str(self.local))
         self._backend.put(self.local, self.netloc, self.path, clobber=CLOBBER)

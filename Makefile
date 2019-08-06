@@ -9,7 +9,9 @@ TRAINDATA = --input $(DATADIR) --meta $(OUTDIR)/$(DSNAME)/train
 TESTDATA = --input $(DATADIR) --meta $(OUTDIR)/$(DSNAME)/test
 
 REFERENCE_DATA = $(OUTDIR)/$(DSNAME)/reference.json
-REFERENCE_SOM = $(OUTDIR)/reference
+REFERENCE_SOM = $(OUTDIR)/reference/model
+
+SOM_DATASET = $(OUTDIR)/som
 
 GROUPS = CLL,MBL,MCL,PL,LPL,MZL,FL,HCL,normal
 
@@ -26,3 +28,8 @@ dataset:
 .ONESHELL:
 reference:
 	@./01a_create_ref_som.py $(TRAINDATA) --tensorboard $(REFERENCE_DATA) $(REFERENCE_SOM)
+
+.PHONY: som
+.ONESHELL:
+som:
+	@./01b_create_soms.py $(TRAINDATA) $(REFERENCE_SOM) $(SOM_DATASET)
