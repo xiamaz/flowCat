@@ -6,9 +6,34 @@ Output a json list of case ids.
 """
 import inspect
 import typing
+import math
 from argparse import ArgumentParser
 
 import flowcat
+
+
+def function_arg_descs(fun) -> dict:
+    """Return a dict of function argument to description from the docstring."""
+    docstring = [l.strip() for l in fun.__doc__.split("\n")]
+    args_start = docstring.index("Args:")
+    try:
+        return_index = docstring.index("Returns:")
+    except ValueError:
+        return_index = None
+    try:
+        raises_index = docstring.index("Raises:")
+    except ValueError:
+        raises_index = None
+
+    if return_index and raises_index:
+        args_end = min(return_index, raises_index)
+    else:
+        args_end = return_index or raises_index
+    args = [l.split(":", 1) for l in docstring[args_start+1: args_end]]
+    arg_map = {
+        name.strip(): desc.strip() for name, desc in filter(lambda x: len(x) == 2, args)
+    }
+    return arg_map
 
 
 def filter_signature() -> dict:
@@ -67,23 +92,15 @@ def map_signature_to_funs(sigs) -> dict:
 def add_filter_args(parser):
     signature = filter_signature()
     argfuns = map_signature_to_funs(signature)
+    filter_descs = function_arg_descs(flowcat.dataset.case.filter_case)
     for name, fun in argfuns.items():
-        parser.add_argument(f"--{name}", type=fun)
+        parser.add_argument(f"--{name}", type=fun, help=filter_descs.get(name, None))
     return parser
 
 
 PARSER = ArgumentParser(
     usage="Output a list of case ids based on the parameters")
-PARSER.add_argument(
-    "-i", "--input",
-    type=flowcat.utils.URLPath,
-    required=True,
-    help="Input fcs directory")
-PARSER.add_argument(
-    "-m", "--meta",
-    type=flowcat.utils.URLPath,
-    required=True,
-    help="Input data meta without suffix")
+flowcat.parser.add_dataset_args(PARSER)
 filter_args = PARSER.add_argument_group("Filter arguments")
 add_filter_args(filter_args)
 PARSER.add_argument(
@@ -94,7 +111,7 @@ PARSER.add_argument(
 
 args = PARSER.parse_args()
 
-cases = flowcat.CaseCollection.load(inputpath=args.input, metapath=args.meta)
+cases = flowcat.parser.get_dataset(args)
 
 input_args = {n: getattr(args, n) for n in filter_signature()}
 filtered, _ = cases.filter_reasons(**input_args)

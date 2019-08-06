@@ -70,6 +70,21 @@ def filter_case(
         materials: List[str] = None,
         selected_markers: Dict[int, List[str]] = None,
 ) -> Tuple[bool, str]:
+    """
+    Args:
+        case: Case object.
+        tubes: List of tubes, such as [1, 2, 3].
+        labels: List of case ids.
+        groups: List of groups, such as [CLL, MBL, HCL].
+        infiltration: Two numbers for lower and upper bound, eg (0.2, 0.8) or (0.2, None)
+        date: Lower and upper date in YYYY-MM-DD format.
+        counts: Minimum number of events in fcs file.
+        materials: List of allowed materials.
+        selected_markers: Dictionary mapping tubes to allowed markers.
+
+    Returns:
+        Tuple of whether case fulfills requirements and optionally the reason for exclusion.
+    """
     reasons = []
     if groups and case.group not in groups:
         reasons.append(f"groups")
