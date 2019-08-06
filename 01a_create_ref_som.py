@@ -23,22 +23,12 @@ def configure_print_logging(rootname="flowcat"):
     utils.add_logger(LOGGER, handlers, level=logging.DEBUG)
 
 
-def main(args):
-    output_dir = args.output
-
-    dataset = flowcat.CaseCollection.from_path(args.input, metapath=args.meta)
-    selected_labels = utils.load_json(args.cases)
-    selected, _ = dataset.filter_reasons(labels=selected_labels)
-
-    if args.markers:
-        selected_markers = utils.load_json(args.markers)
+def train_model(dataset, markers=None, tensorboard=None):
+    """Create and train a SOM model using the given dataset."""
+    if markers:
+        selected_markers = utils.load_json(markers)
     else:
         selected_markers = dataset.selected_markers
-
-    if args.tensorboard:
-        tensorboard_dir = output_dir / "tensorboard"
-    else:
-        tensorboard_dir = None
 
     model = som.CaseSom(
         tubes=selected_markers,
@@ -49,10 +39,28 @@ def main(args):
             "batch_size": 10000,
             "marker_images": som.fcssom.MARKER_IMAGES_NAME_ONLY,
             "map_type": "toroid",
-            "tensorboard_dir": tensorboard_dir,
+            "tensorboard_dir": tensorboard,
             "dims": (32, 32, -1),
         })
-    model.train(selected)
+    model.train(dataset)
+    return model
+
+
+def main(args):
+    """Load case ids from json file to filter cases and train and save the created model."""
+    output_dir = args.output
+
+    dataset = flowcat.CaseCollection.load(args.input, args.meta)
+    selected_labels = utils.load_json(args.cases)
+    selected, _ = dataset.filter_reasons(labels=selected_labels)
+
+    if args.tensorboard:
+        tensorboard_dir = output_dir / "tensorboard"
+    else:
+        tensorboard_dir = None
+
+    model = train_model(selected, markers=args.markers, tensorboard=tensorboard_dir)
+
     model.save(output_dir / "model")
 
 
