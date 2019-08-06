@@ -61,7 +61,7 @@ def filter_tubesamples(
 
 def filter_case(
         case: Case,
-        tubes: List[int] = None,
+        tubes: List[str] = None,
         labels: List[str] = None,
         groups: List[str] = None,
         infiltration: Tuple[float, float] = None,
@@ -138,12 +138,13 @@ class Case:
         "used_material",
         "date",
         "infiltration",
+        "diagnosis",
         "sureness",
         "group",
         "id",
     )
 
-    def __init__(self, data, path=""):
+    def __init__(self, data: Union[Case, dict], path: utils.URLPath = None):
         """
         Args:
             data: Contains all metainformation, either a dictionary or
@@ -166,6 +167,7 @@ class Case:
             self.infiltration = data.infiltration
             self.group = data.group
             self.sureness = data.sureness
+            self.diagnosis = data.diagnosis
         elif isinstance(data, dict):
             self._json = data
             self.path = path
@@ -182,9 +184,8 @@ class Case:
                 infiltration.replace(",", ".") if isinstance(infiltration, str) else infiltration)
             assert self.infiltration <= 100.0 and self.infiltration >= 0.0, "Infiltration out of range 0-100"
             self.group = data.get("cohort", "")
-            short_diagnosis = data.get("diagnosis", "")
-            sureness = data.get("sureness", "")
-            self.sureness = self._infer_sureness(sureness, short_diagnosis)
+            self.diagnosis = data.get("diagnosis", "")
+            self.sureness = data.get("sureness", "")
         else:
             raise TypeError("data needs to be either another Case or a dict")
 
@@ -197,8 +198,8 @@ class Case:
             "filepaths": [p.json for p in self.filepaths],
             "cohort": self.group,
             "infiltration": self.infiltration,
-            "diagnosis": self.raw["diagnosis"],
-            "sureness": self.raw["sureness"],
+            "diagnosis": self.diagnosis,
+            "sureness": self.sureness,
         }
         return cdict
 
@@ -233,14 +234,14 @@ class Case:
     def get_tube_markers(self, tube):
         tube = self.get_tube(tube)
         if tube is None:
-            return [];
+            return []
         return tube.markers
 
-    def get_tube(self, tube, min_count=0, materials=None):
+    def get_tube(self, tube: str, min_count: int = 0, materials: List[mappings.Material] = None) -> TubeSample:
         """Get the TubePath fulfilling the given requirements, return the
         last on the list if multiple are available.
         Args:
-            tube: Int tube number to be selected.
+            tube: Tube number to be selected.
             min_count: Minimum number of events in the FCS file.
             material: Type of material used for the tube.
         Returns:
@@ -327,45 +328,6 @@ class Case:
             joined = joined[[c for c in joined.columns if "nix" not in c]]
         return joined
 
-    def _infer_sureness(self, sureness_desc, short_diag):
-        """Return a sureness score from existing information."""
-        sureness_desc = sureness_desc.lower()
-        short_diag = short_diag.lower()
-
-        if self.group == "FL":
-            if "nachweis eines igh-bcl2" in sureness_desc:
-                return mappings.Sureness.HIGH
-            return mappings.Sureness.NORMAL
-        if self.group == "MCL":
-            if "mit nachweis ccnd1-igh" in sureness_desc:
-                return mappings.Sureness.HIGH
-            if "nachweis eines igh-ccnd1" in sureness_desc:  # synon. to first
-                return mappings.Sureness.HIGH
-            if "nachweis einer 11;14-translokation" in sureness_desc:  # synon. to first
-                return mappings.Sureness.HIGH
-            if "mantelzelllymphom" in short_diag:  # prior known diagnosis will be used
-                return mappings.Sureness.HIGH
-            if "ohne fish-sonde" in sureness_desc:  # diagnosis uncertain without genetic proof
-                return mappings.Sureness.LOW
-            return mappings.Sureness.NORMAL
-        if self.group == "PL":
-            if "kein nachweis eines igh-ccnd1" in sureness_desc:  # hallmark MCL (synon. 11;14)
-                return mappings.Sureness.HIGH
-            if "kein nachweis einer 11;14-translokation" in sureness_desc:  # synon to first
-                return mappings.Sureness.HIGH
-            if "nachweis einer 11;14-translokation" in sureness_desc:  # hallmark MCL
-                return mappings.Sureness.LOW
-            return mappings.Sureness.NORMAL
-        if self.group == "LPL":
-            if "lymphoplasmozytisches lymphom" in short_diag:  # prior known diagnosis will be used
-                return mappings.Sureness.HIGH
-            return mappings.Sureness.NORMAL
-        if self.group == "MZL":
-            if "marginalzonenlymphom" in short_diag:  # prior known diagnosis will be used
-                return mappings.Sureness.HIGH
-            return mappings.Sureness.NORMAL
-        return mappings.Sureness.NORMAL
-
     def copy(self):
         return self.__class__(self)
 
@@ -405,10 +367,10 @@ class TubeSample:
             self._json = data
             assert "fcs" in data and "path" in data["fcs"], "Path to data is missing"
             assert "date" in data, "Date is missing"
-            self.path = data["fcs"]["path"]
+            self.path = utils.URLPath(data["fcs"]["path"])
             self.date = datetime.strptime(data["date"], "%Y-%m-%d").date()
 
-            self.tube = int(data.get("tube", 0))
+            self.tube = str(data.get("tube", "0"))
             self.material = mappings.Material.from_str(data.get("material", ""))
             self.panel = data.get("panel", "")
 
@@ -430,7 +392,7 @@ class TubeSample:
             "date": self.date.isoformat(),
             "material": self.raw["material"],
             "fcs": {
-                "path": self.path,
+                "path": str(self.path),
                 "markers": self.markers,
                 "event_count": self.count,
             }
@@ -444,16 +406,6 @@ class TubeSample:
             return self._data
         return self.get_data(normalized=False, scaled=False)
 
-    @property
-    def urlpath(self):
-        url_path = utils.URLPath(self.parent.path) / self.path
-        return url_path
-
-    @property
-    def localpath(self):
-        local_path = self.urlpath.get()
-        return local_path
-
     def get_data(self, normalized=True, scaled=True):
         """
         Args:
@@ -462,7 +414,7 @@ class TubeSample:
         Returns:
             Dataframe with fcs data.
         """
-        url_path = utils.URLPath(self.parent.path) / self.path
+        url_path = self.parent.path / self.path
         data = fcs.FCSData(url_path.get())
         if normalized:
             data = data.normalize()
@@ -489,4 +441,4 @@ class TubeSample:
         return all_in(markers, self.markers)
 
     def __repr__(self):
-        return f"<Sample| T{self.tube} D{self.date} {self.count} events>"
+        return f"<Sample {self.material}| T{self.tube} D{self.date} {self.count} events>"

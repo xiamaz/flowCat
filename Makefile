@@ -8,6 +8,9 @@ ALLDATA = --input $(DATADIR) --meta $(DATAMETA)
 TRAINDATA = --input $(DATADIR) --meta $(OUTDIR)/$(DSNAME)/train
 TESTDATA = --input $(DATADIR) --meta $(OUTDIR)/$(DSNAME)/test
 
+REFERENCE_DATA = $(OUTDIR)/$(DSNAME)/reference.json
+REFERENCE_SOM = $(OUTDIR)/reference
+
 GROUPS = CLL,MBL,MCL,PL,LPL,MZL,FL,HCL,normal
 
 
@@ -17,4 +20,9 @@ dataset:
 	@echo "Executing 01a"
 	./00a_dataset_prepare.py $(ALLDATA) $(OUTDIR)/$(DSNAME)
 	echo "Executing 01b"
-	./00b_select_ref_cases.py $(TRAINDATA) --sample 3 --groups $(GROUPS) --infiltration 40,None $(OUTDIR)/$(DSNAME)/reference.json
+	./00b_select_ref_cases.py $(TRAINDATA) --sample 1 --groups $(GROUPS) --infiltration 40,None $(REFERENCE_DATA)
+
+.PHONY: reference
+.ONESHELL:
+reference:
+	@./01a_create_ref_som.py $(TRAINDATA) --tensorboard $(REFERENCE_DATA) $(REFERENCE_SOM)

@@ -6,6 +6,7 @@ Overview of cases dataset:
 """
 import time
 import contextlib
+import enum
 from argparse import ArgumentParser
 import collections
 
@@ -28,22 +29,69 @@ def block(label):
     print("-" * len(label))
 
 
+class Sureness(enum.IntEnum):
+    HIGH = 10
+    NORMAL = 5
+    LOW = 1
+
+
+def infer_sureness(case):
+    """Return a sureness score from existing information."""
+    sureness_desc = case.sureness.lower()
+    short_diag = case.diagnosis.lower()
+
+    if case.group == "FL":
+        if "nachweis eines igh-bcl2" in sureness_desc:
+            return Sureness.HIGH
+        return Sureness.NORMAL
+    if case.group == "MCL":
+        if "mit nachweis ccnd1-igh" in sureness_desc:
+            return Sureness.HIGH
+        if "nachweis eines igh-ccnd1" in sureness_desc:  # synon. to first
+            return Sureness.HIGH
+        if "nachweis einer 11;14-translokation" in sureness_desc:  # synon. to first
+            return Sureness.HIGH
+        if "mantelzelllymphom" in short_diag:  # prior known diagnosis will be used
+            return Sureness.HIGH
+        if "ohne fish-sonde" in sureness_desc:  # diagnosis uncertain without genetic proof
+            return Sureness.LOW
+        return Sureness.NORMAL
+    if case.group == "PL":
+        if "kein nachweis eines igh-ccnd1" in sureness_desc:  # hallmark MCL (synon. 11;14)
+            return Sureness.HIGH
+        if "kein nachweis einer 11;14-translokation" in sureness_desc:  # synon to first
+            return Sureness.HIGH
+        if "nachweis einer 11;14-translokation" in sureness_desc:  # hallmark MCL
+            return Sureness.LOW
+        return Sureness.NORMAL
+    if case.group == "LPL":
+        if "lymphoplasmozytisches lymphom" in short_diag:  # prior known diagnosis will be used
+            return Sureness.HIGH
+        return Sureness.NORMAL
+    if case.group == "MZL":
+        if "marginalzonenlymphom" in short_diag:  # prior known diagnosis will be used
+            return Sureness.HIGH
+        return Sureness.NORMAL
+    return Sureness.NORMAL
+
+
 def deduplicate_cases_by_sureness(cases):
     """Remove duplicates by taking the one with the higher sureness score."""
     label_dict = collections.defaultdict(list)
     for case in cases:
-        label_dict[case.id].append(case)
+        label_dict[case.id].append((case, infer_sureness(case)))
     deduplicated = []
     duplicates = []
     for same_id_cases in label_dict.values():
-        same_id_cases.sort(key=lambda c: c.sureness, reverse=True)
-        if len(same_id_cases) == 1 or same_id_cases[0].sureness > same_id_cases[1].sureness:
-            deduplicated.append(same_id_cases[0])
+        same_id_cases.sort(key=lambda c: c[1], reverse=True)
+        if len(same_id_cases) == 1 or same_id_cases[0][1] > same_id_cases[1][1]:
+            deduplicated.append(same_id_cases[0][0])
         else:
-            duplicates.append(same_id_cases[0].id)
+            duplicates.append(same_id_cases[0][0].id)
             print(
                 "DUP both removed: %s (%s), %s (%s)" % (
-                    same_id_cases[0].id, same_id_cases[0].group, same_id_cases[1].id, same_id_cases[1].group
+                    same_id_cases[0][0].id, same_id_cases[0][0].group,
+                    same_id_cases[1][0].id, same_id_cases[1][0].group
                 ))
     if duplicates:
         print("%d duplicates removed" % len(duplicates))
@@ -91,7 +139,7 @@ def print_diff(cases_a, cases_b):
         print(f"{key}: {value_a} → {value_b} -- |{diff_key}|")
 
 
-def preprocess_cases(cases: flowcat.CaseCollection, tubes=(1, 2, 3)):
+def preprocess_cases(cases: flowcat.CaseCollection, tubes=("1", "2", "3")):
     with block("Deduplicate cases by sureness"):
         deduplicated = deduplicate_cases_by_sureness(cases)
         print_diff(cases, deduplicated)
@@ -104,18 +152,26 @@ def preprocess_cases(cases: flowcat.CaseCollection, tubes=(1, 2, 3)):
         print("Markers selected are:")
         print("\n".join(f"{k}: {v}" for k, v in cases.selected_markers.items()))
 
-    with block("Filter train"):
-        train_cases, _ = cases.filter_reasons(
-            date=(None, "2018-06-30"),
+    with timing("Filter all"):
+        all_cases, reasons = cases.filter_reasons(
             materials=flowcat.ALLOWED_MATERIALS,
-            tubes=(1, 2, 3))
+            tubes=tubes)
+        print_diff(cases, all_cases)
+        reason_count = collections.Counter([r for _, rs in reasons for r in rs])
+        print("Reasons are", ", ".join(f"{k}: {v}" for k, v in reason_count.items()))
+        cases = all_cases
+
+    with block("Filter filepaths"):
+        for case in cases:
+            case.set_allowed_material(tubes)
+            case.filepaths = [case.get_tube(tube) for tube in tubes]
+
+    with block("Filter train"):
+        train_cases, _ = cases.filter_reasons(date=(None, "2018-06-30"))
         print_diff(cases, train_cases)
 
     with block("Filter test"):
-        test_cases, _ = cases.filter_reasons(
-            date=("2018-07-01", None),
-            materials=flowcat.ALLOWED_MATERIALS,
-            tubes=(1, 2, 3))
+        test_cases, _ = cases.filter_reasons(date=("2018-07-01", None))
         print_diff(cases, test_cases)
 
     train_labels = train_cases.labels
@@ -125,14 +181,6 @@ def preprocess_cases(cases: flowcat.CaseCollection, tubes=(1, 2, 3)):
     assert train_not_test and test_not_train
 
     print("Ratio", len(test_cases) / (len(train_cases) + len(test_cases)))
-
-    with timing("Filter all"):
-        all_cases, reasons = cases.filter_reasons(
-            materials=flowcat.ALLOWED_MATERIALS,
-            tubes=(1, 2, 3))
-        print_diff(cases, all_cases)
-        reason_count = collections.Counter([r for _, rs in reasons for r in rs])
-        print("Reasons are", ", ".join(f"{k}: {v}" for k, v in reason_count.items()))
 
     newest = None
     for case in all_cases:

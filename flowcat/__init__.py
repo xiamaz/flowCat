@@ -6,5 +6,5 @@ from . import utils, models, plots, som, parser
 from .mappings import (
     ALLOWED_MATERIALS, GROUP_MAPS, GROUPS, NAME_MAP,
     CHANNEL_CONFIGS,
-    Material, Sureness
+    Material
 )

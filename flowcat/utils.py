@@ -198,7 +198,7 @@ class LocalBackend(FileBackend):
 
     def extend(self, path, *args):
         """Concatenate given elements and return a string representation."""
-        return str(pathlib.PurePath(path, *args))
+        return str(pathlib.PurePath(path, *[str(a) for a in args]))
 
     def get(self, localpath, netloc, path):
         if localpath.exists():

@@ -32,14 +32,13 @@ def train_model(dataset, markers=None, tensorboard=None):
 
     model = som.CaseSom(
         tubes=selected_markers,
-        materials=flowcat.ALLOWED_MATERIALS,
+        tensorboard_dir=tensorboard,
         modelargs={
             "marker_name_only": True,
             "max_epochs": 10,
             "batch_size": 10000,
             "marker_images": som.fcssom.MARKER_IMAGES_NAME_ONLY,
             "map_type": "toroid",
-            "tensorboard_dir": tensorboard,
             "dims": (32, 32, -1),
         })
     model.train(dataset)
@@ -50,7 +49,7 @@ def main(args):
     """Load case ids from json file to filter cases and train and save the created model."""
     output_dir = args.output
 
-    dataset = flowcat.CaseCollection.load(args.input, args.meta)
+    dataset = flowcat.parser.get_dataset(args)
     selected_labels = utils.load_json(args.cases)
     selected, _ = dataset.filter_reasons(labels=selected_labels)
 
@@ -66,23 +65,22 @@ def main(args):
 
 if __name__ == "__main__":
     PARSER = argparse.ArgumentParser(usage="Generate references and individual SOMs.")
-    PARSER.add_argument(
-        "-i", "--input",
-        desc="Input directory containing FCS files",
-        type=utils.URLPath)
+    flowcat.parser.add_dataset_args(PARSER)
     PARSER.add_argument(
         "--tensorboard",
-        desc="Flag to enable tensorboard logging",
+        help="Flag to enable tensorboard logging",
         action="store_true")
     PARSER.add_argument(
         "--markers",
-        desc="Input json file mapping tube number to markers",
+        help="Input json file mapping tube number to markers",
         type=utils.URLPath)
     PARSER.add_argument(
-        "-m", "--meta",
-        desc="Metadata file for the dataset",
+        "cases",
+        type=utils.URLPath,
+        help="Json file containing a number of case ids")
+    PARSER.add_argument(
+        "output",
+        help="Output Reference SOM path",
         type=utils.URLPath)
-    PARSER.add_argument("cases", type=utils.URLPath)
-    PARSER.add_argument("output", type=utils.URLPath)
     configure_print_logging()
     main(PARSER.parse_args())

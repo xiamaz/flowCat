@@ -16,12 +16,6 @@ import json
 import enum
 
 
-class Sureness(enum.IntEnum):
-    HIGH = 10
-    NORMAL = 5
-    LOW = 1
-
-
 class Material(enum.Enum):
     """Class containing material types. Abstracting the concept for
     easier consumption."""
@@ -40,7 +34,6 @@ class Material(enum.Enum):
 
 
 PUBLIC_ENUMS = {
-    "Sureness": Sureness,
     "Material": Material,
 }
 

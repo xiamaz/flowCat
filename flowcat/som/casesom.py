@@ -23,8 +23,8 @@ class CaseSingleSom:
 
     def __init__(
             self,
-            tube: int,
-            materials: List[Material],
+            tube: str,
+            materials: List[Material] = None,
             train_labels: List[str] = None,
             model: FCSSom = None,
             *args, **kwargs):
@@ -85,44 +85,27 @@ class CaseSom:
 
     def __init__(
             self,
-            tubes: Union[List[int], Dict[int, list]],
-            materials: list,
+            tubes: Dict[str, list],
             modelargs: dict,
+            materials: list = None,
             tensorboard_dir: utils.URLPath = None,
     ):
         """
         Args:
             tubes: List of tube numbers or a dict mapping tube numbers to list of markers.
-            materials: List of allowed materials, as enum of MATERIAL
             tensorboard_dir: Path for logging data. Each tube will be saved separately.
             modelargs: Dict of args to the CaseSingleSom class.
+            materials: List of allowed materials, as enum of MATERIAL
         """
-        self.tubes = tubes
         self.materials = materials
         self.models = {}
-        for tube in self.tubes:
-            markers = self.tubes[tube] if isinstance(self.tubes, dict) else None
+        for tube, markers in tubes.items():
             self.models[tube] = CaseSingleSom(
                 tube=tube,
-                selected_markers=markers,
+                markers=markers,
                 tensorboard_dir=tensorboard_dir / f"tube{tube}" if tensorboard_dir else None,
                 materials=materials,
                 **modelargs)
-
-        if isinstance(self.tubes, dict):
-            self.models = {
-                tube: CaseSingleSom(
-                    tube=tube,
-                    selected_markers=markers,
-                    materials=materials,
-                    **modelargs)
-                for tube, markers in self.tubes.items()
-            }
-        else:
-            self.models = {
-                tube: CaseSingleSom(tube=tube, materials=materials, **modelargs)
-                for tube in self.tubes
-            }
 
     def save(self, path: utils.URLPath):
         """Save the model to the given directory"""
@@ -138,8 +121,8 @@ class CaseSom:
 
     def transform(self, data: case.Case, *args, **kwargs) -> SOMCollection:
         casesoms = SOMCollection(cases=[data.id])
-        for tube in self.tubes:
+        for tube, model in self.models.items():
             print(f"Transforming tube {tube}")
-            tsom = self.models[tube].transform(data, *args, **kwargs)
+            tsom = model.transform(data, *args, **kwargs)
             casesoms.add_som(tsom)
         return casesoms
