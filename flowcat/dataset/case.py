@@ -95,7 +95,7 @@ def filter_case(
     if labels and case.id not in labels:
         reasons.append(f"labels")
 
-    if infiltration:
+    if infiltration and case.group != "normal":
         infiltration_min, infiltration_max = infiltration
         if infiltration_min and case.infiltration < infiltration_min:
             reasons.append("infiltration_min")

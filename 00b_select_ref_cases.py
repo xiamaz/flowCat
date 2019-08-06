@@ -59,7 +59,7 @@ def to_list(itemtype):
 def to_tuple(itemtypes):
     def parser(string):
         tokens = [s.strip() for s in string.split(",")]
-        res = [itemtype(token) for itemtype, token in zip(itemtypes, tokens)]
+        res = [None if token in ("None", "") else itemtype(token) for itemtype, token in zip(itemtypes, tokens)]
         return res
     return parser
 
@@ -98,9 +98,18 @@ def add_filter_args(parser):
     return parser
 
 
+def print_cases(dataset: flowcat.CaseCollection):
+    """Print cases in a table."""
+    print(f"{'Label':<40}\t{'Group':<6}\t{'Infiltration':<4}")
+    for case in dataset:
+        print(f"{case.id:<40}\t{case.group:<6}\t{case.infiltration:<4}")
+
+
 PARSER = ArgumentParser(
     usage="Output a list of case ids based on the parameters")
 flowcat.parser.add_dataset_args(PARSER)
+PARSER.add_argument(
+    "--sample", type=int, help="Stratified sample of cases.")
 filter_args = PARSER.add_argument_group("Filter arguments")
 add_filter_args(filter_args)
 PARSER.add_argument(
@@ -116,7 +125,10 @@ cases = flowcat.parser.get_dataset(args)
 input_args = {n: getattr(args, n) for n in filter_signature()}
 filtered, _ = cases.filter_reasons(**input_args)
 
+filtered = filtered.sample(args.sample)
+
 print("Found cases", filtered)
+print_cases(filtered)
 
 found_ids = filtered.labels
 flowcat.utils.save_json(found_ids, args.output)

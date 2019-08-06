@@ -5,15 +5,14 @@ from __future__ import annotations
 import random
 import logging
 import collections
-import datetime
-from typing import Union, List
+from typing import Union, List, Tuple
 
 import pandas as pd
 from sklearn import model_selection
 
 from .case import Case, filter_case, filter_tubesamples
 from .. import mappings, utils
-from ..utils import load_json, load_csv, URLPath
+from ..utils import load_json, URLPath
 
 
 LOGGER = logging.getLogger(__name__)
@@ -191,7 +190,7 @@ class CaseIterable(IterableMixin):
         }
         return paths
 
-    def sample(self, count: int, groups: List[str] = None):
+    def sample(self, count: int, groups: List[str] = None) -> CaseIterable:
         """Select a sample from each group.
         Params:
             count: Number of cases in a single group.
@@ -212,7 +211,13 @@ class CaseIterable(IterableMixin):
         filtered, _ = self.filter_reasons(labels=labels)
         return filtered
 
-    def filter_reasons(self, **kwargs):
+    def filter_reasons(self, **kwargs) -> Tuple[CaseIterable, list]:
+        """Filter dataset on given arguments. These are specified in
+        case.filter_case.
+
+        Returns:
+            Filtered dataset and list of failed case ids and string reasons.
+        """
         data = []
         failed = []
         for case in self:
