@@ -146,7 +146,7 @@ def preprocess_cases(cases: flowcat.CaseCollection, tubes=(1, 2, 3)):
 
 
 def main(args):
-    cases = flowcat.CaseCollection.load(args.path, args.meta)
+    cases = flowcat.parser.get_dataset(args)
     train, test = preprocess_cases(cases)
     train.save(args.output / "train")
     test.save(args.output / "test")
@@ -156,15 +156,7 @@ if __name__ == "__main__":
     PARSER = ArgumentParser(
         description="Get overview of available data and create a dataset used for SOM transformation."
     )
-    PARSER.add_argument(
-        "path",
-        type=flowcat.utils.URLPath,
-        help="Path to dataset",
-    )
-    PARSER.add_argument(
-        "meta",
-        type=flowcat.utils.URLPath,
-        help="Path to dataset metadata")
+    flowcat.parser.add_dataset_args(PARSER)
     PARSER.add_argument(
         "output", type=flowcat.utils.URLPath,
         help="Path to save output metadata",
