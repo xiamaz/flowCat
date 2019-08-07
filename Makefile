@@ -26,8 +26,12 @@ dataset:
 
 .PHONY: reference
 .ONESHELL:
-reference:
-	@./01a_create_ref_som.py $(TRAINDATA) --tensorboard $(REFERENCE_DATA) $(REFERENCE_SOM)
+reference: reference.som
+
+.PHONY: %.som
+.ONESHELL:
+%.som:
+	./01a_create_ref_som.py $(TRAINDATA) --tensorboard $(REFERENCE_DATA) $(OUTDIR)/$*
 
 .PHONY: som
 .ONESHELL:
