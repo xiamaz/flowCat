@@ -59,17 +59,6 @@ def linear_cooling(initial, end, epoch, max_epochs):
     return result
 
 
-def apply_cooling(cooling_type, *args, **kwargs):
-    """Wrapper around different cooling functions."""
-    if cooling_type == "linear":
-        cool_op = linear_cooling(*args, **kwargs)
-    elif cooling_type == "exponential":
-        cool_op = exponential_cooling(*args, **kwargs)
-    else:
-        raise TypeError(f"Unknown cooling type: {cooling_type}")
-    return cool_op
-
-
 def exponential_cooling(initial, end, epoch, max_epochs):
     """Implementation of exponential decay for parameter depending on epoch."""
     # Original from somuclu:
@@ -100,6 +89,17 @@ def exponential_cooling(initial, end, epoch, max_epochs):
                 diff)))
 
     return result
+
+
+def apply_cooling(cooling_type, *args, **kwargs):
+    """Wrapper around different cooling functions."""
+    if cooling_type == "linear":
+        cool_op = linear_cooling(*args, **kwargs)
+    elif cooling_type == "exponential":
+        cool_op = exponential_cooling(*args, **kwargs)
+    else:
+        raise TypeError(f"Unknown cooling type: {cooling_type}")
+    return cool_op
 
 
 def planar_distance(matched, locations, *_, **__):
