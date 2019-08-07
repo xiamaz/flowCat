@@ -54,6 +54,12 @@ NAME_MAP = {
     "CLLPL": "PL"
 }
 
+# Marker channel mapping to equalize naming
+MARKER_NAME_MAP = {
+    "Kappa": "kappa",
+    "Lambda": "lambda",
+}
+
 # name of main groups in defined order for plotting
 GROUPS = [
     "CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"

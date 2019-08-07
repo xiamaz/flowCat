@@ -1,10 +1,23 @@
+"""
+Basic FCS data types in order to include more metadata.
+"""
+from __future__ import annotations
+from typing import Union, List
 import functools
+import logging
+
 import numpy as np
 import pandas as pd
 
 from sklearn import preprocessing, base
 
 import fcsparser
+
+from flowcat.utils import URLPath
+from flowcat.mappings import MARKER_NAME_MAP
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def extract_name(marker):
@@ -13,10 +26,8 @@ def extract_name(marker):
         name, _ = splitted
     else:
         name = marker
-    if name == "Kappa":
-        name = "kappa"
-    elif name == "Lambda":
-        name = "lambda"
+
+    name = MARKER_NAME_MAP.get(name, name)
     return name
 
 
@@ -24,13 +35,15 @@ class FCSData:
     """Wrap FCS data with additional metadata"""
 
     __slots__ = (
-        "_meta", "data", "ranges"
+        "_meta",  # dict of metadata
+        "data",  # pd dataframe of data
+        "ranges"  # pd dataframe with column ranges
     )
 
     default_encoding = "latin-1"
     default_dataset = 0
 
-    def __init__(self, initdata):
+    def __init__(self, initdata: Union[tuple, URLPath, FCSData]):
         """Create a new FCS object.
 
         Args:
@@ -54,44 +67,70 @@ class FCSData:
             self.data = data
             self.ranges = self._get_ranges_from_pnr(self._meta)
 
-        self.data = self.data.astype("float64", copy=False)
-        self.ranges = self.ranges.astype("float64", copy=False)
+        self.data = self.data.astype("float32", copy=False)
+        self.ranges = self.ranges.astype("float32", copy=False)
 
     @property
-    def channels(self):
+    def channels(self) -> List[str]:
         return list(self.data.columns)
 
     @property
-    def meta(self):
+    def meta(self) -> dict:
         return self._meta
 
-    def channel_mask(self, channels):
+    def rename(self, mapping: dict):
+        """Rename columns based on the given mapping."""
+        self.data.rename(mapping, axis=1, inplace=True)
+        self.ranges.rename(mapping, axis=1, inplace=True)
+
+    def channel_mask(self, channels: List[str]):
         """Return a 1/0 int array for the given channels, whether channels
         exist or not."""
         return np.array([c in self.data.columns for c in channels])
 
-    def align(self, channels, missing_val=np.nan, name_only=False):
-        """Return aligned copy of FCS data."""
-        meta = self._meta
-        data = self.data
-        if name_only:
-            mapping = {c: extract_name(c) for c in data.columns}
-            data.rename(mapping, axis=1, inplace=True)
-        data = data.assign(**{k: missing_val for k in channels if k not in data.columns})
-        data = data[channels]
-        return self.__class__((meta, data))
+    def align(self, channels: List[str], missing_val=np.nan, name_only: bool = False) -> FCSData:
+        """Return aligned copy of FCS data.
 
-    def copy(self):
+        Args:
+            channels: List of channels to be aligned to.
+            missing_val: Value to be used for missing columns.
+            name_only: Only use the first part of the name.
+
+        Returns:
+            Aligned copy of the data.
+        """
+        copy = self.copy()
+        if name_only:
+            mapping = {c: extract_name(c) for c in copy.channels}
+            copy.rename(mapping)
+
+        cur_channels = copy.channels
+        missing_cols = {k: missing_val for k in channels if k not in cur_channels}
+        if len(missing_cols) / float(len(channels)) > 0.5:
+            LOGGER.warning("More %d columns are missing. Maybe something is wrong.", len(missing_cols))
+
+        data = copy.data
+        data = data.assign(**missing_cols)
+        data = data[channels]
+        copy.data = data
+
+        ranges = copy.ranges
+        ranges = ranges.assign(**missing_cols)
+        ranges = ranges[channels]
+        copy.ranges = ranges
+        return copy
+
+    def copy(self) -> FCSData:
         return self.__class__(self)
 
-    def drop_empty(self):
+    def drop_empty(self) -> FCSData:
         """Drop all channels containing nix in the channel name.
         """
         nix_cols = [c for c in self.data.columns if "nix" in c]
         self.drop_channels(nix_cols)
         return self
 
-    def drop_channels(self, channels):
+    def drop_channels(self, channels) -> FCSData:
         """Drop the given columns from the data.
         Args:
             channels: List of channels or channel name to drop. Will not throw an error if the name is not found.

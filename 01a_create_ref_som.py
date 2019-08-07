@@ -8,6 +8,7 @@ import logging
 
 import flowcat
 from flowcat import utils, som
+from flowcat.dataset.fcs import extract_name
 
 
 LOGGER = logging.getLogger(__name__)
@@ -25,16 +26,22 @@ def configure_print_logging(rootname="flowcat"):
 
 def train_model(dataset, markers=None, tensorboard=None):
     """Create and train a SOM model using the given dataset."""
+    marker_name_only = True
     if markers:
         selected_markers = utils.load_json(markers)
     else:
         selected_markers = dataset.selected_markers
+        # modify marker names if marker_name_only
+        selected_markers = {
+            tube: [extract_name(marker) for marker in markers]
+            for tube, markers in selected_markers.items()
+        }
 
     model = som.CaseSom(
         tubes=selected_markers,
         tensorboard_dir=tensorboard,
         modelargs={
-            "marker_name_only": True,
+            "marker_name_only": marker_name_only,
             "max_epochs": 10,
             "batch_size": 10000,
             "marker_images": som.fcssom.MARKER_IMAGES_NAME_ONLY,
