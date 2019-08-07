@@ -67,7 +67,7 @@ def main(args):
 
     model = train_model(selected, markers=args.markers, tensorboard=tensorboard_dir)
 
-    model.save(output_dir / "model")
+    model.save(output_dir)
 
 
 if __name__ == "__main__":
