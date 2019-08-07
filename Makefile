@@ -9,7 +9,7 @@ TRAINDATA = --input $(DATADIR) --meta $(OUTDIR)/$(DSNAME)/train
 TESTDATA = --input $(DATADIR) --meta $(OUTDIR)/$(DSNAME)/test
 
 REFERENCE_DATA = $(OUTDIR)/$(DSNAME)/reference.json
-REFERENCE_SOM = $(OUTDIR)/reference/model
+REFERENCE_SOM = $(OUTDIR)/reference
 
 SOM_DATASET = $(OUTDIR)/som
 
