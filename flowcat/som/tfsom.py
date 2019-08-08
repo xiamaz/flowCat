@@ -389,16 +389,15 @@ class TFSom:
                 tf.get_variable_scope().reuse_variables()
                 self.add_summary(summaries)
 
-            with tf.name_scope("Weight_Update"):
                 # Divide them
                 new_weights = tf.divide(numerators, denominators)
                 # diff new and old weights
                 if self._tensorboard:
-                    with tf.name_scope("WeightChange"):
-                        diff_weights = tf.reshape(
-                            tf.sqrt(tf.reduce_sum(tf.pow(self._weights - new_weights, 2), axis=1)),
-                            shape=(1, self._m, self._n, 1))
-                        summaries.append(tf.summary.image("WeightDiff", diff_weights))
+                    diff_weights = tf.reshape(
+                        tf.sqrt(tf.reduce_sum(tf.pow(self._weights - new_weights, 2), axis=1)),
+                        shape=(1, self._m, self._n, 1))
+                    self.add_summary(tf.summary.image("weight_diff", diff_weights))
+
                 # Assign them
                 self._training_op = tf.assign(self._weights, new_weights)
                 self._assign_trained_op = tf.assign(self._ref_weights, self._weights)

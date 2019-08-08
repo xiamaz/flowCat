@@ -43,10 +43,13 @@ def train_model(dataset, markers=None, tensorboard=None):
         modelargs={
             "marker_name_only": marker_name_only,
             "max_epochs": 10,
-            "batch_size": 10000,
-            "initial_learning_rate": 0.05,
-            "end_learning_rate": 0.01,
-            "learning_cooling": "exponential",
+            "batch_size": 50000,
+            "initial_learning_rate": 0.05,  # default: 0.05
+            "end_learning_rate": 0.01,  # default: 0.01
+            "learning_cooling": "linear",
+            "initial_radius": 24,
+            "end_radius": 2,
+            "radius_cooling": "linear",
             "marker_images": som.fcssom.MARKER_IMAGES_NAME_ONLY,
             "map_type": "toroid",
             "dims": (32, 32, -1),
