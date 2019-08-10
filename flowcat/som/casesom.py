@@ -69,7 +69,7 @@ class CaseSingleSom:
         tsample = data.get_tube(self.tube, materials=self.materials)
         if tsample is None:
             raise CaseSomSampleException(data.id, self.tube, self.materials)
-        somdata = self.model.transform(tsample.data, *args, **kwargs)
+        somdata = self.model.transform(tsample.data, label=data.id, *args, **kwargs)
         somdata.cases = [data.id]
         somdata.tube = tsample.tube
         somdata.material = tsample.material
@@ -122,6 +122,10 @@ class CaseSom:
             models[tube] = CaseSingleSom.load(mpath, tensorboard_dir=tbdir, **kwargs)
         return cls(models=models)
 
+    @property
+    def tubes(self):
+        return list(self.models.keys())
+
     def save(self, path: utils.URLPath):
         """Save the model to the given directory"""
         for tube, model in self.models.items():
@@ -141,3 +145,7 @@ class CaseSom:
             tsom = model.transform(data, *args, **kwargs)
             casesoms.add_som(tsom)
         return casesoms
+
+    def transform_generator(self, data: Iterable[case.Case], **kwargs) -> Generator[SOMCollection]:
+        for single in data:
+            yield single, self.transform(single, **kwargs)

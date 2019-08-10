@@ -79,8 +79,8 @@ class SOM:
 class SOMCollection:
     """Holds multiple SOM, eg for different tubes for a single patient."""
 
-    path: utils.URLPath
-    config: dict
+    path: utils.URLPath = None
+    config: dict = None
     cases: List[str] = field(default_factory=list)
     tubes: List[int] = field(default_factory=list)
     tubepaths: dict = field(default_factory=dict)
@@ -149,7 +149,7 @@ class SOMCollection:
         return (m, n)
 
     def __iter__(self):
-        self._index = self.tubes[0]
+        self._index = 0
         self._max_index = len(self.tubes)
         return self
 
@@ -157,7 +157,7 @@ class SOMCollection:
         if self._index < self._max_index:
             index = self._index
             self._index += 1
-            return self.get_tube(index)
+            return self.get_tube(self.tubes[index])
         raise StopIteration
 
     def __repr__(self):

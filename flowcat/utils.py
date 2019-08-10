@@ -3,6 +3,7 @@ import abc
 import os
 import pathlib
 import json
+import collections
 import pickle
 from urllib.parse import urlparse
 import logging
@@ -13,6 +14,7 @@ import fnmatch
 from functools import wraps
 
 import toml
+import numpy as np
 import pandas as pd
 import boto3
 import joblib
@@ -35,7 +37,7 @@ else:
 # Overwrites existing data if true
 if "flowCat_clobber" in os.environ:
     CLOBBER = bool(os.environ["flowCat_clobber"])
-    LOGGER.warning(f"Setting clobber to {CLOBBER}")
+    LOGGER.warning("Setting clobber to %s", CLOBBER)
 else:
     CLOBBER = False
 
@@ -500,6 +502,27 @@ def timer(title):
 
     time_diff = time_b - time_a
     print(f"{title}: {time_diff:.3}s")
+
+
+def time_generator_logger(generator, rolling_len=20):
+    """Time the given generator.
+    Args:
+        generator: Will be executed and results are passed through.
+        rolling_len: Number of last values for generation of average time.
+
+    Returns:
+        Any value returned from the given generator.
+    """
+    circ_buffer = collections.deque(maxlen=rolling_len)
+    time_a = time.time()
+    for res in generator:
+        time_b = time.time()
+        time_d = time_b - time_a
+        circ_buffer.append(time_d)
+        time_rolling = np.mean(circ_buffer)
+        print(f"Training time: {time_d}s Rolling avg: {time_rolling}s")
+        time_a = time_b
+        yield res
 
 
 def df_get_count(data, tubes):

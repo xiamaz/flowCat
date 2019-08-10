@@ -399,7 +399,8 @@ class TFSom:
                     self.add_summary(tf.summary.image("weight_diff", diff_weights))
 
                 # Assign them
-                self._training_op = tf.assign(self._weights, new_weights)
+                with tf.control_dependencies([diff_weights]):
+                    self._training_op = tf.assign(self._weights, new_weights)
                 self._assign_trained_op = tf.assign(self._ref_weights, self._weights)
                 self._reset_weights_op = tf.assign(self._weights, self._ref_weights)
 
