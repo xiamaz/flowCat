@@ -605,7 +605,7 @@ class TFSom:
 
             # if the tensorboard flag has been provided (for outputting the summaries)
             if self._tensorboard:
-                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)  # pylint: disable=no-member
                 run_metadata = tf.RunMetadata()
 
             self._sess.run(
