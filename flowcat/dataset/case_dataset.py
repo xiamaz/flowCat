@@ -240,9 +240,13 @@ class CaseCollection(CaseIterable):
     """Get case information from info file and remove errors and provide
     overview information."""
 
-    def __init__(self, data, path="", metapath="", *args, **kwargs):
+    def __init__(self, *args, path: URLPath = "", metapath: URLPath = "", **kwargs):
+        """Initialize with given data.
+
+        Use CaseCollection.load to load from a directory on disk.
+        """
         try:
-            super().__init__(data, *args, **kwargs)
+            super().__init__(*args, **kwargs)
         except ValueError:
             raise ValueError(f"Paths to directories should be instantiated with {self.__class__.__name__}.from_path")
         self.path = utils.URLPath(path)
@@ -262,7 +266,7 @@ class CaseCollection(CaseIterable):
             metaconfig = {}
         data = [Case(d, path=inputpath) for d in metadata]
 
-        return cls(data, inputpath, metapath, **{**metaconfig, **kwargs})
+        return cls(data, path=inputpath, metapath=metapath, **{**metaconfig, **kwargs})
 
     def get_tube(self, tube: int) -> "TubeView":
         if self.selected_markers is None:

@@ -122,6 +122,10 @@ class FileBackend(metaclass=Singleton):
     def ls(self, netloc, path, files_only=False, delimiter="/"):
         pass
 
+    @abc.abstractmethod
+    def mkdir(self, path):
+        pass
+
 
 class S3Backend(FileBackend):
 
@@ -211,6 +215,9 @@ class S3Backend(FileBackend):
         matched = [f for f in all_files if fnmatch.fnmatch(f, pattern)]
         return matched
 
+    def mkdir(self, path):
+        raise NotImplementedError
+
 
 class LocalBackend(FileBackend):
 
@@ -246,6 +253,9 @@ class LocalBackend(FileBackend):
 
     def glob(self, netloc, path, pattern):
         return [p.relative_to(path) for p in pathlib.Path(path).glob(pattern)]
+
+    def mkdir(self, path):
+        pathlib.Path(path).mkdir(parents=True, exist_ok=True)
 
 
 def get_backend(scheme):
@@ -308,6 +318,10 @@ class URLPath:
     def exists(self):
         """Get if the given resource already exists."""
         return self._backend.exists(self.netloc, self.path)
+
+    def mkdir(self):
+        """Create a directory."""
+        return self._backend.mkdir(self.path)
 
     def get(self):
         """Load the file if it is not already local."""

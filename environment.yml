@@ -117,5 +117,6 @@ dependencies:
     - pynvim==0.3.2
     - pywavelets==1.0.3
     - scikit-image==0.15.0
+    - argmagic==0.0.1
 prefix: /usr/local/miniconda3/envs/flowcat
 

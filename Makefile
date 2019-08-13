@@ -41,4 +41,4 @@ som:
 .PHONY: %.som
 .ONESHELL:
 %.som:
-	@./01b_create_soms.py --tensorboard $(TRAINDATA) $(REFERENCE_SOM) $(OUTDIR)/testsom/$*
+	@./01b_create_soms.py --tensorboard $(TRAINDATA) $(REFERENCE_SOM) $(OUTDIR)/epoch_cmp/$*
