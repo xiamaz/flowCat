@@ -360,6 +360,7 @@ class TFSom:
             self._summary_list.append(summary)
 
     def _create_input(self):
+        """Create placeholder inputs for a dataset using an reinitializable iterator."""
         data_placeholder = tf.placeholder(tf.float64)
 
         dataset = tf.data.Dataset.from_tensor_slices(data_placeholder)
@@ -409,7 +410,7 @@ class TFSom:
         return data
 
     def _prediction_variables(self, weights):
-        """Create prediction ops"""
+        """Create prediction ops, these are only used for single operations on the SOM."""
         with tf.name_scope("Prediction"):
             self._invar = tf.placeholder(tf.float32)
             dataset = tf.data.Dataset.from_tensors(self._invar)
@@ -443,6 +444,7 @@ class TFSom:
         """Build a single SOM tower on the TensorFlow graph
         Args:
             input_tensor: Input event data to be mapped to the SOM should have len(channel) width
+            initialization: Given initialization tuple with initializer method and shape.
         Returns:
             (numerator, denominator) describe the weight changes and associated cumulative learn rate per
             node. This can be summed across towers, if we want to parallelize training.
@@ -577,7 +579,18 @@ class TFSom:
             weights, mapped_events_per_node, summaries
         )
 
-    def _run_training(self, data, set_weights=False, label=""):
+    def _run_training(
+            self,
+            data: np.array,
+            set_weights: bool = False,
+            label: str = ""):
+        """
+        Train the SOM for a given number of epochs.
+
+        Args:
+            data: Numpy array.
+            set_weights: Whether trained weights will be kept after training completes.
+        """
         assert data.shape[0] <= self._buffer_size, (
             f"Data size {data.shape[0]} > Buffer size {self._buffer_size}. "
             "Samples will be lost on reshuffling. "
@@ -596,8 +609,8 @@ class TFSom:
                 str(self._tensorboard_dir / f"train_{label}_{create_stamp()}"), self._sess.graph)
 
         LOGGER.info("Training self-organizing Map")
-        if not set_weights:
-            self._sess.run(self._reset_weights_op)
+        # reset weights to given values after running
+        self._sess.run(self._reset_weights_op)
 
         global_step = 0
         for epoch in range(self._max_epochs):
@@ -632,9 +645,12 @@ class TFSom:
                         self._writer.add_run_metadata(run_metadata, f"step_{global_step}")
                         self._writer.add_summary(summary, global_step)
                 except tf.errors.OutOfRangeError:
-                    if set_weights:
-                        self._sess.run(self._assign_trained_op)
                     break
+
+        # set ref_weights to our current weights, these will be used to reset
+        # weights the next time run_training is called.
+        if set_weights:
+            self._sess.run(self._assign_trained_op)
         return self
 
     def train(self, data, label="learn"):

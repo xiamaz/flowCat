@@ -26,10 +26,24 @@ def configure_print_logging(rootname="flowcat"):
 
 
 def transform_cases(dataset, model, output, tubes=("1", "2", "3")):
+    """Create individidual SOMs for all cases in the dataset.
+    Args:
+        dataset: CaseIterable with a number of cases, for which SOMs should be
+                 generated.
+        model: Model with initial weights, which should be used for generation
+               of SOMs.
+        output: Output directory for SOMs
+        tubes: Which tubes, soms should be generated for.
+
+    Returns:
+        Nothing.
+    """
     labels = []
     for case, res in utils.time_generator_logger(model.transform_generator(dataset)):
         flowcat.som.save_som(res, output / case.id, save_config=False, subdirectory=False)
         labels.append({"label": case.id, "randnum": 0, "group": case.group})
+
+    # Save metadata into an additional csv file with the same name
     metadata = pd.DataFrame(labels)
     utils.save_csv(metadata, output + ".csv")
     utils.save_json(
@@ -42,13 +56,20 @@ def transform_cases(dataset, model, output, tubes=("1", "2", "3")):
 
 
 def main(args):
+    """Load a model with given transforming arguments and transform individual
+    cases."""
     cases = flowcat.parser.get_dataset(args)
     labels = utils.load_json("output/test-2019-08/testsom/samples.json")
     cases, _ = cases.filter_reasons(labels=labels)
+
     if args.tensorboard:
         tensorboard_dir = args.output / "tensorboard"
     else:
         tensorboard_dir = None
+
+    # Training parameters for the model can be respecified, the only difference
+    # between transform and normal traninig, is that after a transformation is
+    # completed, the original weights will be restored to the model.
     model = flowcat.som.CaseSom.load(
         args.model,
         marker_images=flowcat.som.fcssom.MARKER_IMAGES_NAME_ONLY,
@@ -60,6 +81,7 @@ def main(args):
         end_radius=1,
         # subsample_size=1000,
         tensorboard_dir=tensorboard_dir)
+
     transform_cases(cases, model, args.output)
 
 
