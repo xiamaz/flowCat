@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Overview of cases dataset:
-
-- number of samples
+Clean and export the initial dataset. The data will directly be split into a
+train and a test set, since the test data should ONLY be used for testing our
+model and never for model development.
 """
 import time
 import contextlib
