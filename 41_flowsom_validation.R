@@ -23,7 +23,7 @@ get_samples <- function(directory, metadata) {
   fromJSON(metadata)
 }
 
-get_dataset <- function(path, ...) {
+get_dataset <- function(directory, metadata) {
   ds <- list(path=path)
   ds$meta <- get_samples(path, ...)
   ds
@@ -59,15 +59,15 @@ som_weights_csv <- function(weights_df, path) {
   write.csv(weights_df, file=path)
 }
 
-plot_dir <- "output/21-flowsom-validation"
+plot_dir <- "output/4-flowsom-cmp/flowsom"
 dir.create(plot_dir, recursive=T)
 
-ds_missing <- get_dataset("output/missing")
-ds_subsample <- get_dataset("output/subsample")
+dataset <- get_dataset("output/4-flowsom-cmp/dataset/metadata.json")
 
-# generate some test images
-pfcs_mi <- get_fcs_path(1, 1, ds_missing)
-pfcs_ss <- get_fcs_path(1, 1, ds_subsample)
+# generate some test images with case 1 and tube 1
+pfcs_mi <- get_fcs_path(1, 1, dataset)
+cat(pfcs_mi)
+q()
 
 fcs_mi <- read.FCS(pfcs_mi, dataset=1, transformation=F)
 fcs_ss <- read.FCS(pfcs_ss, dataset=1, transformation=F)
@@ -81,4 +81,4 @@ ggsave(file.path(plot_dir, "test_sample01.png"), plot=plt)
 weights_ss <- fcs_to_som_weights(fcs_ss)
 som_weights_csv(weights_ss, file.path(plot_dir, "sample_t1.csv"))
 
-# further processing and comparison now in python
+# -> further processing and comparison now in python
