@@ -32,7 +32,7 @@ def move_dataset(meta: URLPath, data: URLPath, labels: URLPath, output: URLPath)
             cur_path = data / tsample.path
             new_path = output_fcs_path / tsample.path.name
             shutil.copyfile(str(cur_path), str(new_path))
-            tsample.path = new_path
+            tsample.path = new_path.relative_to(output)
     dataset.save(output / "metadata")
 
 

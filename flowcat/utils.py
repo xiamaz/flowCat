@@ -27,21 +27,6 @@ TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 LOGGING_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 
-if "flowCat_tmp" in os.environ:
-    TMP_PATH = os.environ["flowCat_tmp"]
-    LOGGER.warning("Setting tmp folder to %s", TMP_PATH)
-else:
-    TMP_PATH = "tmp"
-
-
-# Overwrites existing data if true
-if "flowCat_clobber" in os.environ:
-    CLOBBER = bool(os.environ["flowCat_clobber"])
-    LOGGER.warning("Setting clobber to %s", CLOBBER)
-else:
-    CLOBBER = False
-
-
 class FCEncoder(json.JSONEncoder):
     def default(self, obj):  # pylint: disable=E0202
         if type(obj) in mappings.PUBLIC_ENUMS.values():
@@ -65,440 +50,104 @@ def str_to_date(strdate):
     return datetime.datetime.strptime(strdate, "%Y-%m-%d").date()
 
 
-def get_path(dname, dpaths):
-    """Get an existing dataset name from a list of paths."""
-    if URLPath(dname).exists():
-        return dname
-    for path in dpaths:
-        dpath = URLPath(path, dname)
-        if dpath.exists():
-            return dpath
-    raise FileNotFoundError(f"Could not find {dname} in {dpaths}")
+class URLPath(pathlib.PosixPath):
+    __slots__ = (
+        "_scheme",
+        "_netloc"
+    )
 
-
-def get_paths(names, datasets):
-    return {
-        dtype: get_path(name, datasets[dtype]) for dtype, name in names.items()
-    }
-
-
-class Singleton(abc.ABCMeta):
-    _instances = {}
-
-    def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
-        return cls._instances[cls]
-
-
-class FileBackend(metaclass=Singleton):
-
-    @abc.abstractmethod
-    def name(self, path):
-        """Get name from given path."""
-        pass
-
-    @abc.abstractmethod
-    def suffix(self, path):
-        """Get suffix from given path."""
-        pass
-
-    @abc.abstractmethod
-    def get(self, localpath, netloc, path):
-        """Get data from remote location."""
-        pass
-
-    @abc.abstractmethod
-    def put(self, localpath, netloc, path):
-        """Put data into remote location."""
-        pass
-
-    @abc.abstractmethod
-    def exists(self, netloc, path):
-        """Check whether the given path exists."""
-        pass
-
-    @abc.abstractmethod
-    def ls(self, netloc, path, files_only=False, delimiter="/"):
-        pass
-
-    @abc.abstractmethod
-    def mkdir(self, path):
-        pass
-
-
-class S3Backend(FileBackend):
-
-    continuation_token = "list_even_more"
-
-    def __init__(self):
-        self.client = boto3.client("s3")
-
-    def name(self, path):
-        return pathlib.PurePath(path).name
-
-    def suffix(self, path):
-        return pathlib.PurePath(path).suffix
-
-    def extend(self, path, *args):
-        """Concatenate given elements and return a string representation."""
-        if not path.endswith("/"):
-            path += "/"
-        return path + "/".join(str(a) for a in args)
-
-    def get(self, localpath, netloc, path):
-        path = str(path).lstrip("/")
-
-        if not localpath.exists():
-            LOGGER.debug("%s download", path)
-            localpath.parent.mkdir(parents=True, exist_ok=True)
-            self.client.download_file(netloc, path, str(localpath))
-        return localpath
-
-    def put(self, localpath, netloc, path, clobber=False):
-        """
-        Args:
-            localpath: Temp filepath containing locally written file.
-            netloc: Hostname for remote resource
-            path: path on remote resource
-            clobber: If true will overwrite remote existing data
-        """
-        path = str(path).lstrip("/")
-
-        if not clobber:
-            assert not self.exists(netloc, path)
-        localpath.parent.mkdir(parents=True, exist_ok=True)
-        self.client.upload_file(str(localpath), netloc, str(path))
-
-    def exists(self, netloc, path):
-        """Check existence in S3 by head-request for an object."""
-        path = str(path).lstrip("/")
-
-        return bool(self.ls(netloc, path, files_only=False))
-
-    def ls(self, netloc, path, files_only=False, delimiter="/"):
-        path = str(path).lstrip("/")
-
-        files = []
-        prefixes = []
-        rargs = {
-            "Bucket": netloc,
-            "Prefix": path,
-        }
-        if delimiter:
-            rargs["Delimiter"] = delimiter
-        while True:
-            resp = self.client.list_objects_v2(**rargs)
-            if "Contents" in resp:
-                files += [c["Key"] for c in resp["Contents"]]
-            if "CommonPrefixes" in resp:
-                prefixes += [c["Prefix"] for c in resp["CommonPrefixes"]]
-            if resp["IsTruncated"]:
-                rargs["ContinuationToken"] = resp["NextContinuationToken"]
-            else:
-                break
-
-        if len(prefixes) == 1 and not files and prefixes[0] == path:
-            return self.ls(
-                netloc, path + "/", files_only=files_only, delimiter=delimiter)
-        return [p.replace(path, "") for p in (files + prefixes)]
-
-    def glob(self, netloc, path, pattern):
-        if not pattern.startswith("/"):
-            delim = "/"
+    @classmethod
+    def _from_parts(cls, args, *other, **kwargs):
+        first = args[0]
+        if isinstance(first, URLPath):
+            scheme = first._scheme
+            netloc = first._netloc
+            path = first
         else:
-            delim = None
+            urlpath = urlparse(str(first))
+            scheme = urlpath.scheme
+            netloc = urlpath.netloc
+            path = urlpath.path
 
-        if not path.endswith("/"):
-            path += "/"
-        all_files = self.ls(netloc, path, delimiter=delim)
-        matched = [f for f in all_files if fnmatch.fnmatch(f, pattern)]
-        return matched
+        self = super()._from_parts((path, *args[1:]), *other, **kwargs)
+        self._scheme = scheme
+        self._netloc = netloc
+        return self
 
-    def mkdir(self, path):
-        raise NotImplementedError
+    def _from_parsed_parts(self, *args, **kwargs):
+        obj = super()._from_parsed_parts(*args, **kwargs)
+        obj._scheme = self._scheme
+        obj._netloc = self._netloc
+        return obj
 
+    def mkdir(self, exist_ok=True, parents=True, mode=0o777):
+        return super().mkdir(mode, exist_ok=exist_ok, parents=parents)
 
-class LocalBackend(FileBackend):
+    def __enter__(self):
+        self.parent.mkdir(exist_ok=True, parents=True)
+        super().__enter__()
 
-    def name(self, path):
-        return pathlib.PurePath(path).name
+    def __exit__(self, *args, **kwargs):
+        super().__exit__(*args, **kwargs)
 
-    def suffix(self, path):
-        return pathlib.PurePath(path).suffix
-
-    def extend(self, path, *args):
-        """Concatenate given elements and return a string representation."""
-        return str(pathlib.PurePath(path, *[str(a) for a in args]))
-
-    def get(self, localpath, netloc, path):
-        if localpath.exists():
-            return localpath
+    def __str__(self):
+        if self._scheme:
+            return f"{self._scheme}://{self._netloc}{super().__str__()}"
         else:
-            raise FileNotFoundError(str(localpath))
-
-    def put(self, localpath, netloc, path, clobber=False):
-        """Local backend will never write anywhere, since localpath and path are the same."""
-        pass
-
-    def exists(self, netloc, path):
-        """Directly check whether the path exists on the local system."""
-        return pathlib.Path(path).exists()
-
-    def ls(self, netloc, path, files_only=False, delimiter="/"):
-        files = [f for f in pathlib.Path(path).glob("*")]
-        if files_only:
-            files = [f for f in files if f.is_file()]
-        return files
-
-    def glob(self, netloc, path, pattern):
-        return [p.relative_to(path) for p in pathlib.Path(path).glob(pattern)]
-
-    def mkdir(self, path):
-        pathlib.Path(path).mkdir(parents=True, exist_ok=True)
-
-
-def get_backend(scheme):
-    if not scheme:
-        backend = LocalBackend()
-    elif scheme == "s3":
-        backend = S3Backend()
-    else:
-        raise TypeError(f"Unknown scheme {scheme}")
-    return backend
-
-
-class URLPath:
-    """Combines url and pathlib.
-    Manages two representations, one remote and one local. If the given
-    path is local, both will be equivalent.
-    """
-    __slots__ = ("scheme", "netloc", "path", "_local", "_backend")
-
-    def __init__(self, path, *args):
-        if isinstance(path, URLPath):
-            self.scheme = path.scheme
-            self.netloc = path.netloc
-            self.path = path.path
-        else:
-            urlpath = urlparse(str(path))
-            self.scheme = urlpath.scheme
-            self.netloc = urlpath.netloc
-            self.path = urlpath.path
-
-        self._backend = get_backend(self.scheme)
-
-        # add args
-        if args:
-            self.path = self._backend.extend(self.path, *args)
-
-        self._local = None
-
-    @property
-    def name(self):
-        return self._backend.name(self.path)
-
-    @property
-    def suffix(self):
-        return self._backend.suffix
-
-    @property
-    def local(self):
-        if self._local is None:
-            if self.scheme:
-                self._local = pathlib.Path(TMP_PATH, self.netloc + self.path)
-            else:
-                self._local = pathlib.Path(self.path)
-        return self._local
-
-    @property
-    def remote(self):
-        return bool(self.scheme)
-
-    def exists(self):
-        """Get if the given resource already exists."""
-        return self._backend.exists(self.netloc, self.path)
-
-    def mkdir(self):
-        """Create a directory."""
-        return self._backend.mkdir(self.path)
-
-    def get(self):
-        """Load the file if it is not already local."""
-        return self._backend.get(self.local, self.netloc, self.path)
-
-    def put(self, writefun):
-        """Create a new file using a given write function.
-        Args:
-            writefun: Function writing data to a given path.
-        """
-        if self.local.exists() and not CLOBBER:
-            raise RuntimeError(
-                f"{self} already exists and clobber is {CLOBBER}. Use env var flowCat_clobber to overwrite files.")
-        self.local.parent.mkdir(parents=True, exist_ok=True)
-        writefun(str(self.local))
-        self._backend.put(self.local, self.netloc, self.path, clobber=CLOBBER)
-
-    def clear(self):
-        """Remove temporary file if remote resource."""
-        if self.scheme and self.local.exists():
-            LOGGER.debug("%s removed", self._local)
-            self._local.unlink()
-
-    def ls(self, **kwargs):
-        return [self.__class__(self, p) for p in self._backend.ls(self.netloc, self.path, **kwargs)]
-
-    def glob(self, pattern):
-        return [self.__class__(self, p) for p in self._backend.glob(self.netloc, self.path, pattern)]
-
-    def __truediv__(self, other):
-        """Append to the path as another level."""
-        return self.__class__(self, other)
+            return super().__str__()
 
     def __add__(self, other):
-        """Addition will simply concatenate the fragment to the current
-        string representation."""
         return self.__class__(str(self) + str(other))
 
     def __radd__(self, other):
-        """Implement concatenation also if self is in second place."""
         return self.__class__(str(other) + str(self))
 
-    def __repr__(self):
-        if self.scheme:
-            return f"{self.scheme}://{self.netloc}{self.path}"
-        return f"{self.path}"
 
-    def __lt__(self, other):
-        return str(self) < str(other)
-
-    def __getstate__(self):
-        """Override default pickling behaviour of getting the dict."""
-        return (self.scheme, self.netloc, self.path)
-
-    def __setstate__(self, state):
-        """Retore instance attributes."""
-        self.scheme, self.netloc, self.path = state
-        self._backend = get_backend(self.scheme)
-
-
-def get_urlpath(fun):
-    @wraps(fun)
-    def get_local(path, *args, **kwargs):
-        if isinstance(path, URLPath):
-            path = path.get()
-        return fun(path, *args, **kwargs)
-    return get_local
-
-
-def put_urlpath(fun):
-    @wraps(fun)
-    def put_local(data, path):
-        if isinstance(path, URLPath):
-            return path.put(lambda p: fun(data, p))
-        if not CLOBBER and pathlib.Path(path).exists():
-            raise RuntimeError(f"{path} already exists.")
-        return fun(data, path)
-
-    return put_local
-
-
-@get_urlpath
-def load_json(path):
+def load_json(path: URLPath):
     """Load json data from a path as a simple function."""
-    with open(str(path), "r") as jspath:
+    with path.open("r") as jspath:
         data = json.load(jspath, object_hook=as_fc)
     return data
 
 
-@put_urlpath
-def save_json(data, path):
+def save_json(data, path: URLPath):
     """Write json data to a file as a simple function."""
-    try:
-        with open(str(path), "w") as jsfile:
-            json.dump(data, jsfile, cls=FCEncoder)
-    except TypeError as err:
-        print(err)
-        print(data)
-        raise err
+    with path.open("w") as jsfile:
+        json.dump(data, jsfile, cls=FCEncoder)
 
 
-@get_urlpath
-def load_pickle(path):
-    with open(str(path), "rb") as pfile:
+def load_pickle(path: URLPath):
+    with path.open("rb") as pfile:
         data = pickle.load(pfile)
     return data
 
 
-@put_urlpath
-def save_pickle(data, path):
+def save_pickle(data, path: URLPath):
     """Write data to the given path as a pickle."""
-    with open(str(path), "wb") as pfile:
+    with path.open("wb") as pfile:
         pickle.dump(data, pfile)
 
 
-@get_urlpath
-def load_joblib(path):
+def load_joblib(path: URLPath):
     return joblib.load(str(path))
 
 
-@put_urlpath
-def save_joblib(data, path):
+def save_joblib(data, path: URLPath):
+    path.parent.mkdir()
     joblib.dump(data, str(path))
-
-
-@get_urlpath
-def load_toml(path):
-    with open(str(path), "r") as f:
-        data = toml.load(f)
-    return data
-
-
-@put_urlpath
-def save_toml(data, path):
-    with open(str(path), "w") as f:
-        toml.dump(data, f)
 
 
 def to_json(data):
     return json.dumps(data, indent=4)
 
 
-def to_toml(data):
-    return toml.dumps(data)
-
-
-@get_urlpath
 def load_csv(path, index_col=0):
     data = pd.read_csv(str(path), index_col=index_col)
     return data
 
 
-@put_urlpath
-def save_csv(data, path):
-    data.to_csv(str(path))
-
-
-def load_file(path):
-    """Automatically infer format from filepath ending."""
-    if str(path).endswith(".json"):
-        return load_json(path)
-    if str(path).endswith(".p"):
-        return load_pickle(path)
-    if str(path).endswith(".toml"):
-        return load_toml(path)
-    raise TypeError(f"Unknown suffix in {path}")
-
-
-def save_file(data, path, *args, **kwargs):
-    """Automatically infer save format from filepath ending."""
-    if str(path).endswith(".json"):
-        return save_json(data, path, *args, **kwargs)
-    if str(path).endswith(".p"):
-        return save_pickle(data, path, *args, **kwargs)
-    if str(path).endswith(".toml"):
-        return save_toml(data, path, *args, **kwargs)
-    raise TypeError(f"Unknown suffix in {path}")
+def save_csv(data: pd.DataFrame, path: URLPath):
+    data.to_csv(path)
 
 
 def create_stamp():
