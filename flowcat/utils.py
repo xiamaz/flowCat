@@ -80,15 +80,12 @@ class URLPath(pathlib.PosixPath):
         obj._netloc = self._netloc
         return obj
 
-    def mkdir(self, exist_ok=True, parents=True, mode=0o777):
-        return super().mkdir(mode, exist_ok=exist_ok, parents=parents)
+    def mkdir(self, mode=0o777, exist_ok=True, parents=True):
+        return super().mkdir(mode=mode, exist_ok=exist_ok, parents=parents)
 
-    def __enter__(self):
+    def open(self, *args, **kwargs):
         self.parent.mkdir(exist_ok=True, parents=True)
-        super().__enter__()
-
-    def __exit__(self, *args, **kwargs):
-        super().__exit__(*args, **kwargs)
+        return super().open(*args, **kwargs)
 
     def __str__(self):
         if self._scheme:
@@ -147,6 +144,7 @@ def load_csv(path, index_col=0):
 
 
 def save_csv(data: pd.DataFrame, path: URLPath):
+    path.parent.mkdir(exist_ok=True, parents=True)
     data.to_csv(path)
 
 

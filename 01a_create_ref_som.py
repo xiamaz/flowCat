@@ -24,18 +24,18 @@ def configure_print_logging(rootname="flowcat"):
     utils.add_logger(LOGGER, handlers, level=logging.DEBUG)
 
 
-def train_model(dataset, markers=None, tensorboard=None):
+def train_model(dataset, markers=None, tensorboard=None, marker_name_only=False):
     """Create and train a SOM model using the given dataset."""
-    marker_name_only = True
     if markers:
         selected_markers = utils.load_json(markers)
     else:
         selected_markers = dataset.selected_markers
         # modify marker names if marker_name_only
-        selected_markers = {
-            tube: [extract_name(marker) for marker in markers]
-            for tube, markers in selected_markers.items()
-        }
+        if marker_name_only:
+            selected_markers = {
+                tube: [extract_name(marker) for marker in markers]
+                for tube, markers in selected_markers.items()
+            }
 
     model = som.CaseSom(
         tubes=selected_markers,
@@ -50,9 +50,10 @@ def train_model(dataset, markers=None, tensorboard=None):
             "initial_radius": 24,
             "end_radius": 2,
             "radius_cooling": "linear",
-            "marker_images": som.fcssom.MARKER_IMAGES_NAME_ONLY,
+            # "marker_images": som.fcssom.MARKER_IMAGES_NAME_ONLY,
             "map_type": "toroid",
             "dims": (32, 32, -1),
+            "scaler": "StandardScaler",
         })
     model.train(dataset)
     return model
@@ -71,7 +72,11 @@ def main(args):
     else:
         tensorboard_dir = None
 
-    model = train_model(selected, markers=args.markers, tensorboard=tensorboard_dir)
+    model = train_model(
+        selected,
+        markers=args.markers,
+        tensorboard=tensorboard_dir,
+        marker_name_only=args.marker_name_only)
 
     model.save(output_dir)
 
@@ -87,6 +92,10 @@ if __name__ == "__main__":
         "--markers",
         help="Input json file mapping tube number to markers",
         type=utils.URLPath)
+    PARSER.add_argument(
+        "--marker-name-only",
+        help="Only use the marker name, not the antibody",
+        action="store_true")
     PARSER.add_argument(
         "cases",
         type=utils.URLPath,

@@ -12,7 +12,7 @@ import tensorflow as tf
 from flowcat.dataset.fcs import FCSData
 from flowcat.dataset.case import TubeSample
 from flowcat.utils import load_json, save_json, URLPath
-from .base import SOM
+from .base import SOM, save_som
 from .tfsom import create_initializer, TFSom
 
 
@@ -37,6 +37,10 @@ class MarkerMissingError(Exception):
     def __init__(self, markers, message):
         self.markers = markers
         self.message = message
+
+
+class InvalidScaler(Exception):
+    pass
 
 
 def create_color_map(weights, cols, name="colormap", img_size=None):
@@ -73,20 +77,18 @@ class FCSSom:
             marker_name_only=False,
             marker_images=None,
             name="fcssom",
-            scaler=None,
+            scaler="MinMaxScaler",
             **kwargs):
         self.dims = dims
         m, n, dim = self.dims
 
         init_type, init_data = init
-        transform_configs = []
         if init_type == "random":
             init_data = init_data or 1
         elif init_type == "reference":
             assert isinstance(init_data, SOM)
             markers = init_data.markers
             rm, rn = init_data.dims
-            transform_configs = init_data.transforms
             init_data = init_data.data
             m = rm if m == -1 else m
             n = rn if n == -1 else n
@@ -121,17 +123,15 @@ class FCSSom:
             with self._graph.as_default():
                 self.add_weight_images(marker_images)
 
-        if scaler is None:
-            if transform_configs:
-                assert len(transform_configs) == 1
-                tname, tconf = transform_configs[0]
-                assert tname == "MinMaxScaler"
-                self.scaler = sk.preprocessing.MinMaxScaler()
-                self.scaler.fit([tconf["data_min_"], tconf["data_max_"]])
-            else:
-                self.scaler = sk.preprocessing.MinMaxScaler()
+        if scaler == "StandardScaler":
+            self.scaler = sk.preprocessing.StandardScaler()
+        elif scaler == "MinMaxScaler":
+            self.scaler = sk.preprocessing.MinMaxScaler()
         else:
-            self.scaler = scaler
+            if scaler is not None:
+                self.scaler = scaler
+            else:
+                raise InvalidScaler(scaler)
 
     @classmethod
     def load(cls, path: Union[str, URLPath], **kwargs):
@@ -200,27 +200,25 @@ class FCSSom:
         dfdata = pd.DataFrame(data, columns=self.markers)
         return self._create_som(dfdata)
 
-    @property
-    def transform_args(self):
+    def transform_args(self, scaler=None):
+        if scaler is None:
+            scaler = self.scaler
         return [
-            ("MinMaxScaler", {
-                "data_min_": self.scaler.data_min_.tolist(),
-                "data_max_": self.scaler.data_max_.tolist(),
-            })
+            (str(scaler.__class__), scaler.get_params())
         ]
 
-    def _create_som(self, weights: np.array):
+    def _create_som(self, weights: np.array, scaler=None):
         data = pd.DataFrame(weights, columns=self.markers)
         return SOM(
             data,
-            transforms=self.transform_args
+            transforms=self.transform_args(scaler)
         )
 
     def save(self, path: Union[str, URLPath]):
         """Save the given model including scaler."""
         assert self.trained, "Model has not been trained"
         path = URLPath(path)
-        path.local.mkdir(parents=True, exist_ok=True)
+        path.mkdir(parents=True, exist_ok=True)
         self.model.save(path / "model.ckpt")
         joblib.dump(self.scaler, str(path / "scaler.joblib"))
         save_json(self.config, path / "config.json")
@@ -242,15 +240,21 @@ class FCSSom:
         self.trained = True
         return self
 
-    def transform(self, data: FCSData, sample: int = -1, label: str = "") -> SOM:
+    def transform(self, data: FCSData, sample: int = -1, label: str = "", scaler=None) -> SOM:
         """Transform input fcs into retrained SOM node weights."""
         # mask = data.channel_mask(self.markers)
         res = data.align(self.markers, name_only=self.marker_name_only).data
-        res = self.scaler.transform(res)
+        if scaler is None:
+            scaler = self.scaler
+            res = scaler.transform(res)
+        else:
+            scaler = scaler()
+            res = scaler.fit_transform(res)
+
         if sample > 0:
             res = res[np.random.choice(res.shape[0], sample, replace=False), :]
         weights = self.model.transform(res, label=label)
-        somweights = self._create_som(weights)
+        somweights = self._create_som(weights, scaler=scaler)
         return somweights
 
     def transform_generator(

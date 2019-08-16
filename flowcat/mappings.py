@@ -184,3 +184,46 @@ CHANNEL_CONFIGS = {
         ],
     }
 }
+
+
+# canonical plotting views used by MLL
+PLOT_2D_VIEWS = {
+    "1": (
+        ("CD19-APCA750", "CD79b-PC5.5"),
+        ("CD19-APCA750", "CD5-PacBlue"),
+        ("CD20-PC7", "CD23-APC"),
+        ("CD19-APCA750", "CD10-PE"),
+        ("CD19-APCA750", "FMC7-FITC"),
+        ("CD20-PC7", "CD5-PacBlue"),
+        ("CD19-APCA750", "IgM-ECD"),
+        ("CD10-PE", "FMC7-FITC"),
+        ("SS INT LIN", "FS INT LIN"),
+        ("CD45-KrOr", "SS INT LIN"),
+        ("CD19-APCA750", "SS INT LIN"),
+    ),
+    "2": (
+        ("CD19-APCA750", "Lambda-PE"),
+        ("CD19-APCA750", "Kappa-FITC"),
+        ("Lambda-PE", "Kappa-FITC"),
+        ("CD19-APCA750", "CD22-PacBlue"),
+        ("CD19-APCA750", "CD103-APC"),
+        ("CD19-APCA750", "CD11c-PC7"),
+        ("CD25-PC5.5", "CD11c-PC7"),
+        ("Lambda-PE", "Kappa-FITC"),
+        ("SS INT LIN", "FS INT LIN"),
+        ("CD45-KrOr", "SS INT LIN"),
+        ("CD19-APCA750", "SS INT LIN"),
+    ),
+    "3": (
+        ("CD3-ECD", "CD4-PE"),
+        ("CD3-ECD", "CD8-FITC"),
+        ("CD4-PE", "CD8-FITC"),
+        ("CD56-APC", "CD3-ECD"),
+        ("CD4-PE", "HLA-DR-PacBlue"),
+        ("CD8-FITC", "HLA-DR-PacBlue"),
+        ("CD19-APCA750", "CD3-ECD"),
+        ("SS INT LIN", "FS INT LIN"),
+        ("CD45-KrOr", "SS INT LIN"),
+        ("CD3-ECD", "SS INT LIN")
+    )
+}

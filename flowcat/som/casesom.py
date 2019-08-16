@@ -3,7 +3,7 @@ from typing import Iterable, List, Generator, Dict, Union
 from flowcat.mappings import Material
 from flowcat.dataset import case, case_dataset, fcs
 from flowcat import utils
-from .base import SOMCollection, SOM
+from .base import SOMCollection, SOM, save_som
 from .fcssom import FCSSom
 
 
@@ -58,6 +58,7 @@ class CaseSingleSom:
         path = utils.URLPath(path)
         self.model.save(path)
         utils.save_json(self.config, path / self.config_name)
+        save_som(self.weights, path / "weights", subdirectory=True)
 
     def train(self, data: Iterable[case.Case], *args, **kwargs) -> CaseSingleSom:
         tsamples = [c.get_tube(self.tube, materials=self.materials).data for c in data]
@@ -115,7 +116,7 @@ class CaseSom:
     @classmethod
     def load(cls, path: utils.URLPath, tensorboard_dir: utils.URLPath = None, **kwargs):
         """Load a saved SOM model."""
-        singlepaths = {p.name.lstrip("tube"): p for p in path.ls() if "tube" in str(p)}
+        singlepaths = {p.name.lstrip("tube"): p for p in path.iterdir() if "tube" in str(p)}
         models = {}
         for tube, mpath in sorted(singlepaths.items()):
             tbdir = tensorboard_dir / f"tube{tube}" if tensorboard_dir else None

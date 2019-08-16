@@ -129,7 +129,7 @@ class SOMCollection:
         if tube not in self.tubes:
             return None
         path = self.tubepaths[tube]
-        data = SOM.from_path(path, str(path)[:-3] + "json", tube=tube, cases=self.cases)
+        data = SOM.from_path(path, path.with_suffix(".json"), tube=tube, cases=self.cases)
         self._data[tube] = data
         return data
 
@@ -166,7 +166,7 @@ class SOMCollection:
 
 def get_som_tube_path(
         path: Union[str, utils.URLPath],
-        tube: int,
+        tube: str,
         subdirectory: bool) -> utils.URLPath:
     path = utils.URLPath(path)
     if subdirectory:

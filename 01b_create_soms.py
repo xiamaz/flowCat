@@ -59,8 +59,6 @@ def main(args):
     """Load a model with given transforming arguments and transform individual
     cases."""
     cases = flowcat.parser.get_dataset(args)
-    labels = utils.load_json("output/test-2019-08/testsom/samples.json")
-    cases, _ = cases.filter_reasons(labels=labels)
 
     if args.tensorboard:
         tensorboard_dir = args.output / "tensorboard"

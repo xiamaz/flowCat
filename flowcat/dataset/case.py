@@ -414,8 +414,8 @@ class TubeSample:
         Returns:
             Dataframe with fcs data.
         """
-        url_path = self.parent.path / self.path
-        data = fcs.FCSData(url_path.get())
+        path = self.parent.path / self.path
+        data = fcs.FCSData(path)
         if normalized:
             data = data.normalize()
         if scaled:

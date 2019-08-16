@@ -398,9 +398,12 @@ class TFSom:
                         tf.sqrt(tf.reduce_sum(tf.pow(self._weights - new_weights, 2), axis=1)),
                         shape=(1, self._m, self._n, 1))
                     self.add_summary(tf.summary.image("weight_diff", diff_weights))
+                    control_deps = [diff_weights]
+                else:
+                    control_deps = []
 
                 # Assign them
-                with tf.control_dependencies([diff_weights]):
+                with tf.control_dependencies(control_deps):
                     self._training_op = tf.assign(self._weights, new_weights)
                 self._assign_trained_op = tf.assign(self._ref_weights, self._weights)
                 self._reset_weights_op = tf.assign(self._weights, self._ref_weights)
