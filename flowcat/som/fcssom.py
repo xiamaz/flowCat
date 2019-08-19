@@ -11,7 +11,7 @@ import tensorflow as tf
 
 from flowcat.dataset.fcs import FCSData
 from flowcat.dataset.case import TubeSample
-from flowcat.utils import load_json, save_json, URLPath
+from flowcat.utils import load_json, save_json, URLPath, save_joblib
 from .base import SOM, save_som
 from .tfsom import create_initializer, TFSom
 
@@ -214,13 +214,14 @@ class FCSSom:
             transforms=self.transform_args(scaler)
         )
 
-    def save(self, path: Union[str, URLPath]):
+    def save(self, path: URLPath):
         """Save the given model including scaler."""
-        assert self.trained, "Model has not been trained"
-        path = URLPath(path)
-        path.mkdir(parents=True, exist_ok=True)
-        self.model.save(path / "model.ckpt")
-        joblib.dump(self.scaler, str(path / "scaler.joblib"))
+        if not self.trained:
+            raise RuntimeError("Model has not been trained")
+
+        with (path / "model.ckpt").open("wb") as modelfile:
+            self.model.save(modelfile)
+        save_joblib(self.scaler, path / "scaler.joblib")
         save_json(self.config, path / "config.json")
 
     def train(self, data: Iterable[FCSData], sample: int = -1):

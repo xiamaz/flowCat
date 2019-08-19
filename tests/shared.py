@@ -8,7 +8,7 @@ import pandas as pd
 import flowcat.utils as utils
 
 # Path to test directory containing test files
-TESTPATH = pathlib.Path(__file__).parent
+TESTPATH = utils.URLPath(__file__).parent
 # Path to additional data needed for some tests
 DATAPATH = TESTPATH / "data"
 # Path to fcs files and metadata directory

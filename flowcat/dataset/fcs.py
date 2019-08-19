@@ -13,7 +13,7 @@ from sklearn import preprocessing, base
 
 import fcsparser
 
-from flowcat.utils import URLPath
+from flowcat.utils import URLPath, outer_interval
 from flowcat.mappings import MARKER_NAME_MAP
 
 
@@ -31,23 +31,53 @@ def extract_name(marker):
     return name
 
 
+def join_fcs_data(fcs_data: List[FCSData], channels=None) -> FCSData:
+    """Join the given fcs files.
+
+    Args:
+        fcs_data: List of fcs files.
+        channels: Optionally align new fcs data file to the given channels.
+    Returns:
+        Merged single FCSData containing entries from all given fcsdata files.
+    """
+    if channels is None:
+        channels = fcs_data[0].channels
+
+    dfs = [data.align(channels).data for data in fcs_data]
+    joined = pd.concat(dfs)
+
+    all_ranges = [data.ranges for data in fcs_data]
+    ranges = functools.reduce(
+        lambda x, y: {name: outer_interval(x[name], y[name]) for name in channels},
+        all_ranges
+    )
+
+    return FCSData(joined, meta=None, ranges=ranges)
+
+
 class FCSData:
     """Wrap FCS data with additional metadata"""
 
     __slots__ = (
         "_meta",  # dict of metadata
         "data",  # pd dataframe of data
-        "ranges"  # pd dataframe with column ranges
+        "ranges"  # dict of pd intervals
     )
 
     default_encoding = "latin-1"
     default_dataset = 0
 
-    def __init__(self, initdata: Union[tuple, URLPath, FCSData]):
+    def __init__(
+            self,
+            initdata: Union[pd.DataFrame, URLPath, FCSData],
+            meta: dict = None,
+            ranges: dict = None):
         """Create a new FCS object.
 
         Args:
             initdata: Either tuple of meta and data from fcsparser, string filepath or another FCSData object.
+            meta: Manually provide dict of metadata.
+            ranges: Manually provide ranges
         Returns:
             FCSData object.
         """
@@ -55,20 +85,21 @@ class FCSData:
             self._meta = initdata.meta.copy()
             self.ranges = initdata.ranges.copy()
             self.data = initdata.data.copy()
-        else:
-            # unpack metadata, data tuple
-            if isinstance(initdata, tuple):
-                meta, data = initdata
-            # load using filepath
-            else:
-                meta, data = fcsparser.parse(
-                    str(initdata), data_set=self.default_dataset, encoding=self.default_encoding)
-            self._meta = meta
+        elif isinstance(initdata, URLPath):
+            parsed_meta, data = fcsparser.parse(
+                str(initdata), data_set=self.default_dataset, encoding=self.default_encoding)
             self.data = data
-            self.ranges = self._get_ranges_from_pnr(self._meta)
+            self._meta = meta or parsed_meta
+            self.ranges = ranges or self._get_ranges_from_pnr(self._meta)
+        elif isinstance(initdata, pd.DataFrame):
+            self.data = initdata
+            self._meta = meta
+            self.ranges = ranges or self._get_ranges_from_pnr(self._meta)
+        else:
+            raise RuntimeError(
+                "Invalid data for FCS. Either Path, similar object or tuple of data and metadata needed.")
 
         self.data = self.data.astype("float32", copy=False)
-        self.ranges = self.ranges.astype("float32", copy=False)
 
     @property
     def channels(self) -> List[str]:
@@ -81,7 +112,7 @@ class FCSData:
     def rename(self, mapping: dict):
         """Rename columns based on the given mapping."""
         self.data.rename(mapping, axis=1, inplace=True)
-        self.ranges.rename(mapping, axis=1, inplace=True)
+        self.ranges = {mapping.get(name, name) for name, interval in self.ranges.items()}
 
     def channel_mask(self, channels: List[str]):
         """Return a 1/0 int array for the given channels, whether channels
@@ -114,10 +145,12 @@ class FCSData:
         data = data[channels]
         copy.data = data
 
-        ranges = copy.ranges
-        ranges = ranges.assign(**missing_cols)
-        ranges = ranges[channels]
-        copy.ranges = ranges
+        copy.ranges.update(
+            {
+                name: pd.Interval(missing_val, missing_val)
+                for name, missing_val in missing_cols.items()
+            }
+        )
         return copy
 
     def copy(self) -> FCSData:
@@ -138,7 +171,8 @@ class FCSData:
             self. This operation is done in place, so the original object will be modified!
         """
         self.data.drop(channels, axis=1, inplace=True, errors="ignore")
-        self.ranges.drop(channels, axis=1, inplace=True, errors="ignore")
+        for channel in channels:
+            del self.ranges[channel]
         return self
 
     def normalize(self, scaler=None, fitted=False):
@@ -154,12 +188,9 @@ class FCSData:
     def _get_ranges_from_pnr(self, metadata):
         """Get ranges from metainformation."""
         pnr = {
-            c: {
-                "min": 0,
-                "max": int(metadata[f"$P{i + 1}R"])
-            } for i, c in enumerate(self.data.columns)
+            c: pd.Interval(0, int(metadata[f"$P{i + 1}R"]), closed="both")
+            for i, c in enumerate(self.data.columns)
         }
-        pnr = pd.DataFrame.from_dict(pnr, orient="columns", dtype="float32")
         return pnr
 
     def __repr__(self):
