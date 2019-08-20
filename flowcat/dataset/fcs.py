@@ -249,6 +249,8 @@ class FCSData:
         copy.add_missing_columns(channels, missing_val=missing_val)
 
         copy._data = copy._data[channels]
+        copy._meta = {name: copy._meta[name] for name in channels}
+        copy._channels = channels
         return copy
 
     def copy(self) -> FCSData:
