@@ -233,42 +233,6 @@ class FCSMarkersTransform(base.TransformerMixin, base.BaseEstimator):
         return X
 
 
-class FCSLogTransform(base.BaseEstimator, base.TransformerMixin):
-    """Transform FCS files logarithmically.  Currently this does not work
-    correctly, since FCS files are not $PnE transformed on import"""
-
-    def transform(self, X, *_):
-        names = [n for n in X.columns if "LIN" not in n]
-        X[names] = np.log1p(X[names])
-        return X
-
-    def fit(self, *_):
-        return self
-
-
-class FCSScatterFilter(base.BaseEstimator, base.TransformerMixin):
-    """Remove events with values below threshold in specified channels."""
-
-    def __init__(self, filters=None):
-        if filters is None:
-            filters = [("SS INT LIN", 0), ("FS INT LIN", 0)]
-        self._filters = filters
-
-    def transform(self, X, *_):
-        if isinstance(X, FCSData):
-            selected = functools.reduce(
-                lambda x, y: x & y, [X.data[c] > t for c, t in self._filters])
-            X.data = X.data.loc[selected, :]
-        else:
-            selected = functools.reduce(
-                lambda x, y: x & y, [X[c] > t for c, t in self._filters])
-            X = X.loc[selected, :]
-        return X
-
-    def fit(self, *_):
-        return self
-
-
 class FCSMinMaxScaler(base.TransformerMixin, base.BaseEstimator):
     """MinMaxScaling with adaptations for FCSData."""
 
