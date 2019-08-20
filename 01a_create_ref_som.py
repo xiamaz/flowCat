@@ -37,7 +37,8 @@ def train_model(dataset, markers=None, tensorboard=None, marker_name_only=False)
                 for tube, markers in selected_markers.items()
             }
 
-    scaler = "StandardScaler"
+    # scaler = "StandardScaler"
+    scaler = "MinMaxScaler"
 
     model = som.CaseSom(
         tubes=selected_markers,

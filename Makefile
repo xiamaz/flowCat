@@ -35,10 +35,14 @@ reference: reference.ref
 
 .PHONY: som
 .ONESHELL:
-som:
-	@./01b_create_soms.py $(TRAINDATA) $(REFERENCE_SOM) $(SOM_DATASET)
+som: som.som
 
 .PHONY: %.som
 .ONESHELL:
 %.som:
-	@./01b_create_soms.py --tensorboard $(TRAINDATA) $(REFERENCE_SOM) $(OUTDIR)/epoch_cmp/$*
+	@./01b_create_soms.py $(TRAINDATA) $(REFERENCE_SOM) $(OUTDIR)/$*
+
+.PHONY: %.somtb
+.ONESHELL:
+%.somtb:
+	@./01b_create_soms.py --tensorboard $(TRAINDATA) $(REFERENCE_SOM) $(OUTDIR)/$*

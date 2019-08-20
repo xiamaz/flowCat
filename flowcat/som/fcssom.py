@@ -128,7 +128,7 @@ class FCSSom:
             self.scaler = scalers.FCSMinMaxScaler()
         else:
             if scaler is not None:
-                self.scaler = scaler()
+                self.scaler = scaler
             else:
                 raise InvalidScaler(scaler)
 
