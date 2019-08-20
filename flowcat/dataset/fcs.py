@@ -192,6 +192,7 @@ class FCSData:
         """Rename columns based on the given mapping."""
         self._data.rename(mapping, axis=1, inplace=True)
         self._meta = {mapping.get(name, name) for name, meta in self.meta.items()}
+        self._channels = None
 
     def marker_to_name_only(self) -> FCSData:
         mapping = {c: extract_name(c) for c in self.channels}
@@ -215,6 +216,7 @@ class FCSData:
                 for name, missing_val in missing_cols.items()
             }
         )
+        self._channels = None
         return self
 
     def channel_mask(self):
@@ -273,6 +275,7 @@ class FCSData:
         self._data.drop(channels, axis=1, inplace=True, errors="ignore")
         for channel in channels:
             del self._meta[channel]
+        self._channels = None
         return self
 
     def __repr__(self):
