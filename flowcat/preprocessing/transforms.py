@@ -9,7 +9,7 @@ class FCSLogTransform(TransformerMixin, BaseEstimator):
     correctly, since FCS files are not $PnE transformed on import"""
 
     def transform(self, X, *_):
-        names = [n for n in X.columns if "LIN" not in n]
+        names = [n for n in x.columns if "lin" not in n]
         X[names] = np.log1p(X[names])
         return X
 

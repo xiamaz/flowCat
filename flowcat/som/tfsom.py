@@ -24,7 +24,6 @@
 from __future__ import annotations
 import random
 import logging
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -299,10 +298,9 @@ class TFSom:
         # tensorboard visualizations
         self._tensorboard = tensorboard_dir is not None
         if self._tensorboard:
-            self._tensorboard_dir = Path(str(tensorboard_dir)) / self.config_name
-            self._tensorboard_dir.mkdir(parents=True, exist_ok=True)
+            self._tensorboard_dir = tensorboard_dir / self.config_name
             # save configuration
-            with open(str(self._tensorboard_dir / "config.json"), "w") as f:
+            with (self._tensorboard_dir / "config.json").open("w") as f:
                 f.writelines(str(config))
         else:
             self._tensorboard_dir = None
@@ -670,10 +668,11 @@ class TFSom:
         return self._sess.run(self._weights)
 
     def save(self, path: URLPath):
-        """Save the model to the given path."""
+        """Save the model to the given path. Does not work with buffered readers!"""
         self._saver.save(self._sess, str(path))
 
     def load(self, path: URLPath):
+        """Load model from given path."""
         self._saver.restore(self._sess, str(path))
 
     @property

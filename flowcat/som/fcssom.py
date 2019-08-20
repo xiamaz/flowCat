@@ -1,18 +1,17 @@
 from __future__ import annotations
-from typing import List, Union, Iterable, Generator
+from typing import Union, Iterable, Generator
 import logging
 
 import numpy as np
 import pandas as pd
 
-import sklearn as sk
-import joblib
 import tensorflow as tf
 
-from flowcat.dataset.fcs import FCSData
+from flowcat.dataset.fcs import FCSData, join_fcs_data
 from flowcat.dataset.case import TubeSample
-from flowcat.utils import load_json, save_json, URLPath, save_joblib
-from .base import SOM, save_som
+from flowcat.utils import load_json, save_json, URLPath, save_joblib, load_joblib
+from flowcat.preprocessing import scalers
+from .base import SOM
 from .tfsom import create_initializer, TFSom
 
 
@@ -124,19 +123,19 @@ class FCSSom:
                 self.add_weight_images(marker_images)
 
         if scaler == "StandardScaler":
-            self.scaler = sk.preprocessing.StandardScaler()
+            self.scaler = scalers.FCSStandardScaler()
         elif scaler == "MinMaxScaler":
-            self.scaler = sk.preprocessing.MinMaxScaler()
+            self.scaler = scalers.FCSMinMaxScaler()
         else:
             if scaler is not None:
-                self.scaler = scaler
+                self.scaler = scaler()
             else:
                 raise InvalidScaler(scaler)
 
     @classmethod
     def load(cls, path: Union[str, URLPath], **kwargs):
         path = URLPath(path)
-        scaler = joblib.load(str(path / "scaler.joblib"))
+        scaler = load_joblib(path / "scaler.joblib")
         config = load_json(path / "config.json")
         obj = cls(
             dims=config["dims"],
@@ -219,8 +218,8 @@ class FCSSom:
         if not self.trained:
             raise RuntimeError("Model has not been trained")
 
-        with (path / "model.ckpt").open("wb") as modelfile:
-            self.model.save(modelfile)
+        path.mkdir(parents=True, exist_ok=True)
+        self.model.save(path / "model.ckpt")
         save_joblib(self.scaler, path / "scaler.joblib")
         save_json(self.config, path / "config.json")
 
@@ -230,9 +229,17 @@ class FCSSom:
             data: FCSData object
             sample: Optional subsample to be used in training
         """
-        aligned = [d.align(self.markers, name_only=self.marker_name_only).data for d in data]
-        res = np.concatenate(aligned)
-        res = self.scaler.fit_transform(res)
+        if self.marker_name_only:
+            data = [d.marker_to_name_only() for d in data]
+
+        joined = join_fcs_data(data, self.markers)
+
+        if getattr(self.scaler, "fcsdata_scaler", False):
+            joined = self.scaler.fit_transform(joined)
+            res = joined.data
+        else:
+            res = joined.data
+            res = self.scaler.fit_transform(res)
 
         if sample > 0:
             res = res[np.random.choice(res.shape[0], sample, replace=False), :]
@@ -243,17 +250,20 @@ class FCSSom:
 
     def transform(self, data: FCSData, sample: int = -1, label: str = "", scaler=None) -> SOM:
         """Transform input fcs into retrained SOM node weights."""
-        # mask = data.channel_mask(self.markers)
-        res = data.align(self.markers, name_only=self.marker_name_only).data
-        if scaler is None:
-            scaler = self.scaler
-            res = scaler.transform(res)
+        data = data.align(self.markers, name_only=self.marker_name_only)
+
+        scaler = scaler or self.scaler
+
+        if getattr(scaler, "fcsdata_scaler", False):
+            data = scaler.transform(data)
+            res = data.data
         else:
-            scaler = scaler()
-            res = scaler.fit_transform(res)
+            res = data.data
+            res = scaler.transform(res)
 
         if sample > 0:
             res = res[np.random.choice(res.shape[0], sample, replace=False), :]
+
         weights = self.model.transform(res, label=label)
         somweights = self._create_som(weights, scaler=scaler)
         return somweights

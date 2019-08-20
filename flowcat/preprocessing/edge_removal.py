@@ -4,13 +4,15 @@ from __future__ import annotations
 from typing import Dict, Union
 
 import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
 
 from flowcat.dataset import fcs
 from flowcat.utils.intervals import create_interval, inner_interval, series_in_interval
-from sklearn.base import BaseEstimator, TransformerMixin
+
+from . import FCSDataMixin
 
 
-class EdgeEventFilter(TransformerMixin, BaseEstimator):
+class EdgeEventFilter(FCSDataMixin, TransformerMixin, BaseEstimator):
 
     def __init__(self, channel_intervals: Dict[str, Union[tuple, pd.Interval]]):
         """Intervals are either (x.xx, y.yy) or (None, x.xx) etc, they are always strict smaller"""
@@ -23,19 +25,31 @@ class EdgeEventFilter(TransformerMixin, BaseEstimator):
         return self
 
     def transform(self, X: fcs.FCSData, y=None) -> fcs.FCSData:
+        """Remove all events outside of specified intervals."""
         data = X.data
-        ranges = X.ranges
+        meta = X.meta
 
         all_contained = None
+        new_ranges = {}
         for colname, interval in self._intervals.items():
-            newinterval = inner_interval(ranges[colname], interval)
+            newinterval = inner_interval(meta[colname].range, interval)
             contained = series_in_interval(data[colname], newinterval)
-            print(sum(contained))
+
             if all_contained is None:
                 all_contained = contained
             else:
                 all_contained &= contained
-            ranges[colname] = newinterval
+
+            new_ranges[colname] = newinterval
         X.data = data.loc[all_contained, :]
-        X.ranges = ranges
+        X.set_ranges(new_ranges)
         return X
+
+
+class EmptyChannelFilter(FCSDataMixin, TransformerMixin, BaseEstimator):
+
+    def fit(self, *_):
+        return self
+
+    def transform(self, X, *_):
+        return X.drop_empty()

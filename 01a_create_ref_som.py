@@ -37,6 +37,8 @@ def train_model(dataset, markers=None, tensorboard=None, marker_name_only=False)
                 for tube, markers in selected_markers.items()
             }
 
+    scaler = "StandardScaler"
+
     model = som.CaseSom(
         tubes=selected_markers,
         tensorboard_dir=tensorboard,
@@ -53,7 +55,7 @@ def train_model(dataset, markers=None, tensorboard=None, marker_name_only=False)
             # "marker_images": som.fcssom.MARKER_IMAGES_NAME_ONLY,
             "map_type": "toroid",
             "dims": (32, 32, -1),
-            "scaler": "StandardScaler",
+            "scaler": scaler,
         })
     model.train(dataset)
     return model

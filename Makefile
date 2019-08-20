@@ -31,7 +31,7 @@ reference: reference.ref
 .PHONY: %.ref
 .ONESHELL:
 %.ref:
-	./01a_create_ref_som.py $(TRAINDATA) --tensorboard $(REFERENCE_DATA) $(OUTDIR)/learntest/$*
+	./01a_create_ref_som.py $(TRAINDATA) --tensorboard $(REFERENCE_DATA) $(OUTDIR)/$*
 
 .PHONY: som
 .ONESHELL:
