@@ -37,10 +37,12 @@ def transform_cases(dataset, model, output):
     Returns:
         Nothing.
     """
-    labels = []
+    # labels = []
     for case, res in utils.time_generator_logger(model.transform_generator(dataset)):
         flowcat.som.save_som(res, output / case.id, save_config=False, subdirectory=False)
-        labels.append({"label": case.id, "randnum": 0, "group": case.group})
+        # labels.append({"label": case.id, "randnum": 0, "group": case.group})
+
+    labels = [{"label": case.id, "randnum": 0, "group": case.group} for case in dataset]
 
     # Save metadata into an additional csv file with the same name
     metadata = pd.DataFrame(labels)

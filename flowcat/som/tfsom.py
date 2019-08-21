@@ -647,10 +647,7 @@ class TFSom:
                 feed_dict={self._data_placeholder: data, self._epoch: epoch}
             )
             while True:
-                global_step += 1
                 try:
-                    LOGGER.info("Global step: %d", global_step)
-
                     if self.tensorboard:
                         summary, _, = self._sess.run(
                             [merged_summaries, self._training_op],
@@ -664,6 +661,8 @@ class TFSom:
                             self._training_op,
                             feed_dict={self._epoch: epoch}
                         )
+                    LOGGER.info("Global step: %d", global_step)
+                    global_step += 1
 
                 except tf.errors.OutOfRangeError:
                     break
