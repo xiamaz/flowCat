@@ -1,3 +1,8 @@
+"""
+Basic functions for working with timestamps and timing functions.
+"""
+from __future__ import annotations
+
 import time
 import datetime
 import contextlib
@@ -8,11 +13,11 @@ import numpy as np
 TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 
 
-def str_to_date(strdate):
+def str_to_date(strdate: str) -> datetime.date:
     return datetime.datetime.strptime(strdate, "%Y-%m-%d").date()
 
 
-def create_stamp():
+def create_stamp() -> datetime.datetime:
     """Create timestamp usable for filepaths"""
     stamp = datetime.datetime.now()
     return stamp.strftime(TIMESTAMP_FORMAT)

@@ -222,6 +222,11 @@ class Case:
         """
         self._filepaths = [TubeSample(v, self) for v in value]
 
+    def set_fcs_info(self):
+        """Load fcs information for all available samples from fcs files."""
+        for sample in self.filepaths:
+            sample.set_fcs_info()
+
     def set_markers(self):
         for fp in self.filepaths:
             fp.load()
@@ -368,14 +373,14 @@ class TubeSample:
             assert "fcs" in data and "path" in data["fcs"], "Path to data is missing"
             assert "date" in data, "Date is missing"
             self.path = utils.URLPath(data["fcs"]["path"])
-            self.date = datetime.strptime(data["date"], "%Y-%m-%d").date()
+            self.date = utils.str_to_date(data["date"])
 
             self.tube = str(data.get("tube", "0"))
             self.material = mappings.Material.from_str(data.get("material", ""))
             self.panel = data.get("panel", "")
 
             self.markers = data["fcs"].get("markers", None)
-            self.count = int(data["fcs"].get("event_count", 0))
+            self.count = int(data["fcs"].get("event_count", 0)) or None
 
         self.parent = parent
 
@@ -399,14 +404,14 @@ class TubeSample:
         }
 
     @property
-    def data(self):
+    def data(self) -> fcs.FCSData:
         """FCS data. Do not save the fcs data in the case, since
         it would be too large."""
         if self._data is not None:
             return self._data
-        return self.get_data(normalized=False, scaled=False)
+        return self.get_data()
 
-    def get_data(self, normalized=True, scaled=True):
+    def get_data(self):
         """
         Args:
             normalized: Normalize data to mean and standard deviation.
@@ -416,10 +421,6 @@ class TubeSample:
         """
         path = self.parent.path / self.path
         data = fcs.FCSData(path)
-        if normalized:
-            data = data.normalize()
-        if scaled:
-            data = data.scale()
         return data
 
     def load(self):
@@ -431,10 +432,10 @@ class TubeSample:
         """Clear data from slot."""
         self._data = None
 
-    def set_markers(self):
-        """Set markers from own data."""
-        assert self._data is not None, "Load data beforehand into slot"
-        self.markers = list(self.data.channels)
+    def set_fcs_info(self):
+        data = self.data
+        self.markers = list(data.channels)
+        self.count = data.shape[0]
 
     def has_markers(self, markers: list) -> bool:
         """Return whether given list of markers are fulfilled."""
