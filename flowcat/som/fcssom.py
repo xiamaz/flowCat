@@ -118,9 +118,11 @@ class FCSSom:
             model_name=f"{self.name}",
             **kwargs)
 
-        if marker_images:
+        if marker_images and self.model.tensorboard:
             with self._graph.as_default():
                 self.add_weight_images(marker_images)
+
+        self.model.initialize()
 
         if scaler == "StandardScaler":
             self.scaler = scalers.FCSStandardScaler()

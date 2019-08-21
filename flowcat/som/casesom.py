@@ -148,5 +148,6 @@ class CaseSom:
         return casesoms
 
     def transform_generator(self, data: Iterable[case.Case], **kwargs) -> Generator[SOMCollection]:
-        for single in data:
-            yield single, self.transform(single, **kwargs)
+        for tube, model in self.models.items():
+            for single in data:
+                yield single, model.transform(single, **kwargs)

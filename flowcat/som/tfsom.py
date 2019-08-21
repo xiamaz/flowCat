@@ -22,7 +22,6 @@
 # SOFTWARE.
 # =================================================================================
 from __future__ import annotations
-import random
 import logging
 
 import numpy as np
@@ -38,6 +37,8 @@ https://github.com/cgorman/tensorflow-som
 Adapted from code by Sachin Joglekar
 https://codesachin.wordpress.com/2015/11/28/self-organizing-maps-with-googles-tensorflow/
 """
+
+tf.logging.set_verbosity(tf.logging.WARN)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -217,12 +218,10 @@ class TFSom:
     function.
     """
 
-    EPOCH_COLLECTION = "epoch_collection"
-
     def __init__(
             self,
             dims, initialization=None, graph=None,
-            max_epochs=10, batch_size=1, buffer_size=1_000_000,
+            max_epochs=10, batch_size=10000, buffer_size=1_000_000,
             initial_radius=None, end_radius=None, radius_cooling="linear",
             initial_learning_rate=0.05, end_learning_rate=0.01, learning_cooling="linear",
             node_distance="euclidean", map_type="planar", std_coeff=0.5,
@@ -295,15 +294,18 @@ class TFSom:
 
         self._subsample_size = subsample_size
 
+        self._initialized = False
+
         # tensorboard visualizations
-        self._tensorboard = tensorboard_dir is not None
-        if self._tensorboard:
+        if tensorboard_dir:
             self._tensorboard_dir = tensorboard_dir / self.config_name
-            # save configuration
-            with (self._tensorboard_dir / "config.json").open("w") as f:
-                f.writelines(str(config))
         else:
             self._tensorboard_dir = None
+
+        if self.tensorboard:
+            # save model configuration
+            with (self._tensorboard_dir / "config.json").open("w") as f:
+                f.writelines(str(config))
 
         self._summary_list = []
 
@@ -318,27 +320,13 @@ class TFSom:
             self._graph = graph
             self._initialization = initialization
 
-        with self._graph.as_default():
-            self._data_placeholder = self._initialize_tf_graph()
-            self._saver = tf.train.Saver()
-
         self._seed = seed
         if self._seed is not None:
             LOGGER.info("Setting seed to %d", self._seed)
-            random.seed(self._seed)
             with self._graph.as_default():
                 tf.set_random_seed(self._seed)
 
-        self._sess = tf.Session(
-            graph=self._graph,
-            config=tf.ConfigProto(
-                allow_soft_placement=True,
-                log_device_placement=False,))
-
-        with self._graph.as_default():
-            init_op = tf.global_variables_initializer()
-            self._sess.run([init_op])
-
+        self._sess = None
         self._writer = None
 
     @property
@@ -350,6 +338,53 @@ class TFSom:
     def config_tag(self):
         """Create config tag without model name."""
         return f"s{self._m}_e{self._max_epochs}_m{self._map_type}_d{self._node_distance}"
+
+    @property
+    def initialized(self):
+        return self._initialized
+
+    @property
+    def tensorboard(self):
+        return self._tensorboard_dir is not None
+
+    @property
+    def output_weights(self):
+        """
+        :return: The weights of the trained SOM as a NumPy array, or `None`
+                    if the SOM hasn't been trained
+        """
+        return np.array(self._sess.run(self._weights))
+
+    @property
+    def ref_weights(self):
+        return np.array(self._sess.run(self._ref_weights))
+
+    def initialize(self):
+        """Initialize the tensorflow graph."""
+        if self.initialized:
+            raise RuntimeError("Graph already initialized")
+
+        self._sess = tf.Session(
+            graph=self._graph,
+            config=tf.ConfigProto(
+                allow_soft_placement=True,
+                log_device_placement=False,))
+
+        with self._graph.as_default():
+            self._data_placeholder = self._initialize_tf_graph()
+            self._saver = tf.train.Saver()
+
+            # Initalize all variables
+            init_op = tf.global_variables_initializer()
+            self._sess.run([init_op])
+
+            # Get some metric variables which we will reset each epoch
+            self._metric_initializers = tf.variables_initializer(
+                self._graph.get_collection(tf.GraphKeys.METRIC_VARIABLES)
+            )
+
+        self._initialized = True
+        return self
 
     def add_summary(self, summary):
         if isinstance(summary, list):
@@ -372,74 +407,39 @@ class TFSom:
     def _initialize_tf_graph(self):
         """Initialize the SOM on the TensorFlow graph"""
         data, iter_init, input_tensor = self._create_input()
-        tf.add_to_collection(self.EPOCH_COLLECTION, iter_init.initializer)
+        self._data_initializer = iter_init.initializer
 
         with tf.variable_scope(tf.get_variable_scope()):
+            (
+                numerators, denominators,
+                self._epoch, self._weights, _, summaries
+            ) = self._tower_som(input_tensor, self._initialization)
 
-            with tf.name_scope("Tower_0"):
-                (
-                    numerators, denominators,
-                    self._epoch, self._weights, _, summaries
-                ) = self._tower_som(input_tensor, self._initialization)
+            self._ref_weights = tf.get_variable(
+                name="ref_weights", initializer=self._weights)
 
-                self._ref_weights = tf.get_variable(
-                    name="ref_weights", initializer=self._weights)
+            tf.get_variable_scope().reuse_variables()
+            self.add_summary(summaries)
 
-                tf.get_variable_scope().reuse_variables()
-                self.add_summary(summaries)
+            # Divide them
+            new_weights = tf.divide(numerators, denominators)
+            # diff new and old weights
+            if self.tensorboard:
+                diff_weights = tf.reshape(
+                    tf.sqrt(tf.reduce_sum(tf.pow(self._weights - new_weights, 2), axis=1)),
+                    shape=(1, self._m, self._n, 1))
+                self.add_summary(tf.summary.image("weight_diff", diff_weights))
+                control_deps = [diff_weights]
+            else:
+                control_deps = []
 
-                # Divide them
-                new_weights = tf.divide(numerators, denominators)
-                # diff new and old weights
-                if self._tensorboard:
-                    diff_weights = tf.reshape(
-                        tf.sqrt(tf.reduce_sum(tf.pow(self._weights - new_weights, 2), axis=1)),
-                        shape=(1, self._m, self._n, 1))
-                    self.add_summary(tf.summary.image("weight_diff", diff_weights))
-                    control_deps = [diff_weights]
-                else:
-                    control_deps = []
+            # Assign them
+            with tf.control_dependencies(control_deps):
+                self._training_op = tf.assign(self._weights, new_weights)
+            self._assign_trained_op = tf.assign(self._ref_weights, self._weights)
+            self._reset_weights_op = tf.assign(self._weights, self._ref_weights)
 
-                # Assign them
-                with tf.control_dependencies(control_deps):
-                    self._training_op = tf.assign(self._weights, new_weights)
-                self._assign_trained_op = tf.assign(self._ref_weights, self._weights)
-                self._reset_weights_op = tf.assign(self._weights, self._ref_weights)
-
-        with self._graph.as_default():
-            self._prediction_variables(self._weights)
         return data
-
-    def _prediction_variables(self, weights):
-        """Create prediction ops, these are only used for single operations on the SOM."""
-        with tf.name_scope("Prediction"):
-            self._invar = tf.placeholder(tf.float32)
-            dataset = tf.data.Dataset.from_tensors(self._invar)
-
-            self.__prediction_input = dataset.make_initializable_iterator()
-
-            # Get the index of the minimum distance for each input item,
-            # shape will be [batch_size],
-            self._squared_distances = tf.reduce_sum(
-                tf.pow(tf.subtract(
-                    tf.expand_dims(weights, axis=0),
-                    tf.expand_dims(self.__prediction_input.get_next(), axis=1)
-                ), 2), 2
-            )
-            self._prediction_output = tf.argmin(
-                self._squared_distances, axis=1
-            )
-
-            # get the minimum distance for each event
-            self._prediction_distance = tf.sqrt(tf.reduce_min(
-                self._squared_distances, axis=1
-            ))
-
-            # Summarize values across columns to get the absolute number
-            # of assigned events for each node
-            self._transform_output = tf.reduce_sum(tf.one_hot(
-                self._prediction_output, self._m * self._n
-            ), 0)
 
     def _tower_som(self, input_tensor, initialization):
         """Build a single SOM tower on the TensorFlow graph
@@ -492,7 +492,13 @@ class TFSom:
                 tf.pow(tf.subtract(tf.expand_dims(weights, axis=0),
                                    tf.expand_dims(input_copy, axis=1)), 2), 2)
 
-            bmu_indices = tf.argmin(squared_distance, axis=1)
+            bmu_indices = tf.argmin(squared_distance, axis=1, name="map_to_node_index")
+
+            # Dangling operators used to get node event mapping and distances
+            tf.sqrt(tf.reduce_min(squared_distance, axis=1), name="min_distance")
+            tf.reduce_sum(tf.one_hot(
+                bmu_indices, self._m * self._n
+            ), 0, name="events_per_node")
 
             mapped_events_per_node = tf.reduce_sum(
                 tf.one_hot(bmu_indices, self._m * self._n), axis=0)
@@ -558,7 +564,7 @@ class TFSom:
                 axis=-1)
 
         summaries = []
-        if self._tensorboard:
+        if self.tensorboard:
             with tf.name_scope('Summary'):
                 _, update_mean_alpha = tf.metrics.mean(alpha)
                 summaries.append(tf.summary.scalar('alpha', update_mean_alpha))
@@ -580,6 +586,26 @@ class TFSom:
             weights, mapped_events_per_node, summaries
         )
 
+    def run_till_tensor(self, tensors, data: np.array, epoch: int):
+        assert data.shape[0] <= self._buffer_size, (
+            f"Data size {data.shape[0]} > Buffer size {self._buffer_size}. "
+            "Samples will be lost on reshuffling. "
+            "Increase buffer size to number of samples.")
+
+        self._sess.run(
+            [self._data_initializer, self._metric_initializers],
+            feed_dict={self._data_placeholder: data, self._epoch: epoch}
+        )
+        result = self._sess.run(
+            tensors,
+            feed_dict={self._epoch: epoch}
+        )
+        return result
+
+    def run_till_op(self, op_name: str, data: np.array, epoch: int):
+        operation = self._graph.get_operation_by_name(op_name)
+        return self.run_till_tensor(operation.outputs, data, epoch)
+
     def _run_training(
             self,
             data: np.array,
@@ -597,13 +623,7 @@ class TFSom:
             "Samples will be lost on reshuffling. "
             "Increase buffer size to number of samples.")
 
-        with self._graph.as_default():
-            metric = tf.variables_initializer(
-                self._graph.get_collection(tf.GraphKeys.METRIC_VARIABLES)
-            )
-            epoch_collection = tf.get_collection(self.EPOCH_COLLECTION) + [metric]
-
-        if self._tensorboard:
+        if self.tensorboard:
             # Initialize the summary writer after the session has been initialized
             merged_summaries = tf.summary.merge(self._summary_list)
             self._writer = tf.summary.FileWriter(
@@ -618,33 +638,33 @@ class TFSom:
             LOGGER.info("Epoch: %d/%d", epoch + 1, self._max_epochs)
 
             # if the tensorboard flag has been provided (for outputting the summaries)
-            if self._tensorboard:
+            if self.tensorboard:
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)  # pylint: disable=no-member
                 run_metadata = tf.RunMetadata()
 
             self._sess.run(
-                epoch_collection,
+                [self._data_initializer, self._metric_initializers],
                 feed_dict={self._data_placeholder: data, self._epoch: epoch}
             )
             while True:
+                global_step += 1
                 try:
-                    if self._tensorboard:
+                    LOGGER.info("Global step: %d", global_step)
+
+                    if self.tensorboard:
                         summary, _, = self._sess.run(
                             [merged_summaries, self._training_op],
                             options=run_options, run_metadata=run_metadata,
                             feed_dict={self._epoch: epoch}
                         )
+                        self._writer.add_run_metadata(run_metadata, f"step_{global_step}")
+                        self._writer.add_summary(summary, global_step)
                     else:
                         self._sess.run(
                             self._training_op,
                             feed_dict={self._epoch: epoch}
                         )
-                    LOGGER.info("Global step: %d", global_step)
-                    global_step += 1
-                    # save the summary if it has been tracked
-                    if self._tensorboard:
-                        self._writer.add_run_metadata(run_metadata, f"step_{global_step}")
-                        self._writer.add_summary(summary, global_step)
+
                 except tf.errors.OutOfRangeError:
                     break
 
@@ -654,7 +674,7 @@ class TFSom:
             self._sess.run(self._assign_trained_op)
         return self
 
-    def train(self, data, label="learn"):
+    def train(self, data, label="learn") -> TFSom:
         """Train the network on the data provided by the input tensor.
         Args:
             data_iterable: Iterable object returning single pandas dataframes.
@@ -662,7 +682,7 @@ class TFSom:
         self._run_training(data, set_weights=True, label=label)
         return self
 
-    def transform(self, data, label="transform"):
+    def transform(self, data, label="transform") -> np.array:
         """Train data using given parameters from initial values transiently."""
         self._run_training(data, set_weights=False, label=label)
         return self._sess.run(self._weights)
@@ -674,88 +694,3 @@ class TFSom:
     def load(self, path: URLPath):
         """Load model from given path."""
         self._saver.restore(self._sess, str(path))
-
-    @property
-    def output_weights(self):
-        """
-        :return: The weights of the trained SOM as a NumPy array, or `None`
-                    if the SOM hasn't been trained
-        """
-        return np.array(self._sess.run(self._weights))
-
-    @property
-    def ref_weights(self):
-        return np.array(self._sess.run(self._ref_weights))
-
-    @property
-    def _prediction_input(self):
-        """Get the prediction input."""
-        return self.__prediction_input
-
-    @_prediction_input.setter
-    def _prediction_input(self, value):
-        self._sess.run(
-            self.__prediction_input.initializer, feed_dict={self._invar: value}
-        )
-
-    def map_to_nodes(self, data):
-        """Map data to the closest node in the map.
-        """
-        self._prediction_input = data
-        results = []
-        while True:
-            try:
-                res = self._sess.run(
-                    self._prediction_output
-                )
-                results.append(res)
-            except tf.errors.OutOfRangeError:
-                break
-        return np.concatenate(results)
-
-    def map_to_histogram_distribution(self, data, relative=True):
-        """Map input data to the distribution across the SOM map.
-        Either return absolute values for each node or relative distribution
-        across the dataset.
-
-        :param data: Pandas dataframe or np.matrix
-        :param relative: Output relative distribution instead of absolute.
-
-        :return: Array of m x n length, eg number of mapped events for each
-                    node.
-        """
-        self._prediction_input = data
-        results = np.zeros(self._m * self._n)
-        while True:
-            try:
-                res = self._sess.run(
-                    self._transform_output
-                )
-                results += res
-            except tf.errors.OutOfRangeError:
-                break
-
-        if relative:
-            results = results / np.sum(results)
-        return results
-
-    def distance_to_map(self, data):
-        """Return the summed loss of the current case."""
-        self._prediction_input = data
-
-        # run in batches to get the result
-        results = []
-        while True:
-            try:
-                res = self._sess.run(
-                    self._prediction_distance
-                )
-                results.append(res)
-            except tf.errors.OutOfRangeError:
-                break
-
-        distance = np.concatenate(results)
-
-        avg_distance = np.average(distance)
-        # median_distance = np.median(distance)
-        return avg_distance

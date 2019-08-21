@@ -25,7 +25,7 @@ def configure_print_logging(rootname="flowcat"):
     utils.add_logger(LOGGER, handlers, level=logging.DEBUG)
 
 
-def transform_cases(dataset, model, output, tubes=("1", "2", "3")):
+def transform_cases(dataset, model, output):
     """Create individidual SOMs for all cases in the dataset.
     Args:
         dataset: CaseIterable with a number of cases, for which SOMs should be
@@ -33,7 +33,6 @@ def transform_cases(dataset, model, output, tubes=("1", "2", "3")):
         model: Model with initial weights, which should be used for generation
                of SOMs.
         output: Output directory for SOMs
-        tubes: Which tubes, soms should be generated for.
 
     Returns:
         Nothing.
