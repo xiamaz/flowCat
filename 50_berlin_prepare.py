@@ -9,43 +9,52 @@ import json
 from datetime import datetime
 
 import flowcat
+from flowcat.dataset import case as fc_case, sample as fc_sample
+from flowcat.dataset.case_dataset import CaseCollection
+from flowcat.io_functions import save_case_collection
 from flowcat.utils import URLPath
 
 
 def convert_timestamp(timestamp: str) -> str:
     """Create datetime object from the given timestamp"""
-    return datetime.fromisoformat(timestamp).date().isoformat()
+    return datetime.fromisoformat(timestamp).date()
 
 
-def meta_to_filepath(metadata: dict, data_url: "URLPath", tube: str) -> dict:
+def meta_to_filepath(metadata: dict, data_url: "URLPath", tube: str, case_id: str) -> dict:
     """Create filepath dictionary."""
     fcs_path = data_url / f"c{metadata['id']}_t{tube}.lmd"
+    date = convert_timestamp(metadata["date"])
+    sample_id = f"{case_id}_t{tube}_{date.isoformat()}"
     filepath = {
-        "fcs": {
-            "path": fcs_path
-        },
-        "date": convert_timestamp(metadata["date"]),
+        "path": fcs_path,
+        "id": sample_id,
+        "case_id": case_id,
+        "date": date,
         "tube": tube,
-        "material": "KM",
         "panel": "B-NHL",
+        "material": flowcat.Material.PERIPHERAL_BLOOD,
     }
-    return filepath
+
+    sample = fc_sample.FCSSample(**filepath)
+    return sample
 
 
 def meta_to_case(metadata: dict, data_url: "URLPath") -> flowcat.dataset.case.Case:
     """Generate case objects from the given metadata dict."""
-    filepaths = [meta_to_filepath(metadata, data_url, str(tube)) for tube in metadata["tubes"]]
+    case_id = str(metadata["id"])
+    filepaths = [meta_to_filepath(metadata, data_url, str(tube), case_id) for tube in metadata["tubes"]]
 
     casedict = {
-        "id": str(metadata["id"]),
+        "id": case_id,
         "date": convert_timestamp(metadata["date"]),
-        "cohort": metadata["class"],
+        "group": metadata["class"],
         "diagnosis": metadata["diag_text"],
-        "filepaths": filepaths
+        "samples": filepaths
     }
 
-    case = flowcat.dataset.case.Case(data=casedict, path=data_url)
+    case = fc_case.Case(**casedict)
     case.set_fcs_info()
+    print(case)
     return case
 
 
@@ -60,24 +69,25 @@ print(metadata[0])
 
 data = [meta_to_case(meta, fcs_data_path) for meta in metadata]
 
-dataset = flowcat.CaseCollection(data, path=fcs_data_path)
+dataset = CaseCollection(data, data_path=fcs_data_path)
 
 outpath = flowcat.utils.URLPath("output/50-berlin-data/dataset")
-dataset.save(dataset_path / "casecollection")
+
+save_case_collection(dataset, dataset_path / "casecollection.json")
 
 # only use groups we already have for now
 group_dataset, reasons = dataset.filter_reasons(groups=flowcat.mappings.GROUPS)
-group_dataset.save(dataset_path / "valid_groups")
+save_case_collection(group_dataset, dataset_path / "valid_groups.json")
 
 invalid_labels = [l for l, _ in reasons]
 invalid_dataset, _ = dataset.filter_reasons(labels=invalid_labels)
-invalid_dataset.save(dataset_path / "invalid_groups")
+save_case_collection(invalid_dataset, dataset_path / "invalid_groups.json")
 
 selected = flowcat.marker_selection.get_selected_markers(
     group_dataset,
     ("1", "2", "3", "4"),
     marker_threshold=0.9)
-selected.save(outpath / "dataset" / "known_groups")
+save_case_collection(selected, outpath / "known_groups.json")
 
 selected_invalid, _ = invalid_dataset.filter_reasons(selected_markers=selected.selected_markers)
-selected_invalid.save(outpath / "dataset" / "unknown_groups")
+save_case_collection(selected_invalid, outpath / "unknown_groups.json")
