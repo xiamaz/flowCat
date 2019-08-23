@@ -1,7 +1,9 @@
 from __future__ import annotations
 from typing import Iterable, List, Generator, Dict, Union
 from flowcat.mappings import Material
-from flowcat.dataset import case, case_dataset, fcs
+
+from flowcat.dataset import case, case_dataset, fcs, sample
+
 from flowcat import utils
 from .base import SOMCollection, SOM, save_som
 from .fcssom import FCSSom
@@ -61,19 +63,19 @@ class CaseSingleSom:
         save_som(self.weights, path / "weights", subdirectory=True)
 
     def train(self, data: Iterable[case.Case], *args, **kwargs) -> CaseSingleSom:
-        tsamples = [c.get_tube(self.tube, materials=self.materials).data for c in data]
+        tsamples = [c.get_tube(self.tube, materials=self.materials).get_data() for c in data]
         self.model.train(tsamples)
         self.train_labels = [c.id for c in data]
         return self
 
-    def transform(self, data: case.Case, *args, **kwargs) -> SOM:
-        tsample = data.get_tube(self.tube, materials=self.materials)
-        if tsample is None:
+    def transform(self, data: case.Case, *args, **kwargs) -> sample.SOMSample:
+        fcs_sample = data.get_tube(self.tube, materials=self.materials)
+        if fcs_sample is None:
             raise CaseSomSampleException(data.id, self.tube, self.materials)
-        somdata = self.model.transform(tsample.data, label=data.id, *args, **kwargs)
+        somdata = self.model.transform(fcs_sample.get_data(), label=data.id, *args, **kwargs)
         somdata.cases = [data.id]
-        somdata.tube = tsample.tube
-        somdata.material = tsample.material
+        somdata.tube = fcs_sample.tube
+        somdata.material = fcs_sample.material
         return somdata
 
     def transform_generator(self, data: Iterable[case.Case], *args, **kwargs) -> Generator[SOM]:

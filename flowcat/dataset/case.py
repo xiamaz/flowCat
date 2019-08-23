@@ -7,13 +7,15 @@ from __future__ import annotations
 
 import logging
 import functools
+import datetime
+from dataclasses import dataclass, replace, field
 from typing import List, Dict, Union, Tuple
-from datetime import datetime
 
+from dataslots import with_slots
 import pandas as pd
 
-from .. import mappings, utils
-from . import fcs
+from flowcat import mappings, utils
+from . import sample
 
 
 LOGGER = logging.getLogger(__name__)
@@ -22,41 +24,9 @@ LOGGER = logging.getLogger(__name__)
 CASE_REQUIRED_FIELDS = "date", "id", "filepaths"
 
 
-def all_in(smaller, larger):
-    """Check that all items in the smaller iterable is in the larger iterable.
-    """
-    for item in smaller:
-        if item not in larger:
-            return False
-    return True
-
-
 def assert_in_dict(fields, data):
     for field in fields:
         assert field in data, f"{field} is required"
-
-
-def filter_tubesamples(
-        tubesamples: List[TubeSample],
-        tubes: List[int] = None,
-        materials: List[str] = None,
-        selected_markers: Dict[int, List[str]] = None,
-        counts: int = None,
-        **_
-) -> List[TubeSample]:
-    filtered = []
-    for tubesample in tubesamples:
-        if tubes and tubesample.tube not in tubes:
-            continue
-        if materials and tubesample.material not in materials:
-            continue
-        if counts and tubesample.count < counts:
-            continue
-        tube_markers = selected_markers.get(tubesample.tube) if selected_markers else None
-        if tube_markers and not tubesample.has_markers(tube_markers):
-            continue
-        filtered.append(tubesample)
-    return filtered
 
 
 def filter_case(
@@ -129,108 +99,68 @@ def filter_case(
     return not bool(reasons), reasons
 
 
+def caseinfo_to_case(caseinfo: dict, sample_path: utils.URLPath) -> Case:
+    # required keys
+    assert_in_dict(CASE_REQUIRED_FIELDS, caseinfo)
+    case_id = caseinfo["id"]
+    case_date = utils.str_to_date(caseinfo["date"])
+    samples = [
+        sample.sampleinfo_to_sample(sampleinfo, case_id, sample_path)
+        for sampleinfo in caseinfo["filepaths"]
+    ]
+
+    # optional keys
+    infiltration = caseinfo.get("infiltration", 0.0)
+    infiltration = float(infiltration.replace(",", ".") if isinstance(infiltration, str) else infiltration)
+    assert infiltration <= 100.0 and infiltration >= 0.0, "Infiltration out of range 0-100"
+    group = caseinfo.get("cohort", "")
+    diagnosis = caseinfo.get("diagnosis", "")
+    sureness = caseinfo.get("sureness", "")
+
+    case = Case(
+        id=case_id,
+        date=case_date,
+        samples=samples,
+        infiltration=infiltration,
+        group=group,
+        diagnosis=diagnosis,
+        sureness=sureness,
+    )
+    return case
+
+
+def case_to_caseinfo(case: Case, base_path: utils.URLPath) -> dict:
+    """Create caseinfo dict from a case object."""
+    return {
+        "id": case.id,
+        "date": case.date.isoformat(),
+        "filepaths": [
+            sample.sample_to_sampleinfo(s, base_path) for s in case.samples
+        ],
+        "cohort": case.group,
+        "infiltration": case.infiltration,
+        "diagnosis": case.diagnosis,
+        "sureness": case.sureness,
+    }
+
+
+@with_slots
+@dataclass
 class Case:
     """Basic case object containing all metadata for a case."""
-    __slots__ = (
-        "_json",
-        "path",
-        "_filepaths",
-        "used_material",
-        "date",
-        "infiltration",
-        "diagnosis",
-        "sureness",
-        "group",
-        "id",
-    )
-
-    def __init__(self, data: Union[Case, dict], path: utils.URLPath = None):
-        """
-        Args:
-            data: Contains all metainformation, either a dictionary or
-                a case object.
-            path: Path prefix used for loading any data.
-        Returns:
-            New case object.
-        """
-        self._filepaths = None
-        self.used_material = None
-
-        if isinstance(data, self.__class__):
-            self._json = data.raw.copy()
-            self.path = path if path else data.path
-
-            self.id = data.id
-            self.date = data.date
-            self.filepaths = data.filepaths
-
-            self.infiltration = data.infiltration
-            self.group = data.group
-            self.sureness = data.sureness
-            self.diagnosis = data.diagnosis
-        elif isinstance(data, dict):
-            self._json = data
-            self.path = path
-
-            # required keys
-            assert_in_dict(CASE_REQUIRED_FIELDS, data)
-            self.id = data["id"]
-            self.date = utils.str_to_date(data["date"])
-            self.filepaths = data["filepaths"]
-
-            # optional keys
-            infiltration = data.get("infiltration", 0.0)
-            self.infiltration = float(
-                infiltration.replace(",", ".") if isinstance(infiltration, str) else infiltration)
-            assert self.infiltration <= 100.0 and self.infiltration >= 0.0, "Infiltration out of range 0-100"
-            self.group = data.get("cohort", "")
-            self.diagnosis = data.get("diagnosis", "")
-            self.sureness = data.get("sureness", "")
-        else:
-            raise TypeError("data needs to be either another Case or a dict")
-
-    @property
-    def json(self):
-        """Get dict representation of data usable for saving to json."""
-        cdict = {
-            "id": self.id,
-            "date": self.date.isoformat(),
-            "filepaths": [p.json for p in self.filepaths],
-            "cohort": self.group,
-            "infiltration": self.infiltration,
-            "diagnosis": self.diagnosis,
-            "sureness": self.sureness,
-        }
-        return cdict
-
-    @property
-    def raw(self):
-        """Return raw input dictionary."""
-        return self._json
-
-    @property
-    def filepaths(self):
-        """Get a list of filepaths."""
-        return self._filepaths
-
-    @filepaths.setter
-    def filepaths(self, value: list):
-        """Set filepaths and clear all generated dicts on data.
-        Args:
-            value: List of dictionaries with information to create case paths
-            or case paths.
-        """
-        self._filepaths = [TubeSample(v, self) for v in value]
+    id: str
+    used_material: mappings.Material = None
+    date: datetime.date = None
+    infiltration: float = None
+    diagnosis: str = None
+    sureness: str = None
+    group: str = None
+    samples: List[sample.Sample] = field(default_factory=list)
 
     def set_fcs_info(self):
         """Load fcs information for all available samples from fcs files."""
-        for sample in self.filepaths:
-            sample.set_fcs_info()
-
-    def set_markers(self):
-        for fp in self.filepaths:
-            fp.load()
-            fp.set_markers()
+        for case_sample in self.samples:
+            case_sample.set_fcs_info()
 
     def get_markers(self, tubes):
         """Return a dictionary of markers."""
@@ -242,7 +172,7 @@ class Case:
             return []
         return tube.markers
 
-    def get_tube(self, tube: str, min_count: int = 0, materials: List[mappings.Material] = None) -> TubeSample:
+    def get_tube(self, tube: str, min_count: int = 0, materials: List[mappings.Material] = None) -> sample.Sample:
         """Get the TubePath fulfilling the given requirements, return the
         last on the list if multiple are available.
         Args:
@@ -256,7 +186,7 @@ class Case:
             materials = [self.used_material]
 
         tubecases = [
-            p for p in self.filepaths
+            p for p in self.samples
             if p.tube == tube and (
                 (not materials) or (p.material in materials)
             ) and (
@@ -272,7 +202,7 @@ class Case:
             List of possible materials.
         """
         materials = [
-            set(f.material for f in self.filepaths
+            set(f.material for f in self.samples
                 if f.tube == t) for t in tubes
         ]
 
@@ -318,7 +248,7 @@ class Case:
             True if the required tubes are available.
         """
         wanted_tubes = set(tubes)
-        available_tubes = set(f.tube for f in self.filepaths)
+        available_tubes = set(f.tube for f in self.samples)
         # check if all wanted tubes are inside available tubes using set ops
         return wanted_tubes <= available_tubes
 
@@ -333,113 +263,9 @@ class Case:
             joined = joined[[c for c in joined.columns if "nix" not in c]]
         return joined
 
-    def copy(self):
-        return self.__class__(self)
+    def copy(self, **replaced):
+        """Copy the object and replace the given arguments."""
+        return replace(self, **replaced)
 
     def __repr__(self):
-        return f"<Case {self.id}| G{self.group} {self.date} {len(self.filepaths)} files>"
-
-
-class TubeSample:
-    """FCS sample metadata wrapper."""
-    __slots__ = (
-        "_json",
-        "_data",
-        "count",
-        "date",
-        "path",
-        "markers",
-        "material",
-        "parent",
-        "panel",
-        "tube",
-    )
-
-    """Single sample from a certain tube."""
-    def __init__(self, data, parent):
-        self._data = None
-        if isinstance(data, self.__class__):
-            self._json = data.raw
-            self.path = data.path
-
-            self.tube = data.tube
-            self.material = data.material
-            self.panel = data.panel
-            self.markers = data.markers.copy() if data.markers is not None else None
-            self.count = data.count
-            self.date = data.date
-        else:
-            self._json = data
-            assert "fcs" in data and "path" in data["fcs"], "Path to data is missing"
-            assert "date" in data, "Date is missing"
-            self.path = utils.URLPath(data["fcs"]["path"])
-            self.date = utils.str_to_date(data["date"])
-
-            self.tube = str(data.get("tube", "0"))
-            self.material = mappings.Material.from_str(data.get("material", ""))
-            self.panel = data.get("panel", "")
-
-            self.markers = data["fcs"].get("markers", None)
-            self.count = int(data["fcs"].get("event_count", 0)) or None
-
-        self.parent = parent
-
-    @property
-    def raw(self):
-        return self._json
-
-    @property
-    def json(self):
-        return {
-            "id": self.parent.id,
-            "panel": self.panel,
-            "tube": self.tube,
-            "date": self.date.isoformat(),
-            "material": self.raw["material"],
-            "fcs": {
-                "path": str(self.path),
-                "markers": self.markers,
-                "event_count": self.count,
-            }
-        }
-
-    @property
-    def data(self) -> fcs.FCSData:
-        """FCS data. Do not save the fcs data in the case, since
-        it would be too large."""
-        if self._data is not None:
-            return self._data
-        return self.get_data()
-
-    def get_data(self):
-        """
-        Args:
-            normalized: Normalize data to mean and standard deviation.
-            scaled: Scale data between 0 and 1.
-        Returns:
-            Dataframe with fcs data.
-        """
-        path = self.parent.path / self.path
-        data = fcs.FCSData(path)
-        return data
-
-    def load(self):
-        """Load data into slot."""
-        self._data = self.get_data()
-        return self._data
-
-    def clear(self):
-        """Clear data from slot."""
-        self._data = None
-
-    def set_fcs_info(self):
-        data = self.data
-        self.markers = list(data.channels)
-        self.count = data.shape[0]
-
-    def has_markers(self, markers: list) -> bool:
-        """Return whether given list of markers are fulfilled."""
-        return all_in(markers, self.markers)
-
-    def __repr__(self):
-        return f"<Sample {self.material}| T{self.tube} D{self.date} {self.count} events>"
+        return f"<Case {self.id}| G{self.group} {self.date} {len(self.samples)} files>"

@@ -8,7 +8,6 @@ import pandas as pd
 import tensorflow as tf
 
 from flowcat.dataset.fcs import FCSData, join_fcs_data
-from flowcat.dataset.case import TubeSample
 from flowcat.utils import load_json, save_json, URLPath, save_joblib, load_joblib
 from flowcat.preprocessing import scalers
 from .base import SOM
@@ -276,6 +275,5 @@ class FCSSom:
             sample: int = -1) -> Generator[SOM]:
         """Transform multiple samples."""
         for single in data:
-            if isinstance(single, TubeSample):
-                single = single.data
+            single = single.data
             yield self.transform(single, sample=sample)

@@ -6,6 +6,7 @@ CLI Interface components.
 from argparse import ArgumentParser, Namespace
 from flowcat.utils import URLPath
 from flowcat import CaseCollection
+from flowcat.dataset import case_dataset
 
 
 def add_dataset_args(parser: ArgumentParser) -> ArgumentParser:
@@ -37,5 +38,5 @@ def add_dataset_args(parser: ArgumentParser) -> ArgumentParser:
 
 
 def get_dataset(args: Namespace) -> CaseCollection:
-    cases = CaseCollection.load(args.input, args.meta)
+    cases = case_dataset.load_case_collection_from_caseinfo(args.input, args.meta)
     return cases

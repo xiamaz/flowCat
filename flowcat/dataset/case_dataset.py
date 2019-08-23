@@ -2,91 +2,67 @@
 Classes for managing collections of case and tubecase objects.
 """
 from __future__ import annotations
+
 import random
 import logging
 import collections
-from typing import Union, List, Tuple
+from dataclasses import dataclass, field
+from typing import List, Tuple
 
+from dataslots import with_slots
 import pandas as pd
 from sklearn import model_selection
 
-from .case import Case, filter_case, filter_tubesamples
-from .. import mappings, utils
-from ..utils import load_json, URLPath
+from flowcat import mappings, utils
+
+from . import case as fc_case
+from . import sample as fc_sample
 
 
 LOGGER = logging.getLogger(__name__)
 
 
-class NoTubeSelectedError(Exception):
+class DatasetError(Exception):
     pass
 
 
-class IterableMixin:
-    """Implement iterable stuff but needs to have the data attribute."""
-    def __getitem__(self, key):
-        return self.data[key]
+def load_case_collection_from_caseinfo(data_path: utils.URLPath, meta_path: utils.URLPath) -> CaseCollection:
+    """Load case collection from caseinfo json, as used in the MLL dataset."""
+    metadata = utils.load_json(meta_path + ".json")
+    try:
+        metaconfig = utils.load_json(meta_path + "_config.json")
+    except FileNotFoundError:
+        metaconfig = {}
+    data = [fc_case.caseinfo_to_case(d, data_path) for d in metadata]
 
-    def __len__(self):
-        return len(self.data)
+    metaconfig["data_path"] = data_path
+    metaconfig["meta_path"] = meta_path
 
-    def __iter__(self):
-        self._current = 0
-        return self
-
-    def __next__(self):
-        if self._current >= len(self):
-            raise StopIteration
-        else:
-            self._current += 1
-            return self[self._current - 1]
+    return CaseCollection(data, **metaconfig)
 
 
-class CaseIterable(IterableMixin):
+def save_case_collection_to_caseinfo(cases: CaseCollection, destination: utils.URLPath):
+    """Save the metainformation to the given destination."""
+    config_path = destination + "_config.json"
+    utils.save_json(cases.config, config_path)
+    data_path = destination + ".json"
+
+    caseinfo = [fc_case.case_to_caseinfo(case, cases.data_path) for case in cases]
+    utils.save_json(caseinfo, data_path)
+
+
+@with_slots
+@dataclass
+class CaseCollection:
     """Iterable collection for cases. Base class."""
 
-    def __init__(
-            self,
-            data: Union[CaseIterable, List[Case]],
-            selected_markers=None,
-            selected_tubes=None,
-            filterconfig: Union[tuple, list] = ()
-    ):
-        """
-        Args:
-            data: Case iterable or a list of cases
-            selected_markers: Dictionary of tubes to list of marker channels.
-            selected_tubes: List of tube numbers.
-            filterconfig: List of dicts containing previous kwargs used in filtering Cases
-        """
-        self._current = None
-        self._data = []
-        self.filterconfig = filterconfig
+    cases: List[fc_case.Case]
+    data_path: utils.URLPath
+    meta_path: utils.URLPath
 
-        if isinstance(data, CaseIterable):
-            self.data = data.data
-            # use metainformation if they are given
-            if selected_markers is None:
-                selected_markers = data.selected_markers
-            if selected_tubes is None:
-                selected_tubes = data.selected_tubes
-        elif isinstance(data, list):
-            self.data = data
-        else:
-            raise ValueError(f"Cannot initialize from {type(data)}")
-
-        self.selected_markers = selected_markers
-        self.selected_tubes = selected_tubes
-
-    @property
-    def data(self) -> list:
-        return self._data
-
-    @data.setter
-    def data(self, value: list):
-        self._data = value
-        # reset all cached computed objects
-        self._current = None
+    selected_markers: dict = None
+    selected_tubes: List[str] = None
+    filterconfig: list = field(default_factory=list)
 
     @property
     def tubes(self):
@@ -95,25 +71,20 @@ class CaseIterable(IterableMixin):
             A sorted list of tubes as int values.
         """
         return sorted(list(set(
-            [int(f.tube) for d in self.data for f in d.filepaths])))
+            [s.tube for case in self.cases for s in case.samples])))
 
     @property
     def group_count(self):
         """Get number of cases per group in case colleciton."""
-        return collections.Counter(c.group for c in self)
+        return collections.Counter(c.group for c in self.cases)
 
     @property
     def groups(self):
-        return [c.group for c in self]
+        return [c.group for c in self.cases]
 
     @property
     def labels(self):
-        return [c.id for c in self]
-
-    @property
-    def json(self):
-        """Return dict represendation of content."""
-        return [c.json for c in self]
+        return [c.id for c in self.cases]
 
     @property
     def config(self):
@@ -121,6 +92,8 @@ class CaseIterable(IterableMixin):
             "selected_markers": self.selected_markers,
             "selected_tubes": self.selected_tubes,
             "filterconfig": self.filterconfig,
+            "meta_path": self.meta_path,
+            "data_path": self.data_path,
         }
 
     @property
@@ -131,16 +104,6 @@ class CaseIterable(IterableMixin):
         index = pd.MultiIndex.from_tuples(list(zip(self.labels, self.groups)), names=["label", "group"])
         return pd.DataFrame(1, index=index, columns=["count"])
 
-    def save(self, path: URLPath):
-        """Save the given dataset metadata to the given path.
-
-        Files will be saved with <path>.json and <path>_config.json name.
-        """
-        config_path = path + "_config.json"
-        utils.save_json(self.config, config_path)
-        data_path = path + ".json"
-        utils.save_json(self.json, data_path)
-
     def add_filter_step(self, step: dict):
         self.filterconfig = [*self.filterconfig, step]
 
@@ -150,7 +113,7 @@ class CaseIterable(IterableMixin):
         return {l: [0] for l in labels}
 
     def copy(self):
-        data = [d.copy() for d in self.data]
+        data = [d.copy() for d in self.cases]
         return self.__class__(
             data, selected_tubes=self.selected_tubes,
             selected_markers=self.selected_markers)
@@ -190,14 +153,14 @@ class CaseIterable(IterableMixin):
         }
         return paths
 
-    def sample(self, count: int, groups: List[str] = None) -> CaseIterable:
+    def sample(self, count: int, groups: List[str] = None) -> CaseCollection:
         """Select a sample from each group.
         Params:
             count: Number of cases in a single group.
             groups: Optionally limit to given groups.
         """
         group_labels = collections.defaultdict(list)
-        for case in self.data:
+        for case in self.cases:
             group_labels[case.group].append(case.id)
         if groups is None:
             groups = group_labels.keys()
@@ -211,7 +174,7 @@ class CaseIterable(IterableMixin):
         filtered, _ = self.filter_reasons(labels=labels)
         return filtered
 
-    def filter_reasons(self, **kwargs) -> Tuple[CaseIterable, list]:
+    def filter_reasons(self, **kwargs) -> Tuple[CaseCollection, list]:
         """Filter dataset on given arguments. These are specified in
         case.filter_case.
 
@@ -221,10 +184,10 @@ class CaseIterable(IterableMixin):
         data = []
         failed = []
         for case in self:
-            success, reasons = filter_case(case, **kwargs)
+            success, reasons = fc_case.filter_case(case, **kwargs)
             if success:
                 ccase = case.copy()
-                ccase.filepaths = filter_tubesamples(ccase.filepaths, **kwargs)
+                ccase.samples = fc_sample.filter_samples(ccase.samples, **kwargs)
                 data.append(ccase)
             else:
                 failed.append((case.id, reasons))
@@ -232,71 +195,18 @@ class CaseIterable(IterableMixin):
         filtered.add_filter_step(kwargs)
         return filtered, failed
 
-    def __repr__(self):
-        return f"<{self.__class__.__name__} {len(self)} cases>"
-
-
-class CaseCollection(CaseIterable):
-    """Get case information from info file and remove errors and provide
-    overview information."""
-
-    def __init__(self, *args, path: URLPath = "", metapath: URLPath = "", **kwargs):
-        """Initialize with given data.
-
-        Use CaseCollection.load to load from a directory on disk.
-        """
-        try:
-            super().__init__(*args, **kwargs)
-        except ValueError:
-            raise ValueError(f"Paths to directories should be instantiated with {self.__class__.__name__}.from_path")
-        self.path = utils.URLPath(path)
-        self.metapath = utils.URLPath(metapath)
-
-    @classmethod
-    def load(cls, inputpath: URLPath, metapath: URLPath, **kwargs):
-        """
-        Initialize on datadir with info json.
-        Args:
-            inputpath: Input directory containing cohorts and a info file.
-        """
-        metadata = load_json(metapath + ".json")
-        try:
-            metaconfig = load_json(metapath + "_config.json")
-        except FileNotFoundError:
-            metaconfig = {}
-        data = [Case(d, path=inputpath) for d in metadata]
-
-        return cls(data, path=inputpath, metapath=metapath, **{**metaconfig, **kwargs})
-
-    def get_tube(self, tube: int) -> "TubeView":
-        if self.selected_markers is None:
-            raise NoTubeSelectedError
-        return TubeView(
-            [
-                d.get_tube(tube) for d in self
-            ],
-            markers=self.selected_markers[tube],
-            tube=tube,
-        )
-
-    def download_all(self):
-        """Download selected tubes for cases into the download folder
-        location."""
-        if self.selected_markers is None:
-            raise NoTubeSelectedError
-        for case in self:
-            for tube in self.selected_tubes:
-                # touch the data to load it
-                print("Loaded df with shape: ", case.get_tube(tube).data.shape)
+    def filter(self, **kwargs) -> CaseCollection:
+        filtered, _ = self.filter_reasons(**kwargs)
+        return filtered
 
     def create_split(self, num, stratify=True):
         """Split the data into two groups."""
         if stratify:
-            labels = [d.group for d in self.data]
+            labels = [d.group for d in self.cases]
         else:
             labels = None
         train, test = model_selection.train_test_split(
-            self.data, test_size=num, stratify=labels)
+            self.cases, test_size=num, stratify=labels)
         return (
             self.__class__(
                 train,
@@ -308,60 +218,11 @@ class CaseCollection(CaseIterable):
                 selected_tubes=self.selected_tubes),
         )
 
-
-class TubeView(IterableMixin):
-    """List containing CasePath."""
-    def __init__(self, data, markers, tube):
-        assert None not in data, "None contained in passed list"
-        self.markers = markers
-        self.tube = tube
-        self._data = data
-        self._materials = None
-        self._current = None
-        self._labels = None
-        self._groups = None
-
-    @property
-    def data(self):
-        return self._data
-
-    @property
-    def materials(self):
-        if self._materials is None:
-            self._materials = [d.material for d in self]
-
-        return self._materials
-
-    @property
-    def labels(self):
-        if self._labels is None:
-            self._labels = [d.parent.id for d in self]
-        return self._labels
-
-    @property
-    def groups(self):
-        if self._groups is None:
-            self._groups = [d.parent.group for d in self]
-        return self._groups
-
-    @property
-    def marker_ratios(self):
-        """Get a list of markers and their presence ratio in the current
-        dataset."""
-        marker_counts = collections.Counter(
-            [m for c in self.data for m in c.markers])
-        ratios = pd.Series({m: k / len(self) for m, k in marker_counts.items()})
-        return ratios
-
-    def export_results(self):
-        """Export histogram results to pandas dataframe."""
-        hists = [d.dict for d in self.data if d.result_success]
-        failures = [d.fail_dict for d in self.data if not d.result_success]
-
-        return (
-            pd.DataFrame.from_records(hists),
-            pd.DataFrame.from_records(failures)
-        )
-
     def __repr__(self):
         return f"<{self.__class__.__name__} {len(self)} cases>"
+
+    def __iter__(self):
+        return iter(self.cases)
+
+    def __len__(self):
+        return len(self.cases)

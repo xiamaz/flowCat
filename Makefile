@@ -24,6 +24,14 @@ dataset:
 	echo "Executing 01b"
 	./00b_select_ref_cases.py $(TRAINDATA) --sample 1 --groups $(GROUPS) --infiltration 40,None $(REFERENCE_DATA)
 
+.PHONY: %.dsa
+%.dsa:
+	./00a_dataset_prepare.py $(ALLDATA) $(OUTDIR)/$*
+
+.PHONY: %.dsb
+%.dsb:
+	./00b_select_ref_cases.py $(TRAINDATA) --sample 1 --groups $(GROUPS) --infiltration 40,None $(OUTDIR)/$*
+
 .PHONY: reference
 .ONESHELL:
 reference: reference.ref

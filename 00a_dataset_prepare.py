@@ -11,6 +11,7 @@ from argparse import ArgumentParser
 import collections
 
 import flowcat
+from flowcat.dataset import case_dataset
 
 
 @contextlib.contextmanager
@@ -161,10 +162,10 @@ def preprocess_cases(cases: flowcat.CaseCollection, tubes=("1", "2", "3")):
         print("Reasons are", ", ".join(f"{k}: {v}" for k, v in reason_count.items()))
         cases = all_cases
 
-    with block("Filter filepaths"):
+    with block("Filter FCS samples"):
         for case in cases:
             case.set_allowed_material(tubes)
-            case.filepaths = [case.get_tube(tube) for tube in tubes]
+            case.samples = [case.get_tube(tube) for tube in tubes]
 
     with block("Filter train"):
         train_cases, _ = cases.filter_reasons(date=(None, "2018-06-30"))
@@ -196,8 +197,8 @@ def preprocess_cases(cases: flowcat.CaseCollection, tubes=("1", "2", "3")):
 def main(args):
     cases = flowcat.parser.get_dataset(args)
     train, test = preprocess_cases(cases)
-    train.save(args.output / "train")
-    test.save(args.output / "test")
+    case_dataset.save_case_collection_to_caseinfo(train, args.output / "train")
+    case_dataset.save_case_collection_to_caseinfo(test, args.output / "test")
 
 
 if __name__ == "__main__":

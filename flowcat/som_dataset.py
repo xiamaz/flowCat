@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
+from dataslots import with_slots
 from typing import List, Tuple
 
 import numpy as np
@@ -11,6 +12,7 @@ from flowcat import utils
 from flowcat.som.base import load_som, SOMCollection, SOM
 
 
+@with_slots
 @dataclass
 class SOMCase:
     """Wrapper for SOM data, associating it with additional classification
@@ -33,11 +35,12 @@ def load_som_cases(row, path, tubes):
     return SOMCase(som=som, group=row["group"], label=row["label"])
 
 
+@with_slots
 @dataclass
 class SOMDataset:
     """Simple wrapper for reading dataset metadata."""
 
-    data: pd.DataFrame
+    data: pd.Series  # [SOMCase]
     tubes: List[int]
     dims: Tuple[int]
     channels: List[str]

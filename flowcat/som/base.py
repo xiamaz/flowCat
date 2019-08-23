@@ -6,6 +6,7 @@ import re
 import logging
 from dataclasses import dataclass, field
 
+from dataslots import with_slots
 import numpy as np
 import pandas as pd
 
@@ -15,6 +16,7 @@ from flowcat import utils, configuration, mappings
 LOGGER = logging.getLogger(__name__)
 
 
+@with_slots
 @dataclass
 class SOM:
     """Holds self organizing map data with associated metadata."""
@@ -26,11 +28,15 @@ class SOM:
     transforms: List[dict] = field(default_factory=list)
 
     @classmethod
-    def from_path(cls, data_path, config_path, **kwargs):
+    def from_path(cls, data_path, config_path=None, **kwargs):
         data = utils.load_csv(data_path)
-        try:
-            config = utils.load_json(config_path)
-        except FileNotFoundError:
+
+        if config:
+            try:
+                config = utils.load_json(config_path)
+            except FileNotFoundError:
+                config = {}
+        else:
             config = {}
 
         kwargs = {**config, **kwargs}
