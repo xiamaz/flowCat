@@ -7,14 +7,13 @@ calling Sample.get_fcs().
 # flake8: noqa
 from __future__ import annotations
 
-from typing import List
-from dataclasses import dataclass, replace
+from typing import List, Tuple, Union
+from dataclasses import dataclass, replace, field, asdict
 
 from dataslots import with_slots
 
 from flowcat import mappings, utils
-from flowcat.som import base
-from . import fcs
+from . import fcs, som
 
 
 def _all_in(smaller, larger):
@@ -49,7 +48,7 @@ def filter_samples(
     return filtered
 
 
-def sampleinfo_to_sample(sample_info: dict, sample_id: str, path: utils.URLPath) -> Sample:
+def sampleinfo_to_sample(sample_info: dict, case_id: str, path: utils.URLPath) -> Sample:
     """Create a tube sample from sample info dict."""
     assert "fcs" in sample_info and "path" in sample_info["fcs"], "Path to sample_info is missing"
     assert "date" in sample_info, "Date is missing"
@@ -63,8 +62,11 @@ def sampleinfo_to_sample(sample_info: dict, sample_id: str, path: utils.URLPath)
     markers = sample_info["fcs"].get("markers", None)
     count = int(sample_info["fcs"].get("event_count", 0)) or None
 
+    sample_id = f"{case_id}_t{tube}_{material.name}_{sample_info['date']}"
+
     sample = FCSSample(
         id=sample_id,
+        case_id=case_id,
         path=path,
         date=date,
         tube=tube,
@@ -75,20 +77,55 @@ def sampleinfo_to_sample(sample_info: dict, sample_id: str, path: utils.URLPath)
     return sample
 
 
-def sample_to_sampleinfo(sample: FCSSample, parent_path: utils.URLPath) -> dict:
-    """Generate caseinfo from tubesample object."""
-    return {
-        "id": sample.id,
-        "panel": sample.panel,
-        "tube": sample.tube,
-        "date": sample.date.isoformat(),
-        "material": sample.material.name,
-        "fcs": {
-            "path": str(sample.path.relative_to(parent_path)),
-            "markers": sample.markers,
-            "event_count": sample.count,
-        }
-    }
+def sample_to_json(sample: Sample) -> dict:
+    if isinstance(sample, FCSSample):
+        return {"__fcssample__": fcssample_to_json(sample)}
+    elif isinstance(sample, SOMSample):
+        return {"__somsample__": somsample_to_json(sample)}
+
+
+def fcssample_to_json(sample: FCSSample) -> dict:
+    sdict = asdict(sample)
+    sdict["date"] = sample.date.isoformat()
+    sdict["path"] = str(sample.path)
+    if sample.material:
+        sdict["material"] = sample.material.name
+    else:
+        sdict["material"] = ""
+    return sdict
+
+
+def somsample_to_json(sample: SOMSample) -> dict:
+    sdict = asdict(sample)
+    sdict["date"] = sample.date.isoformat()
+    sdict["path"] = str(sample.path)
+    return sdict
+
+
+def json_to_sample(samplejson: dict) -> Sample:
+    if "__fcssample__" in samplejson:
+        return json_to_fcssample(samplejson["__fcssample__"])
+    elif "__somsample__" in samplejson:
+        return json_to_somsample(samplejson["__somsample__"])
+    else:
+        raise NotImplementedError("Unknown sample type")
+
+
+def json_to_fcssample(samplejson: dict) -> FCSSample:
+    samplejson["date"] = utils.str_to_date(samplejson["date"])
+    samplejson["path"] = utils.URLPath(samplejson["path"])
+    if samplejson["material"]:
+        samplejson["material"] = mappings.Material[samplejson["material"]]
+    else:
+        samplejson["material"] = None
+    return FCSSample(**samplejson)
+
+
+def json_to_somsample(samplejson: dict) -> SOMSample:
+    samplejson["date"] = utils.str_to_date(samplejson["date"])
+    samplejson["path"] = utils.URLPath(samplejson["path"])
+    samplejson["dims"] = tuple(samplejson["dims"])
+    return SOMSample(**samplejson)
 
 
 @with_slots
@@ -96,13 +133,11 @@ def sample_to_sampleinfo(sample: FCSSample, parent_path: utils.URLPath) -> dict:
 class Sample:
     """Single sample from a certain tube."""
     id: str
+    case_id: str
     date: date
     tube: str
-    path: utils.URLPath
-    panel: str = None
-    markers: List[str] = None
-    material: mappings.Material = None
-    count: int = None
+    path: utils.URLPath = None
+    markers: List[str] = field(default_factory=list)
 
     def has_markers(self, markers: list) -> bool:
         """Return whether given list of markers are fulfilled."""
@@ -118,6 +153,9 @@ class Sample:
 @with_slots
 @dataclass
 class FCSSample(Sample):
+    panel: str = None
+    count: int = None
+    material: mappings.Material = None
 
     def get_data(self) -> fcs.FCSData:
         """
@@ -139,27 +177,10 @@ class FCSSample(Sample):
 @with_slots
 @dataclass
 class SOMSample(Sample):
-    data: base.SOM = None
+    original_id: Union[str, tuple] = None  # sample id of original fcs used to build som
+    dims: Tuple[int, int, int] = None
 
-    def set_data(self, data: base.SOM):
-        """Set the given data, also add metadata here to SOM."""
-        if data.material is None:
-            data.material = self.material
-        else:
-            if data.material != self.material:
-                raise ValueError(f"{data} mismatch with {self}")
-        if data.tube is None:
-            data.tube = self.tube
-        else:
-            if data.tube != self.tube:
-                raise ValueError(f"{data} mismatch with {self}")
-        if not data.cases:
-            data.cases = [self.id]
-            if len(data.cases) != 1 or data.cases[0] != self.id:
-                raise ValueError(f"{data} mismatch with {self}")
-        self.data = data
-
-    def get_data(self) -> base.SOM:
+    def get_data(self) -> som.SOM:
         """
         Args:
             normalized: Normalize data to mean and standard deviation.
@@ -167,7 +188,7 @@ class SOMSample(Sample):
         Returns:
             Dataframe with fcs data.
         """
-        data = base.SOM.from_path(self.path)
+        data = som.SOM.from_path(self.path)
         data.material = self.material
         data.tube = self.tube
         data.cases = [self.id]

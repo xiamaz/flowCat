@@ -5,7 +5,7 @@ import os
 import logging
 import argparse
 
-from flowcat import utils, classify, configuration
+from flowcat import utils, classify, configuration, io_functions
 from flowcat.dataset import case_dataset
 
 
@@ -57,7 +57,7 @@ def run(args):
 
     casepath = args.cases
     labelpath = args.labels
-    labels = utils.load_labels(labelpath)
+    labels = io_functions.load_json(labelpath)
     LOGGER.info("Loading %d labels in %s", len(labels), labelpath)
     path = utils.get_path(casepath, args.pathconfig("input", "FCS"))
     LOGGER.info("Loading cases in %s", casepath)

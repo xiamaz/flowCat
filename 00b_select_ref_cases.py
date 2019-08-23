@@ -10,6 +10,8 @@ import math
 from argparse import ArgumentParser
 
 import flowcat
+from flowcat import io_functions
+from flowcat.dataset.case_dataset import CaseCollection
 
 
 def function_arg_descs(fun) -> dict:
@@ -98,7 +100,7 @@ def add_filter_args(parser):
     return parser
 
 
-def print_cases(dataset: flowcat.CaseCollection):
+def print_cases(dataset: CaseCollection):
     """Print cases in a table."""
     print(f"{'Label':<40}\t{'Group':<6}\t{'Infiltration':<4}")
     for case in dataset:
@@ -107,7 +109,10 @@ def print_cases(dataset: flowcat.CaseCollection):
 
 PARSER = ArgumentParser(
     usage="Output a list of case ids based on the parameters")
-flowcat.parser.add_dataset_args(PARSER)
+PARSER.add_argument(
+    "--data", type=flowcat.utils.URLPath)
+PARSER.add_argument(
+    "--meta", type=flowcat.utils.URLPath)
 PARSER.add_argument(
     "--sample", type=int, help="Stratified sample of cases.")
 filter_args = PARSER.add_argument_group("Filter arguments")
@@ -120,7 +125,8 @@ PARSER.add_argument(
 
 args = PARSER.parse_args()
 
-cases = flowcat.parser.get_dataset(args)
+cases = io_functions.load_case_collection(args.data, args.meta)
+print(cases)
 
 input_args = {n: getattr(args, n) for n in filter_signature()}
 filtered, _ = cases.filter_reasons(**input_args)
@@ -131,4 +137,4 @@ print("Found cases", filtered)
 print_cases(filtered)
 
 found_ids = filtered.labels
-flowcat.utils.save_json(found_ids, args.output)
+flowcat.io_functions.save_json(found_ids, args.output)

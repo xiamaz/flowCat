@@ -8,9 +8,9 @@ import pandas as pd
 import tensorflow as tf
 
 from flowcat.dataset.fcs import FCSData, join_fcs_data
-from flowcat.utils import load_json, save_json, URLPath, save_joblib, load_joblib
+from flowcat.dataset.som import SOM
+from flowcat.utils import URLPath
 from flowcat.preprocessing import scalers
-from .base import SOM
 from .tfsom import create_initializer, TFSom
 
 
@@ -132,23 +132,6 @@ class FCSSom:
                 self.scaler = scaler
             else:
                 raise InvalidScaler(scaler)
-
-    @classmethod
-    def load(cls, path: Union[str, URLPath], **kwargs):
-        path = URLPath(path)
-        scaler = load_joblib(path / "scaler.joblib")
-        config = load_json(path / "config.json")
-        obj = cls(
-            dims=config["dims"],
-            scaler=scaler,
-            name=config["name"],
-            markers=config["markers"],
-            marker_name_only=config["marker_name_only"],
-            **{**config["modelargs"]["kwargs"], **kwargs},
-        )
-        obj.model.load(path / "model.ckpt")
-        obj.trained = True
-        return obj
 
     @property
     def config(self):

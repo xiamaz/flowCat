@@ -17,7 +17,7 @@ def str_to_date(strdate: str) -> datetime.date:
     return datetime.datetime.strptime(strdate, "%Y-%m-%d").date()
 
 
-def create_stamp() -> datetime.datetime:
+def create_stamp() -> str:
     """Create timestamp usable for filepaths"""
     stamp = datetime.datetime.now()
     return stamp.strftime(TIMESTAMP_FORMAT)

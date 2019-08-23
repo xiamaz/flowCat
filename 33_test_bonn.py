@@ -8,7 +8,7 @@ from keras import models
 
 
 def load_model(path):
-    binarizer = flowcat.utils.load_joblib(path / "binarizer.joblib")
+    binarizer = flowcat.io_functions.load_joblib(path / "binarizer.joblib")
     model = models.load_model(str(path / "model.h5"))
     return binarizer, model
 

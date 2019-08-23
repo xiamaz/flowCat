@@ -7,7 +7,7 @@ import argparse
 import logging
 
 import flowcat
-from flowcat import utils, som
+from flowcat import utils, sommodels, io_functions
 from flowcat.dataset.fcs import extract_name
 
 
@@ -27,7 +27,7 @@ def configure_print_logging(rootname="flowcat"):
 def train_model(dataset, markers=None, tensorboard=None, marker_name_only=False):
     """Create and train a SOM model using the given dataset."""
     if markers:
-        selected_markers = utils.load_json(markers)
+        selected_markers = io_functions.load_json(markers)
     else:
         selected_markers = dataset.selected_markers
         # modify marker names if marker_name_only
@@ -40,7 +40,7 @@ def train_model(dataset, markers=None, tensorboard=None, marker_name_only=False)
     # scaler = "StandardScaler"
     scaler = "MinMaxScaler"
 
-    model = som.CaseSom(
+    model = sommodels.casesom.CaseSom(
         tubes=selected_markers,
         tensorboard_dir=tensorboard,
         modelargs={
@@ -53,7 +53,7 @@ def train_model(dataset, markers=None, tensorboard=None, marker_name_only=False)
             "initial_radius": 24,
             "end_radius": 2,
             "radius_cooling": "linear",
-            # "marker_images": som.fcssom.MARKER_IMAGES_NAME_ONLY,
+            # "marker_images": sommodels.fcssom.MARKER_IMAGES_NAME_ONLY,
             "map_type": "toroid",
             "dims": (32, 32, -1),
             "scaler": scaler,
@@ -66,8 +66,8 @@ def main(args):
     """Load case ids from json file to filter cases and train and save the created model."""
     output_dir = args.output
 
-    dataset = flowcat.parser.get_dataset(args)
-    selected_labels = utils.load_json(args.cases)
+    dataset = io_functions.load_case_collection(args.data, args.meta)
+    selected_labels = io_functions.load_json(args.cases)
     selected, _ = dataset.filter_reasons(labels=selected_labels)
 
     if args.tensorboard:
@@ -81,7 +81,7 @@ def main(args):
         tensorboard=tensorboard_dir,
         marker_name_only=args.marker_name_only)
 
-    model.save(output_dir)
+    io_functions.save_casesom(model, output_dir)
 
 
 if __name__ == "__main__":

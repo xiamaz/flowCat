@@ -11,7 +11,8 @@ from argparse import ArgumentParser
 import collections
 
 import flowcat
-from flowcat.dataset import case_dataset
+from flowcat.dataset.case_dataset import CaseCollection
+from flowcat.io_functions import save_case_collection
 
 
 @contextlib.contextmanager
@@ -96,7 +97,7 @@ def deduplicate_cases_by_sureness(cases):
                 ))
     if duplicates:
         print("%d duplicates removed" % len(duplicates))
-    deduplicated_cases = flowcat.CaseCollection(deduplicated, **cases.config)
+    deduplicated_cases = CaseCollection(deduplicated, **cases.config)
     deduplicated_cases.add_filter_step({"custom_filter": "deduplicate_cases_by_sureness"})
     return deduplicated_cases
 
@@ -140,7 +141,7 @@ def print_diff(cases_a, cases_b):
         print(f"{key}: {value_a} → {value_b} -- |{diff_key}|")
 
 
-def preprocess_cases(cases: flowcat.CaseCollection, tubes=("1", "2", "3")):
+def preprocess_cases(cases: CaseCollection, tubes=("1", "2", "3")):
     with block("Deduplicate cases by sureness"):
         deduplicated = deduplicate_cases_by_sureness(cases)
         print_diff(cases, deduplicated)
@@ -197,8 +198,8 @@ def preprocess_cases(cases: flowcat.CaseCollection, tubes=("1", "2", "3")):
 def main(args):
     cases = flowcat.parser.get_dataset(args)
     train, test = preprocess_cases(cases)
-    case_dataset.save_case_collection_to_caseinfo(train, args.output / "train")
-    case_dataset.save_case_collection_to_caseinfo(test, args.output / "test")
+    save_case_collection(train, args.output / "train.json")
+    save_case_collection(test, args.output / "test.json")
 
 
 if __name__ == "__main__":

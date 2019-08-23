@@ -8,8 +8,8 @@ import pandas as pd
 
 from keras.utils import Sequence
 
-from flowcat import utils
-from flowcat.som.base import load_som, SOMCollection, SOM
+from flowcat import utils, io_functions
+from flowcat.dataset.som import SOMCollection, SOM
 
 
 @with_slots
@@ -31,7 +31,7 @@ class SOMCase:
 
 def load_som_cases(row, path, tubes):
     sompath = path / row["label"]
-    som = load_som(sompath, subdirectory=False, tube=tubes)
+    som = io_functions.load_som(sompath, subdirectory=False, tube=tubes)
     return SOMCase(som=som, group=row["group"], label=row["label"])
 
 
@@ -48,8 +48,8 @@ class SOMDataset:
     @classmethod
     def from_path(cls, path):
         path = utils.URLPath(path)
-        config = utils.load_json(path + ".json")
-        metadata = utils.load_csv(path + ".csv")
+        config = io_functions.load_json(path + ".json")
+        metadata = io_functions.load_csv(path + ".csv")
         som_cases = metadata.apply(load_som_cases, axis=1, args=(path, config["tubes"]))
         return cls(data=som_cases, **config)
 

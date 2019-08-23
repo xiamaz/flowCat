@@ -4,7 +4,8 @@ import shutil
 
 import argmagic
 import flowcat
-from flowcat.utils import URLPath, load_json
+from flowcat.utils import URLPath
+from flowcat.io_functions import load_json
 
 
 def move_dataset(meta: URLPath, data: URLPath, labels: URLPath, output: URLPath):

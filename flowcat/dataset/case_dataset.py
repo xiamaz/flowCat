@@ -26,29 +26,23 @@ class DatasetError(Exception):
     pass
 
 
-def load_case_collection_from_caseinfo(data_path: utils.URLPath, meta_path: utils.URLPath) -> CaseCollection:
-    """Load case collection from caseinfo json, as used in the MLL dataset."""
-    metadata = utils.load_json(meta_path + ".json")
-    try:
-        metaconfig = utils.load_json(meta_path + "_config.json")
-    except FileNotFoundError:
-        metaconfig = {}
-    data = [fc_case.caseinfo_to_case(d, data_path) for d in metadata]
-
-    metaconfig["data_path"] = data_path
-    metaconfig["meta_path"] = meta_path
-
-    return CaseCollection(data, **metaconfig)
+def case_collection_to_json(cases: CaseCollection) -> dict:
+    return {
+        "cases": cases.cases,
+        "selected_markers": cases.selected_markers,
+        "selected_tubes": cases.selected_tubes,
+        "filterconfig": cases.filterconfig,
+    }
 
 
-def save_case_collection_to_caseinfo(cases: CaseCollection, destination: utils.URLPath):
-    """Save the metainformation to the given destination."""
-    config_path = destination + "_config.json"
-    utils.save_json(cases.config, config_path)
-    data_path = destination + ".json"
-
-    caseinfo = [fc_case.case_to_caseinfo(case, cases.data_path) for case in cases]
-    utils.save_json(caseinfo, data_path)
+def json_to_case_collection(jsonobj: dict) -> CaseCollection:
+    cases = CaseCollection(
+        jsonobj["cases"],
+        selected_markers=jsonobj["selected_markers"],
+        selected_tubes=jsonobj["selected_tubes"],
+        filterconfig=jsonobj["filterconfig"],
+    )
+    return cases
 
 
 @with_slots
@@ -57,8 +51,9 @@ class CaseCollection:
     """Iterable collection for cases. Base class."""
 
     cases: List[fc_case.Case]
-    data_path: utils.URLPath
-    meta_path: utils.URLPath
+
+    data_path: utils.URLPath = None
+    meta_path: utils.URLPath = None
 
     selected_markers: dict = None
     selected_tubes: List[str] = None
@@ -115,7 +110,8 @@ class CaseCollection:
     def copy(self):
         data = [d.copy() for d in self.cases]
         return self.__class__(
-            data, selected_tubes=self.selected_tubes,
+            data,
+            selected_tubes=self.selected_tubes,
             selected_markers=self.selected_markers)
 
     def set_markers(self):

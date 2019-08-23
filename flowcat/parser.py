@@ -3,10 +3,9 @@
 """
 CLI Interface components.
 """
-from argparse import ArgumentParser, Namespace
-from flowcat.utils import URLPath
-from flowcat import CaseCollection
-from flowcat.dataset import case_dataset
+from __future__ import annotations
+
+from flowcat import io_functions, utils, dataset
 
 
 def add_dataset_args(parser: ArgumentParser) -> ArgumentParser:
@@ -23,14 +22,14 @@ def add_dataset_args(parser: ArgumentParser) -> ArgumentParser:
 
     dataset_group = parser.add_argument_group("Dataset options")
     dataset_group.add_argument(
-        "-i", "--input",
-        type=URLPath,
+        "-i", "--data",
+        type=utils.URLPath,
         required=True,
         help="Path to dataset",
     )
     dataset_group.add_argument(
         "-m", "--meta",
-        type=URLPath,
+        type=utils.URLPath,
         required=True,
         help="Path to dataset metadata. Do not include file ending.")
 
@@ -38,5 +37,5 @@ def add_dataset_args(parser: ArgumentParser) -> ArgumentParser:
 
 
 def get_dataset(args: Namespace) -> CaseCollection:
-    cases = case_dataset.load_case_collection_from_caseinfo(args.input, args.meta)
+    cases = io_functions.load_case_collection_from_caseinfo(args.input, args.meta)
     return cases

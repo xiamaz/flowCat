@@ -1,4 +1,4 @@
-from flowcat import utils
+from flowcat import io_functions
 
 
 def remove_stem(marker):
@@ -10,8 +10,8 @@ def remove_stem(marker):
 
 
 def main():
-    bonn_config = utils.load_json("output/00-dataset-test/bonn_config.json")
-    munich_config = utils.load_json("output/00-dataset-test/train_config.json")
+    bonn_config = io_functions.load_json("output/00-dataset-test/bonn_config.json")
+    munich_config = io_functions.load_json("output/00-dataset-test/train_config.json")
 
     selected = {}
     for tube, markers in bonn_config["selected_markers"].items():
@@ -23,7 +23,7 @@ def main():
                 selected[tube].append(marker_stem)
     print(selected)
 
-    utils.save_json(selected, "output/00-dataset-test/munich_bonn_tubes.json")
+    io_functions.save_json(selected, "output/00-dataset-test/munich_bonn_tubes.json")
 
 
 if __name__ == "__main__":

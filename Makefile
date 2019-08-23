@@ -4,9 +4,8 @@ OUTDIR = ~/flowCat/output/test-2019-08
 
 DSNAME = dataset
 
-ALLDATA = --input $(DATADIR) --meta $(DATAMETA)
-TRAINDATA = --input $(DATADIR) --meta $(OUTDIR)/$(DSNAME)/train
-TESTDATA = --input $(DATADIR) --meta $(OUTDIR)/$(DSNAME)/test
+TRAINDATA = --data $(DATADIR) --meta $(OUTDIR)/$(DSNAME)/train.json
+TESTDATA = --data $(DATADIR) --meta $(OUTDIR)/$(DSNAME)/test.json
 
 REFERENCE_DATA = $(OUTDIR)/$(DSNAME)/reference.json
 REFERENCE_SOM = $(OUTDIR)/reference
@@ -20,17 +19,9 @@ GROUPS = CLL,MBL,MCL,PL,LPL,MZL,FL,HCL,normal
 .ONESHELL:
 dataset:
 	@echo "Executing 01a"
-	./00a_dataset_prepare.py $(ALLDATA) $(OUTDIR)/$(DSNAME)
+	./00a_dataset_prepare.py --data /data/flowcat-data/mll-flowdata/decCLL-9F --meta /data/flowcat-data/mll-flowdata/decCLL-9F/case_info_2018-12-15.json $(OUTDIR)/$(DSNAME)
 	echo "Executing 01b"
 	./00b_select_ref_cases.py $(TRAINDATA) --sample 1 --groups $(GROUPS) --infiltration 40,None $(REFERENCE_DATA)
-
-.PHONY: %.dsa
-%.dsa:
-	./00a_dataset_prepare.py $(ALLDATA) $(OUTDIR)/$*
-
-.PHONY: %.dsb
-%.dsb:
-	./00b_select_ref_cases.py $(TRAINDATA) --sample 1 --groups $(GROUPS) --infiltration 40,None $(OUTDIR)/$*
 
 .PHONY: reference
 .ONESHELL:

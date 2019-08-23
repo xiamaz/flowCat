@@ -13,7 +13,7 @@ from flowcat.dataset import combined_dataset as cd
 from flowcat.dataset import dataset as dd
 from flowcat import loaders
 from flowcat.visual import plotting
-from flowcat import utils as flowutils
+from flowcat import io_functions as flowutils
 from flowcat import mappings
 
 

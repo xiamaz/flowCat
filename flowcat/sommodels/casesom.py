@@ -1,11 +1,12 @@
 from __future__ import annotations
-from typing import Iterable, List, Generator, Dict, Union
-from flowcat.mappings import Material
-
-from flowcat.dataset import case, case_dataset, fcs, sample
+from typing import Iterable, List, Generator, Dict, Tuple
+import datetime
 
 from flowcat import utils
-from .base import SOMCollection, SOM, save_som
+from flowcat.mappings import Material
+from flowcat.dataset import case
+from flowcat.dataset.som import SOMCollection, SOM
+
 from .fcssom import FCSSom
 
 
@@ -21,13 +22,12 @@ class CaseSomSampleException(Exception):
 class CaseSingleSom:
     """Transform single tube for a case to SOM."""
 
-    config_name = "casesinglesom_config.json"
-
     def __init__(
             self,
             tube: str,
             materials: List[Material] = None,
             train_labels: List[str] = None,
+            run_identifier: str = None,
             model: FCSSom = None,
             *args, **kwargs):
         self.tube = tube
@@ -35,11 +35,12 @@ class CaseSingleSom:
         self.train_labels = train_labels or []
         self.model = model or FCSSom(*args, **kwargs)
 
-    @classmethod
-    def load(cls, path: utils.URLPath, **kwargs):
-        config = utils.load_json(path / cls.config_name)
-        model = FCSSom.load(path, **kwargs)
-        return cls(model=model, **config)
+        self.model_time = datetime.datetime.now().date()  # time of model
+
+        if run_identifier is None:
+            self.run_identifier = f"{self.model.name}_{utils.create_stamp()}"
+        else:
+            self.run_identifier = utils.create_stamp()
 
     @property
     def config(self):
@@ -56,29 +57,29 @@ class CaseSingleSom:
         mweights.cases = self.train_labels
         return mweights
 
-    def save(self, path):
-        path = utils.URLPath(path)
-        self.model.save(path)
-        utils.save_json(self.config, path / self.config_name)
-        save_som(self.weights, path / "weights", subdirectory=True)
-
     def train(self, data: Iterable[case.Case], *args, **kwargs) -> CaseSingleSom:
         tsamples = [c.get_tube(self.tube, materials=self.materials).get_data() for c in data]
         self.model.train(tsamples)
         self.train_labels = [c.id for c in data]
         return self
 
-    def transform(self, data: case.Case, *args, **kwargs) -> sample.SOMSample:
+    def transform(self, data: case.Case, *args, **kwargs) -> SOM:
         fcs_sample = data.get_tube(self.tube, materials=self.materials)
+
         if fcs_sample is None:
             raise CaseSomSampleException(data.id, self.tube, self.materials)
+
         somdata = self.model.transform(fcs_sample.get_data(), label=data.id, *args, **kwargs)
-        somdata.cases = [data.id]
-        somdata.tube = fcs_sample.tube
+        somdata.tube = self.tube
         somdata.material = fcs_sample.material
+        somdata.cases = data.id
         return somdata
 
-    def transform_generator(self, data: Iterable[case.Case], *args, **kwargs) -> Generator[SOM]:
+    def transform_generator(
+            self,
+            data: Iterable[case.Case],
+            *args, **kwargs
+    ) -> Generator[Tuple[case.Case, SOM]]:
         for casedata in data:
             yield casedata, self.transform(casedata, *args, **kwargs)
 
@@ -115,25 +116,9 @@ class CaseSom:
         else:
             self.models = models
 
-    @classmethod
-    def load(cls, path: utils.URLPath, tensorboard_dir: utils.URLPath = None, **kwargs):
-        """Load a saved SOM model."""
-        singlepaths = {p.name.lstrip("tube"): p for p in path.iterdir() if "tube" in str(p)}
-        models = {}
-        for tube, mpath in sorted(singlepaths.items()):
-            tbdir = tensorboard_dir / f"tube{tube}" if tensorboard_dir else None
-            models[tube] = CaseSingleSom.load(mpath, tensorboard_dir=tbdir, **kwargs)
-        return cls(models=models)
-
     @property
     def tubes(self):
         return list(self.models.keys())
-
-    def save(self, path: utils.URLPath):
-        """Save the model to the given directory"""
-        for tube, model in self.models.items():
-            output_path = path / f"tube{tube}"
-            model.save(output_path)
 
     def train(self, data: Iterable[case.Case], *args, **kwargs) -> CaseSom:
         for tube, model in self.models.items():
@@ -149,7 +134,7 @@ class CaseSom:
             casesoms.add_som(tsom)
         return casesoms
 
-    def transform_generator(self, data: Iterable[case.Case], **kwargs) -> Generator[SOMCollection]:
+    def transform_generator(self, data: Iterable[case.Case], **kwargs) -> Generator[Tuple[case.Case, SOM]]:
         for tube, model in self.models.items():
             for single in data:
                 yield single, model.transform(single, **kwargs)

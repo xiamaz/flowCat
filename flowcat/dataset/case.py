@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import functools
 import datetime
-from dataclasses import dataclass, replace, field
+from dataclasses import dataclass, replace, field, asdict
 from typing import List, Dict, Union, Tuple
 
 from dataslots import with_slots
@@ -129,19 +129,26 @@ def caseinfo_to_case(caseinfo: dict, sample_path: utils.URLPath) -> Case:
     return case
 
 
-def case_to_caseinfo(case: Case, base_path: utils.URLPath) -> dict:
-    """Create caseinfo dict from a case object."""
-    return {
-        "id": case.id,
-        "date": case.date.isoformat(),
-        "filepaths": [
-            sample.sample_to_sampleinfo(s, base_path) for s in case.samples
-        ],
-        "cohort": case.group,
-        "infiltration": case.infiltration,
-        "diagnosis": case.diagnosis,
-        "sureness": case.sureness,
-    }
+def case_to_json(case: Case) -> dict:
+    casedict = asdict(case)
+    if casedict["used_material"]:
+        casedict["used_material"] = casedict["used_material"].name
+    else:
+        casedict["used_material"] = ""
+    casedict["date"] = case.date.isoformat()
+    casedict["samples"] = [sample.sample_to_json(s) for s in case.samples]
+    return casedict
+
+
+def json_to_case(jscase: dict) -> Case:
+    if jscase["used_material"]:
+        material = mappings.Material[jscase["used_material"]]
+    else:
+        material = None
+    jscase["used_material"] = material
+    jscase["date"] = utils.str_to_date(jscase["date"])
+
+    return Case(**jscase)
 
 
 @with_slots

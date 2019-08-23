@@ -9,7 +9,8 @@ import logging
 import pandas as pd
 
 import flowcat
-from flowcat import utils
+from flowcat import utils, io_functions
+from flowcat.dataset import sample
 
 
 LOGGER = logging.getLogger(__name__)
@@ -37,17 +38,34 @@ def transform_cases(dataset, model, output):
     Returns:
         Nothing.
     """
-    # labels = []
     for case, res in utils.time_generator_logger(model.transform_generator(dataset)):
-        flowcat.som.save_som(res, output / case.id, save_config=False, subdirectory=False)
-        # labels.append({"label": case.id, "randnum": 0, "group": case.group})
+        io_functions.save_som(res, output / case.id, save_config=False, subdirectory=False)
+
+    somcases = []
+    for case in dataset:
+        somsamples = []
+        for tube, tmodel in model.models.items():
+            som_id = f"{case.id}_t{tube}_{tmodel.run_identifier}"
+            fcs_sample = case.get_tube(tube)
+            somsamples.append(sample.SOMSample(
+                id=som_id,
+                case_id=case.id,
+                original_id=fcs_sample.id,
+                date=tmodel.model_time,
+                tube=tube,
+                dims=tmodel.model.dims,
+                markers=tmodel.model.markers,
+            ))
+        somcases.append(case.copy(samples=somsamples))
+
+    somcollection = flowcat.dataset.case_dataset.CaseCollection(somcases)
+    io_functions.save_json(somcollection, output + "_collection.json")
 
     labels = [{"label": case.id, "randnum": 0, "group": case.group} for case in dataset]
-
     # Save metadata into an additional csv file with the same name
     metadata = pd.DataFrame(labels)
-    utils.save_csv(metadata, output + ".csv")
-    utils.save_json(
+    io_functions.save_csv(metadata, output + ".csv")
+    io_functions.save_json(
         {
             tube: {
                 "dims": m.model.dims,
@@ -59,7 +77,8 @@ def transform_cases(dataset, model, output):
 def main(args):
     """Load a model with given transforming arguments and transform individual
     cases."""
-    cases = flowcat.parser.get_dataset(args)
+    cases = io_functions.load_case_collection(args.data, args.meta)
+    # cases = cases.sample(1, groups=["CLL", "normal"])
 
     if args.tensorboard:
         tensorboard_dir = args.output / "tensorboard"
@@ -69,9 +88,9 @@ def main(args):
     # Training parameters for the model can be respecified, the only difference
     # between transform and normal traninig, is that after a transformation is
     # completed, the original weights will be restored to the model.
-    model = flowcat.som.CaseSom.load(
+    model = io_functions.load_casesom(
         args.model,
-        marker_images=flowcat.som.fcssom.MARKER_IMAGES_NAME_ONLY,
+        # marker_images=flowcat.sommodels.fcssom.MARKER_IMAGES_NAME_ONLY,
         max_epochs=4,
         initial_learning_rate=0.05,
         end_learning_rate=0.01,

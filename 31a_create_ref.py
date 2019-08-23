@@ -7,7 +7,7 @@ import argparse
 import logging
 
 import flowcat
-from flowcat import utils, som
+from flowcat import utils, som, io_functions
 
 
 LOGGER = logging.getLogger(__name__)
@@ -27,12 +27,12 @@ def main(args):
     output_dir = args.output / args.name
 
     dataset = flowcat.CaseCollection.from_path(args.input, metapath=args.meta)
-    selected_labels = utils.load_json("data/selected_cases.json")
+    selected_labels = io_functions.load_json("data/selected_cases.json")
     selected, _ = dataset.filter_reasons(labels=selected_labels)
     selected = dataset.sample(count=1, groups=["CLL", "normal"])
     print(selected.labels)
 
-    joined_tubes = utils.load_json("output/00-dataset-test/munich_bonn_tubes.json")
+    joined_tubes = io_functions.load_json("output/00-dataset-test/munich_bonn_tubes.json")
     print(joined_tubes)
 
     # TODO: Generate a SOM for all tubes for the given labels.
