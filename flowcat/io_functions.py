@@ -203,13 +203,7 @@ def load_som_collection(path, subdirectory: bool, tubes: list = None, **kwargs):
             if m is not None
         }
     tubes = sorted(tubepaths.keys())
-    # load config if exists
-    conf_path = path / "config.json"
-    if conf_path.exists():
-        config = load_json(conf_path)
-    else:
-        config = None
-    return SOMCollection(path=path, tubes=tubes, tubepaths=tubepaths, config=config)
+    return SOMCollection(path=path, tubes=tubes, tubepaths=tubepaths)
 
 
 def load_casesom(path: URLPath, tensorboard_dir: URLPath = None, **kwargs):

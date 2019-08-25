@@ -1,7 +1,7 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from dataslots import with_slots
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 import numpy as np
 import pandas as pd
@@ -12,6 +12,15 @@ from flowcat import utils, io_functions
 from flowcat.dataset.som import SOMCollection, SOM
 
 
+def pad_array(array, pad_width):
+    array = np.pad(array, pad_width=[
+        (pad_width, pad_width),
+        (pad_width, pad_width),
+        (0, 0),
+    ], mode="wrap")
+    return array
+
+
 @with_slots
 @dataclass
 class SOMCase:
@@ -20,10 +29,14 @@ class SOMCase:
 
     label: str
     group: str
-    som: SOMCollection
+    soms: Dict[str, utils.URLPath]
+    data: Dict[str, np.array] = field(default_factory=dict)
 
-    def get_tube(self, tube: int) -> SOM:
-        return self.som.get_tube(tube)
+    def get_tube(self, tube: str) -> SOM:
+        if tube not in self.data:
+            sompath = self.soms[tube]
+            self.data[tube] = np.load(sompath)
+        return self.data[tube]
 
     def __repr__(self):
         return f"<SOMCase {self.label} {self.group}"
@@ -31,8 +44,10 @@ class SOMCase:
 
 def load_som_cases(row, path, tubes):
     sompath = path / row["label"]
-    som = io_functions.load_som(sompath, subdirectory=False, tube=tubes)
-    return SOMCase(som=som, group=row["group"], label=row["label"])
+    soms = {
+        tube: sompath + f"_t{tube}.npy" for tube in tubes
+    }
+    return SOMCase(soms=soms, group=row["group"], label=row["label"])
 
 
 @with_slots
@@ -41,17 +56,15 @@ class SOMDataset:
     """Simple wrapper for reading dataset metadata."""
 
     data: pd.Series  # [SOMCase]
-    tubes: List[int]
-    dims: Tuple[int]
-    channels: List[str]
+    config: dict  # Dict of dims and channels from tubes
 
     @classmethod
     def from_path(cls, path):
-        path = utils.URLPath(path)
         config = io_functions.load_json(path + ".json")
         metadata = io_functions.load_csv(path + ".csv")
-        som_cases = metadata.apply(load_som_cases, axis=1, args=(path, config["tubes"]))
-        return cls(data=som_cases, **config)
+        tubes = list(config.keys())
+        som_cases = metadata.apply(load_som_cases, axis=1, args=(path + "np", tubes))
+        return cls(data=som_cases, config=config)
 
     @property
     def labels(self):
@@ -91,8 +104,8 @@ class SOMDataset:
         validate = validate.reindex(np.random.permutation(validate.index))
 
         return (
-            self.__class__(train, tubes=self.tubes, dims=self.dims, channels=self.channels),
-            self.__class__(validate, tubes=self.tubes, dims=self.dims, channels=self.channels),
+            self.__class__(train, config=self.config),
+            self.__class__(validate, config=self.config),
         )
 
     def __len__(self):
@@ -115,7 +128,15 @@ class SOMSequence(Sequence):
 
     def __getitem__(self, idx: int) -> Tuple[np.array, np.array]:
         batch = self.dataset.data[idx * self.batch_size:(idx + 1) * self.batch_size]
-        x_batch = np.array([s.get_tube(self.tube).np_array() for s in batch])
+
+        inputs = []
+        for tube in self.tube:
+            dims = self.dataset.config[tube]["dims"]
+            x_batch = np.array([
+                np.reshape(s.get_tube(tube), dims) for s in batch
+            ])
+            inputs.append(x_batch)
+
         y_labels = [s.group for s in batch]
         y_batch = self.binarizer.transform(y_labels)
-        return x_batch, y_batch
+        return inputs, y_batch

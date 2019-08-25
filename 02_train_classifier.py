@@ -1,153 +1,122 @@
-#!/usr/bin/env python3
-import sys
-import math
-import os
-import logging
-import argparse
+"""
+Train models on Munich data and attempt to classify Bonn data.
+"""
+import numpy as np
+from sklearn.preprocessing import LabelBinarizer
+from keras import layers, regularizers, models
+from argmagic import argmagic
 
-from flowcat import utils, classify, configuration
-from flowcat.dataset import combined_dataset
-
-
-LOGGER = logging.getLogger(__name__)
-
-
-def setup_logging_from_args(args):
-    logpath = None
-    if args.name:
-        classification_path = args.pathconfig("output", "classification")
-        outpath = utils.URLPath(f"{classification_path}/{args.name}")
-        logpath = outpath / f"classification.log"
-        logpath.local.parent.mkdir(parents=True, exist_ok=True)
-    return setup_logging(logpath, printlevel=args_loglevel(args.verbose))
+import flowcat
+from flowcat import utils, io_functions
+from flowcat.som_dataset import SOMDataset, SOMSequence
 
 
-def setup_logging(filelog=None, filelevel=logging.DEBUG, printlevel=logging.WARNING):
-    """Setup logging to both visible output and file output.
-    Args:
-        filelog: Logging file. Will not log to file if None
-        filelevel: Logging level inside file.
-        printlevel: Logging level for visible output.
-    """
-    handlers = [
-        utils.create_handler(logging.StreamHandler(), level=printlevel),
-    ]
-    if filelog is not None:
-        handlers.append(
-            utils.create_handler(logging.FileHandler(str(filelog)), level=filelevel)
-        )
+def create_model_multi_input(input_shapes, yshape, global_decay=5e-4):
+    segments = []
+    inputs = []
+    for xshape in input_shapes:
+        ix = layers.Input(shape=xshape)
+        inputs.append(ix)
+        x = layers.Conv2D(
+            filters=12, kernel_size=3, activation="relu", strides=1,
+            kernel_regularizer=regularizers.l2(global_decay))(ix)
+        segments.append(x)
 
-    utils.add_logger("flowcat", handlers, level=logging.DEBUG)
-    utils.add_logger(LOGGER, handlers, level=logging.DEBUG)
+    x = layers.maximum(segments)
+    # x = layers.Conv2D(
+    #     filters=32, kernel_size=2, activation="relu", strides=1,
+    #     kernel_regularizer=regularizers.l2(global_decay))(x)
+    x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
+    # x = layers.BatchNormalization()(x)
+    x = layers.Dropout(0.2)(x)
 
+    x = layers.Flatten()(ix)
 
-def args_loglevel(vlevel):
-    """Get logging level from number of verbosity chars."""
-    if not vlevel:
-        return logging.WARNING
-    if vlevel == 1:
-        return logging.INFO
-    return logging.DEBUG
+    # x = layers.Dense(
+    #     units=128, activation="relu", kernel_initializer="uniform",
+    #     kernel_regularizer=regularizers.l2(global_decay)
+    # )(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.Dropout(0.2)(x)
+    x = layers.Dense(
+        units=64, activation="relu", kernel_initializer="uniform",
+        kernel_regularizer=regularizers.l2(global_decay)
+    )(x)
+    # x = layers.BatchNormalization()(x)
+    x = layers.Dropout(0.2)(x)
 
+    final = layers.Dense(
+        units=yshape, activation="sigmoid"
+    )(x)
 
-def run_config(args):
-    setup_logging(filelog=None, printlevel=logging.ERROR)
-    config = getattr(args, args.type)
-
-    if args.output is None:
-        print("HINT: Redirect stderr to get config output suitable for piping.", file=sys.stderr)
-        print(config)
-    else:
-        print(f"Writing configuration to {args.output}")
-        config.to_file(args.output)
-
-
-def run(args):
-    config = args.modelconfig
-    pathconfig = args.pathconfig
-
-    if args.name:
-        config.data["name"] = args.name
-    classification_path = pathconfig("output", "classification")
-    outpath = utils.URLPath(f"{classification_path}/{config('name')}")
-
-    dataset = combined_dataset.CombinedDataset.from_config(config, pathconfig)
-
-    # split into train and test set
-    LOGGER.info("Splitting dataset")
-    train, test = combined_dataset.split_dataset(dataset, **config("split"), seed=args.seed)
-    utils.save_json(train.labels, outpath / "train_labels.json")
-    utils.save_json(test.labels, outpath / "test_labels.json")
-
-    LOGGER.info("Getting models")
-    model, trainseq, testseq = classify.generate_model_inputs(train, test, config("model"))
-
-    LOGGER.info("Fitting model")
-    if config("fit", "validation"):
-        data_val = testseq
-    else:
-        data_val = None
-    history = classify.fit(model, trainseq, data_val=data_val, config=config("fit"))
-    pred_df = classify.predict_generator(model, testseq)
-
-    classify.save_model(
-        model, trainseq, config, outpath, pathconfig=pathconfig, history=history, dataset=dataset)
-    classify.save_predictions(pred_df, outpath)
-
-    LOGGER.info("Creating statistics")
-    classify.create_stats(
-        outpath=outpath, dataset=dataset, pred_df=pred_df, **config("stat"))
+    model = models.Model(inputs=inputs, outputs=final)
+    return model
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Classify samples")
-    parser.add_argument(
-        "--name",
-        help="Set an alternative output name.")
-    parser.add_argument(
-        "-v", "--verbose",
-        help="Control verbosity. -v is info, -vv is debug",
-        action="count")
-    configuration.PathConfig.add_to_arguments(parser)
-    classify.SOMClassifierConfig.add_to_arguments(parser)
-    subparsers = parser.add_subparsers()
+def get_model(channel_config, groups, **kwargs):
+    inputs = tuple([*d["dims"][:-1], len(d["channels"])] for d in channel_config.values())
+    output = len(groups)
 
-    # Save configuration files in specified in the create configuration file
-    cparser = subparsers.add_parser(
-        "config",
-        help="Output the current configuration. Hint: Get rid of import messages by eg piping stderr to /dev/null")
-    cparser.add_argument(
-        "-o", "--output",
-        help="Write configuration to output file.",
-        type=utils.URLPath)
-    cparser.add_argument(
-        "--type",
-        help="Output pathconfig instead of model configuration.",
-        choices=["pathconfig", "modelconfig"],
-        default="modelconfig",
+    model = create_model_multi_input(inputs, output, **kwargs)
+    model.compile(
+        loss="categorical_crossentropy",
+        # loss="binary_crossentropy",
+        optimizer="adam",
+        # optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=epsilon),
+        metrics=[
+            "acc",
+            # top2_acc,
+        ]
     )
-    cparser.set_defaults(fun=run_config)
 
-    # Run the classification process
-    rparser = subparsers.add_parser("run", help="Run classification")
-    rparser.add_argument(
-        "--seed",
-        help="Seed for random number generator",
-        type=int)
-    rparser.add_argument(
-        "--model",
-        help="Use an existing model",
-        type=utils.URLPath) # TODO
-    rparser.set_defaults(fun=run)
+    binarizer = LabelBinarizer()
+    binarizer.fit(groups)
+    return binarizer, model
 
-    args = parser.parse_args()
 
-    if not hasattr(args, "fun") or args.fun is None:
-        parser.print_help()
-    else:
-        setup_logging_from_args(args)
-        args.fun(args)
+def main(data: utils.URLPath, output: utils.URLPath):
+    """
+    Args:
+        data: Path to som dataset
+        output: Output path
+    """
+    tubes = ("1", "2", "3")
+
+    munich = SOMDataset.from_path(data)
+    train, validate = munich.split(ratio=0.9, stratified=True)
+
+    train_ids = [t.label for t in train.data]
+    validate_ids = [t.label for t in validate.data]
+    io_functions.save_json(train_ids, output / "ids_train.json")
+    io_functions.save_json(validate_ids, output / "ids_validate.json")
+
+    selected_tubes = {tube: munich.config[tube] for tube in tubes}
+    groups = flowcat.mappings.GROUPS
+
+    config = {
+        "tubes": selected_tubes,
+        "groups": groups,
+    }
+    io_functions.save_json(config, output / "config.json")
+
+    binarizer, model = get_model(selected_tubes, flowcat.mappings.GROUPS, global_decay=5e-3)
+
+    trainseq = SOMSequence(train, binarizer, tube=tubes)
+    validseq = SOMSequence(validate, binarizer, tube=tubes)
+
+    model.fit_generator(
+        epochs=20,
+        generator=trainseq, validation_data=validseq)
+
+    model.save(str(output / "model.h5"))
+    io_functions.save_joblib(binarizer, output / "binarizer.joblib")
+
+    # preds = []
+    # for pred in model.predict_generator(validseq):
+    #     preds.append(pred)
+
+    # args.output.local.mkdir(parents=True, exist_ok=True)
 
 
 if __name__ == "__main__":
-    main()
+    argmagic(main)

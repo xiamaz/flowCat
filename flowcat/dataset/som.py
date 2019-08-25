@@ -91,7 +91,8 @@ class SOMCollection:
         if tube not in self.tubes:
             return None
         path = self.tubepaths[tube]
-        data = SOM.from_path(path, path.with_suffix(".json"), tube=tube, cases=self.cases)
+        with path.open("r") as sfile:
+            data = SOM(pd.read_csv(sfile, index_col=0), tube=tube, cases=self.cases)
         self._data[tube] = data
         return data
 
