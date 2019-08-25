@@ -6,8 +6,7 @@ visualization and classification.
 import argparse
 import logging
 
-import flowcat
-from flowcat import utils, sommodels, io_functions
+from flowcat import utils, sommodels, io_functions, parser
 from flowcat.dataset.fcs import extract_name
 
 
@@ -86,7 +85,7 @@ def main(args):
 
 if __name__ == "__main__":
     PARSER = argparse.ArgumentParser(usage="Generate references and individual SOMs.")
-    flowcat.parser.add_dataset_args(PARSER)
+    parser.add_dataset_args(PARSER)
     PARSER.add_argument(
         "--tensorboard",
         help="Flag to enable tensorboard logging",

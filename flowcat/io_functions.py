@@ -7,6 +7,7 @@ import pickle
 from datetime import date
 
 import joblib
+import numpy as np
 import pandas as pd
 
 from flowcat import mappings
@@ -15,7 +16,7 @@ from flowcat.utils.urlpath import URLPath
 from flowcat.sommodels import fcssom
 from flowcat.sommodels.casesom import CaseSingleSom, CaseSom
 from flowcat.dataset import case, case_dataset, sample
-from flowcat.dataset.som import SOM, SOMCollection
+from flowcat.dataset.som import SOM
 
 
 LOGGER = logging.getLogger(__name__)
@@ -130,80 +131,24 @@ def get_som_tube_path(
     return (result + ".csv", result + ".json")
 
 
-def save_som(
-        som: Union[SOMCollection, SOM],
-        path: URLPath,
-        subdirectory: bool = False,
-        save_config: bool = True):
-    """Save som object to the given destination.
-    Params:
-        som: Either a SOM collection or a single SOM object.
-        path: Destination path
-        subdirectory: Save files to separate files with path as directory name.
-    """
-    if isinstance(som, SOMCollection):
-        soms = som
-    elif isinstance(som, SOM):
-        soms = [som]
-    else:
-        raise TypeError
+def save_som(som: SOM, path: URLPath, save_config: bool = True):
+    npy_path = path.with_suffix(".npy")
+    np.save(str(npy_path), som.data)
 
-    for som_obj in soms:
-        data_dest, conf_dest = get_som_tube_path(path, som_obj.tube, subdirectory)
-        LOGGER.debug("Saving %s to %s", som_obj, data_dest)
-        save_csv(som_obj.data, data_dest)
-        if save_config:
-            save_json(som_obj.config, conf_dest)
+    if save_config:
+        meta_path = path.with_suffix(".json")
+        save_json({"markers": som.markers}, meta_path)
 
 
-def load_som(
-        path: URLPath,
-        subdirectory: bool = False,
-        tube: Union[int, list] = None) -> Union[SOMCollection, SOM]:
-    """Load soms into a som collection or if tube specified into a single SOM."""
-    # Load single SOM
-    if isinstance(tube, int):
-        inpaths = get_som_tube_path(path, tube, subdirectory)
-        return load_som(*inpaths, tube=tube)
-    # Load multiple SOM into a SOM collection
-    return load_som_collection(path, tubes=tube, subdirectory=subdirectory)
-
-
-def load_single_som(data_path, config_path=None, **kwargs):
-    data = load_csv(data_path)
-
-    if config_path:
-        try:
-            config = load_json(config_path)
-        except FileNotFoundError:
-            config = {}
+def load_som(path: URLPath, load_config: bool = True) -> SOM:
+    if load_config:
+        meta_path = path.with_suffix(".json")
+        config = load_json(meta_path)
     else:
         config = {}
 
-    kwargs = {**config, **kwargs}
-    return SOM(data, **kwargs)
-
-
-def load_som_collection(path, subdirectory: bool, tubes: list = None, **kwargs):
-    path = URLPath(path)
-    if tubes:
-        tubepaths = {
-            tube: get_som_tube_path(path, tube, subdirectory)[0] for tube in tubes
-        }
-    else:
-        if subdirectory:
-            paths = path.glob("t*.csv")
-        else:
-            parent = path.local.parent
-            paths = [p for p in parent.glob(f"{path.local.name}*.csv")]
-
-        tubepaths = {
-            int(m[1]): p for m, p in
-            [(re.search(r"t(\d+)\.csv", str(path)), path) for path in paths]
-            if m is not None
-        }
-    tubes = sorted(tubepaths.keys())
-    return SOMCollection(path=path, tubes=tubes, tubepaths=tubepaths)
+    npy_path = path.with_suffix(".npy")
+    return SOM(data=npy_path, **config)
 
 
 def load_casesom(path: URLPath, tensorboard_dir: URLPath = None, **kwargs):
@@ -230,7 +175,7 @@ def load_casesinglesom(path: URLPath, **kwargs):
 def save_casesinglesom(model, path: URLPath):
     save_fcssom(model.model, path)
     save_json(model.config, path / "casesinglesom_config.json")
-    save_som(model.weights, path / "weights", subdirectory=True)
+    save_som(model.weights, path / f"weights", save_config=True)
 
 
 def load_fcssom(path: URLPath, **kwargs):

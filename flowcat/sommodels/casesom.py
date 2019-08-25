@@ -4,8 +4,8 @@ import datetime
 
 from flowcat import utils
 from flowcat.mappings import Material
-from flowcat.dataset import case
-from flowcat.dataset.som import SOMCollection, SOM
+from flowcat.dataset import case, sample
+from flowcat.dataset.som import SOM
 
 from .fcssom import FCSSom
 
@@ -52,10 +52,7 @@ class CaseSingleSom:
 
     @property
     def weights(self):
-        mweights = self.model.weights
-        mweights.tube = self.tube
-        mweights.cases = self.train_labels
-        return mweights
+        return self.model.weights
 
     def train(self, data: Iterable[case.Case], *args, **kwargs) -> CaseSingleSom:
         tsamples = [c.get_tube(self.tube).get_data() for c in data]
@@ -63,23 +60,30 @@ class CaseSingleSom:
         self.train_labels = [c.id for c in data]
         return self
 
-    def transform(self, data: case.Case, *args, **kwargs) -> SOM:
+    def transform(self, data: case.Case, *args, **kwargs) -> sample.SOMSample:
         fcs_sample = data.get_tube(self.tube)
 
         if fcs_sample is None:
             raise CaseSomSampleException(data.id, self.tube, self.materials)
 
         somdata = self.model.transform(fcs_sample.get_data(), label=data.id, *args, **kwargs)
-        somdata.tube = self.tube
-        somdata.material = fcs_sample.material
-        somdata.cases = data.id
-        return somdata
+        som_id = f"{data.id}_t{self.tube}_{self.run_identifier}"
+        somsample = sample.SOMSample(
+            id=som_id,
+            case_id=data.id,
+            original_id=fcs_sample.id,
+            date=self.model_time,
+            tube=self.tube,
+            dims=somdata.dims,
+            markers=self.model.markers,
+            data=somdata)
+        return somsample
 
     def transform_generator(
             self,
             data: Iterable[case.Case],
             *args, **kwargs
-    ) -> Generator[Tuple[case.Case, SOM]]:
+    ) -> Generator[Tuple[case.Case, sample.SOMSample]]:
         for casedata in data:
             yield casedata, self.transform(casedata, *args, **kwargs)
 
@@ -126,15 +130,17 @@ class CaseSom:
             model.train(data, *args, **kwargs)
         return self
 
-    def transform(self, data: case.Case, *args, **kwargs) -> SOMCollection:
-        casesoms = SOMCollection(cases=[data.id])
+    def transform(self, data: case.Case, *args, **kwargs) -> case.Case:
+        samples = []
         for tube, model in self.models.items():
             print(f"Transforming tube {tube}")
-            tsom = model.transform(data, *args, **kwargs)
-            casesoms.add_som(tsom)
-        return casesoms
+            somsample = model.transform(data, *args, **kwargs)
+            samples.append(somsample)
 
-    def transform_generator(self, data: Iterable[case.Case], **kwargs) -> Generator[Tuple[case.Case, SOM]]:
+        newcase = data.copy(samples=samples)
+        return newcase
+
+    def transform_generator(self, data: Iterable[case.Case], **kwargs) -> Generator[Tuple[case.Case, sample.SOMSample]]:
         for tube, model in self.models.items():
             for single in data:
                 yield single, model.transform(single, **kwargs)

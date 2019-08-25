@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 from numpy.testing import assert_array_equal
 
-from flowcat.som import tfsom
+from flowcat.sommodels import tfsom
 
 from .shared import TESTPATH
 

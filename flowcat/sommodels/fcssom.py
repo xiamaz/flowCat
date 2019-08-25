@@ -7,9 +7,9 @@ import pandas as pd
 
 import tensorflow as tf
 
+from flowcat.utils import URLPath
 from flowcat.dataset.fcs import FCSData, join_fcs_data
 from flowcat.dataset.som import SOM
-from flowcat.utils import URLPath
 from flowcat.preprocessing import scalers
 from .tfsom import create_initializer, TFSom
 
@@ -179,33 +179,10 @@ class FCSSom:
 
     @property
     def weights(self):
-        data = self.model.output_weights
-        dfdata = pd.DataFrame(data, columns=self.markers)
-        return self._create_som(dfdata)
+        return self._create_som(self.model.output_weights)
 
-    def transform_args(self, scaler=None):
-        if scaler is None:
-            scaler = self.scaler
-        return [
-            (str(scaler.__class__), scaler.get_params())
-        ]
-
-    def _create_som(self, weights: np.array, scaler=None):
-        data = pd.DataFrame(weights, columns=self.markers)
-        return SOM(
-            data,
-            transforms=self.transform_args(scaler)
-        )
-
-    def save(self, path: URLPath):
-        """Save the given model including scaler."""
-        if not self.trained:
-            raise RuntimeError("Model has not been trained")
-
-        path.mkdir(parents=True, exist_ok=True)
-        self.model.save(path / "model.ckpt")
-        save_joblib(self.scaler, path / "scaler.joblib")
-        save_json(self.config, path / "config.json")
+    def _create_som(self, weights: np.array):
+        return SOM(np.reshape(weights, self.dims), markers=self.markers)
 
     def train(self, data: Iterable[FCSData], sample: int = -1):
         """Input an iterable with FCSData
@@ -249,7 +226,7 @@ class FCSSom:
             res = res[np.random.choice(res.shape[0], sample, replace=False), :]
 
         weights = self.model.transform(res, label=label)
-        somweights = self._create_som(weights, scaler=scaler)
+        somweights = self._create_som(weights)
         return somweights
 
     def transform_generator(

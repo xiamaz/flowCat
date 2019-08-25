@@ -7,7 +7,7 @@ calling Sample.get_fcs().
 # flake8: noqa
 from __future__ import annotations
 
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Any
 from dataclasses import dataclass, replace, field, asdict
 
 import pandas as pd
@@ -80,6 +80,10 @@ def sampleinfo_to_sample(sample_info: dict, case_id: str, path: utils.URLPath) -
 
 
 def sample_to_json(sample: Sample) -> dict:
+    """Store sample information in json format.
+    This does NOT store data in json. Please do that manually and add a
+    reference on the path attribute.
+    """
     if isinstance(sample, FCSSample):
         return {"__fcssample__": fcssample_to_json(sample)}
     elif isinstance(sample, SOMSample):
@@ -90,6 +94,7 @@ def fcssample_to_json(sample: FCSSample) -> dict:
     sdict = asdict(sample)
     sdict["date"] = sample.date.isoformat()
     sdict["path"] = str(sample.path)
+    del sdict["data"]  # never store data in json
     if sample.material:
         sdict["material"] = sample.material.name
     else:
@@ -101,6 +106,7 @@ def somsample_to_json(sample: SOMSample) -> dict:
     sdict = asdict(sample)
     sdict["date"] = sample.date.isoformat()
     sdict["path"] = str(sample.path)
+    del sdict["data"]  # never store data in json
     return sdict
 
 
@@ -138,6 +144,7 @@ class Sample:
     case_id: str
     date: date
     tube: str
+    data: Any = None
     path: utils.URLPath = None
     markers: List[str] = field(default_factory=list)
 
@@ -161,12 +168,12 @@ class FCSSample(Sample):
 
     def get_data(self) -> fcs.FCSData:
         """
-        Args:
-            normalized: Normalize data to mean and standard deviation.
-            scaled: Scale data between 0 and 1.
         Returns:
-            Dataframe with fcs data.
+            FCS data in dataframe.
         """
+        if self.data:
+            return self.data
+
         data = fcs.FCSData(self.path)
         return data
 
@@ -184,15 +191,11 @@ class SOMSample(Sample):
 
     def get_data(self) -> som.SOM:
         """
-        Args:
-            normalized: Normalize data to mean and standard deviation.
-            scaled: Scale data between 0 and 1.
         Returns:
-            Dataframe with fcs data.
+            SOM object containing numpy array.
         """
-        with self.path.open("r") as sfile:
-            data = som.SOM(pd.read_csv(sfile, index_col=0))
+        if self.data:
+            return self.data
 
-        data.tube = self.tube
-        data.cases = self.id
+        data = som.SOM(self.path)
         return data

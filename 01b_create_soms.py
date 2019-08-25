@@ -5,12 +5,12 @@ visualization and classification.
 """
 import argparse
 import logging
+from collections import defaultdict
 
 import pandas as pd
 
-import flowcat
-from flowcat import utils, io_functions
-from flowcat.dataset import sample
+from flowcat import utils, io_functions, parser
+from flowcat.dataset import sample, case_dataset
 
 
 LOGGER = logging.getLogger(__name__)
@@ -38,29 +38,21 @@ def transform_cases(dataset, model, output):
     Returns:
         Nothing.
     """
-    for case, res in utils.time_generator_logger(model.transform_generator(dataset)):
-        io_functions.save_som(res, output / case.id, save_config=False, subdirectory=False)
+    output.mkdir()
+    casesamples = defaultdict(list)
+    for case, somsample in utils.time_generator_logger(model.transform_generator(dataset)):
+        sompath = output / f"{case.id}_t{somsample.tube}.npy"
+        io_functions.save_som(somsample.data, sompath, save_config=False)
+        somsample.data = None
+        somsample.path = sompath
+        casesamples[case.id].append(somsample)
 
     somcases = []
     for case in dataset:
-        somsamples = []
-        for tube, tmodel in model.models.items():
-            som_id = f"{case.id}_t{tube}_{tmodel.run_identifier}"
-            fcs_sample = case.get_tube(tube)
-            somsamples.append(sample.SOMSample(
-                id=som_id,
-                case_id=case.id,
-                path=output / f"{case.id}_t{tube}.csv",
-                original_id=fcs_sample.id,
-                date=tmodel.model_time,
-                tube=tube,
-                dims=tmodel.model.dims,
-                markers=tmodel.model.markers,
-            ))
-        somcases.append(case.copy(samples=somsamples))
+        somcases.append(case.copy(samples=casesamples[case.id]))
 
-    somcollection = flowcat.dataset.case_dataset.CaseCollection(somcases)
-    io_functions.save_json(somcollection, output + "_collection.json")
+    somcollection = case_dataset.CaseCollection(somcases)
+    io_functions.save_json(somcollection, output + ".json")
 
     labels = [{"label": case.id, "randnum": 0, "group": case.group} for case in dataset]
     # Save metadata into an additional csv file with the same name
@@ -72,14 +64,14 @@ def transform_cases(dataset, model, output):
                 "dims": m.model.dims,
                 "channels": m.model.markers,
             } for tube, m in model.models.items()
-        }, output + ".json")
+        }, output + "_config.json")
 
 
 def main(args):
     """Load a model with given transforming arguments and transform individual
     cases."""
     cases = io_functions.load_case_collection(args.data, args.meta)
-    # cases = cases.sample(1, groups=["CLL", "normal"])
+    cases = cases.sample(1, groups=["CLL", "normal"])
 
     if args.tensorboard:
         tensorboard_dir = args.output / "tensorboard"
@@ -106,7 +98,7 @@ def main(args):
 
 if __name__ == "__main__":
     PARSER = argparse.ArgumentParser(usage="Generate references and individual SOMs.")
-    PARSER = flowcat.parser.add_dataset_args(PARSER)
+    PARSER = parser.add_dataset_args(PARSER)
     PARSER.add_argument(
         "--tensorboard",
         help="Flag to enable tensorboard logging",
