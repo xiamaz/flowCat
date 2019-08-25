@@ -37,9 +37,10 @@ class URLPath(pathlib.PosixPath):
     def mkdir(self, mode=0o777, exist_ok=True, parents=True):
         return super().mkdir(mode=mode, exist_ok=exist_ok, parents=parents)
 
-    def open(self, *args, **kwargs):
-        self.parent.mkdir(exist_ok=True, parents=True)
-        return super().open(*args, **kwargs)
+    def open(self, mode="r", *args, **kwargs):
+        if "w" in mode:
+            self.parent.mkdir(exist_ok=True, parents=True)
+        return super().open(mode=mode, *args, **kwargs)
 
     def __str__(self):
         if self._scheme:
