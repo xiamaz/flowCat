@@ -141,11 +141,8 @@ class CaseCollection:
     def get_paths(self, label, randnum=0):
         case = self.get_label(label)
         tubes = self.selected_tubes or self.tubes
-        # enforce same material
-        material = case.get_possible_material(
-            tubes, allowed_materials=mappings.ALLOWED_MATERIALS)
         paths = {
-            t: str(case.get_tube(t, material=material).localpath) for t in tubes
+            t: str(case.get_tube(t).localpath) for t in tubes
         }
         return paths
 

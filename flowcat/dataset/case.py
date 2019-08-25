@@ -25,8 +25,8 @@ CASE_REQUIRED_FIELDS = "date", "id", "filepaths"
 
 
 def assert_in_dict(fields, data):
-    for field in fields:
-        assert field in data, f"{field} is required"
+    for sfield in fields:
+        assert sfield in data, f"{field} is required"
 
 
 def filter_case(
@@ -179,27 +179,28 @@ class Case:
             return []
         return tube.markers
 
-    def get_tube(self, tube: str, min_count: int = 0, materials: List[mappings.Material] = None) -> sample.Sample:
+    def get_tube_samples(self, tube: str, kind: str) -> List[sample.Sample]:
+        if kind == "fcs":
+            samples = [s for s in self.samples if isinstance(s, sample.FCSSample) and s.tube == tube]
+        elif kind == "som":
+            samples = [s for s in self.samples if isinstance(s, sample.SOMSample) and s.tube == tube]
+        else:
+            raise ValueError(f"{kind} is not known. Valid options are: fcs, som")
+        return samples
+
+    def get_tube(self, tube: str, kind: str = "fcs") -> sample.Sample:
         """Get the TubePath fulfilling the given requirements, return the
         last on the list if multiple are available.
         Args:
             tube: Tube number to be selected.
-            min_count: Minimum number of events in the FCS file.
-            material: Type of material used for the tube.
+            kind: Kind of sample to return.
         Returns:
             TubePath or None.
         """
-        if self.used_material and not materials:
-            materials = [self.used_material]
-
-        tubecases = [
-            p for p in self.samples
-            if p.tube == tube and (
-                (not materials) or (p.material in materials)
-            ) and (
-                not min_count or min_count <= p.count)
-        ]
-        return tubecases[-1] if tubecases else None
+        samples = self.get_tube_samples(tube, kind)
+        if len(samples) != 1:
+            raise RuntimeError(f"Ambiguous {self.id}. Needed one, but got {len(samples)}")
+        return samples[0]
 
     def get_same_materials(self, tubes):
         """Check whether the given tubes can have the same material.
@@ -259,10 +260,10 @@ class Case:
         # check if all wanted tubes are inside available tubes using set ops
         return wanted_tubes <= available_tubes
 
-    def get_merged_data(self, tubes, channels=None, min_count=0, **kwargs):
+    def get_merged_data(self, tubes, channels=None, **kwargs):
         """Get dataframe from selected tubes and channels.
         """
-        sel_tubes = [self.get_tube(t, min_count=min_count).get_data(**kwargs) for t in tubes]
+        sel_tubes = [self.get_tube(t).get_data(**kwargs) for t in tubes]
         joined = pd.concat(sel_tubes, sort=False)
         if channels:
             joined = joined[channels]

@@ -58,13 +58,13 @@ class CaseSingleSom:
         return mweights
 
     def train(self, data: Iterable[case.Case], *args, **kwargs) -> CaseSingleSom:
-        tsamples = [c.get_tube(self.tube, materials=self.materials).get_data() for c in data]
+        tsamples = [c.get_tube(self.tube).get_data() for c in data]
         self.model.train(tsamples)
         self.train_labels = [c.id for c in data]
         return self
 
     def transform(self, data: case.Case, *args, **kwargs) -> SOM:
-        fcs_sample = data.get_tube(self.tube, materials=self.materials)
+        fcs_sample = data.get_tube(self.tube)
 
         if fcs_sample is None:
             raise CaseSomSampleException(data.id, self.tube, self.materials)

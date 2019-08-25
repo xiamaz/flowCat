@@ -120,10 +120,9 @@ def save_csv(data: pd.DataFrame, path: URLPath):
 
 
 def get_som_tube_path(
-        path: Union[str, URLPath],
+        path: URLPath,
         tube: str,
         subdirectory: bool) -> URLPath:
-    path = URLPath(path)
     if subdirectory:
         result = path / f"t{tube}"
     else:
@@ -133,7 +132,7 @@ def get_som_tube_path(
 
 def save_som(
         som: Union[SOMCollection, SOM],
-        path: Union[str, URLPath],
+        path: URLPath,
         subdirectory: bool = False,
         save_config: bool = True):
     """Save som object to the given destination.
@@ -149,8 +148,6 @@ def save_som(
     else:
         raise TypeError
 
-    path = URLPath(path)
-
     for som_obj in soms:
         data_dest, conf_dest = get_som_tube_path(path, som_obj.tube, subdirectory)
         LOGGER.debug("Saving %s to %s", som_obj, data_dest)
@@ -160,7 +157,7 @@ def save_som(
 
 
 def load_som(
-        path: Union[str, URLPath],
+        path: URLPath,
         subdirectory: bool = False,
         tube: Union[int, list] = None) -> Union[SOMCollection, SOM]:
     """Load soms into a som collection or if tube specified into a single SOM."""

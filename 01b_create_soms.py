@@ -50,6 +50,7 @@ def transform_cases(dataset, model, output):
             somsamples.append(sample.SOMSample(
                 id=som_id,
                 case_id=case.id,
+                path=output / f"{case.id}_t{tube}.csv",
                 original_id=fcs_sample.id,
                 date=tmodel.model_time,
                 tube=tube,

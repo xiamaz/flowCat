@@ -10,6 +10,8 @@ from __future__ import annotations
 from typing import List, Tuple, Union
 from dataclasses import dataclass, replace, field, asdict
 
+import pandas as pd
+
 from dataslots import with_slots
 
 from flowcat import mappings, utils
@@ -188,8 +190,9 @@ class SOMSample(Sample):
         Returns:
             Dataframe with fcs data.
         """
-        data = som.SOM.from_path(self.path)
-        data.material = self.material
+        with self.path.open("r") as sfile:
+            data = som.SOM(pd.read_csv(sfile, index_col=0))
+
         data.tube = self.tube
-        data.cases = [self.id]
+        data.cases = self.id
         return data
