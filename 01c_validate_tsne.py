@@ -26,7 +26,7 @@ def create_tsne(data: flowcat.utils.URLPath, meta: flowcat.utils.URLPath, plotdi
         plotdir: Path to output plots for data.
     """
     data = flowcat.utils.URLPath("output/test-2019-08/som")
-    meta = flowcat.utils.URLPath("output/test-2019-08/som_collection.json")
+    meta = flowcat.utils.URLPath("output/test-2019-08/som.json")
     plotdir = flowcat.utils.URLPath("output/test-2019-08/tsne")
     cases = flowcat.io_functions.load_case_collection(data, meta)
 

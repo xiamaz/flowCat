@@ -71,7 +71,7 @@ def main(args):
     """Load a model with given transforming arguments and transform individual
     cases."""
     cases = io_functions.load_case_collection(args.data, args.meta)
-    cases = cases.sample(1, groups=["CLL", "normal"])
+    # cases = cases.sample(1, groups=["CLL", "normal"])
 
     if args.tensorboard:
         tensorboard_dir = args.output / "tensorboard"

@@ -47,5 +47,22 @@ class TFSomTestCase(unittest.TestCase):
         mapped, = model.run_till_op("BMU_Indices/map_to_node_index", newdata, 0)
         assert_array_equal(mapped, expected)
 
+    def test_missing_data(self):
+        model = tfsom.TFSom(
+            (10, 10, 4),
+            seed=SEED,
+        )
+        model.initialize()
+
+        data = np.random.rand(1000, 4)
+        model.train(data)
+
+        newdata = np.random.rand(100, 4)
+        newdata[:, 0] = 0
+        newdata[:, 2] = 0
+        mask = (0, 1, 0, 1)
+        print(newdata)
+        result = model.run_till_op("BMU_Indices/map_to_node_index", newdata, 0)
+
 
 logging.basicConfig(level=logging.INFO)

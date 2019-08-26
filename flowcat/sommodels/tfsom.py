@@ -491,6 +491,7 @@ class TFSom:
             squared_distance = tf.reduce_sum(
                 tf.pow(tf.subtract(tf.expand_dims(weights, axis=0),
                                    tf.expand_dims(input_copy, axis=1)), 2), 2)
+            # TODO: use sample mask to null some terms
 
             bmu_indices = tf.argmin(squared_distance, axis=1, name="map_to_node_index")
 
@@ -517,7 +518,6 @@ class TFSom:
                 self._radius_cooling,
                 self._initial_radius, self._end_radius,
                 epoch, self._max_epochs)
-            self._radius = radius
             alpha = apply_cooling(
                 self._learning_cooling,
                 self._initial_learning_rate, self._end_learning_rate,

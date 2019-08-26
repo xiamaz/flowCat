@@ -104,7 +104,11 @@ def print_cases(dataset: CaseCollection):
     """Print cases in a table."""
     print(f"{'Label':<40}\t{'Group':<6}\t{'Infiltration':<4}")
     for case in dataset:
-        print(f"{case.id:<40}\t{case.group:<6}\t{case.infiltration:<4}")
+        if case.infiltration is not None:
+            infiltration = case.infiltration
+        else:
+            infiltration = "NA"
+        print(f"{case.id:<40}\t{case.group:<6}\t{infiltration:<4}")
 
 
 PARSER = ArgumentParser(
