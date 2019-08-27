@@ -10,7 +10,7 @@ import enum
 from argparse import ArgumentParser
 import collections
 
-import flowcat
+from flowcat import parser, utils, mappings
 from flowcat.dataset.case_dataset import CaseCollection
 from flowcat.io_functions import save_case_collection
 
@@ -108,12 +108,20 @@ def print_marker_ratios(counts, num, tube):
         print(f"\t{marker}\t\t{count}/{num} ({count / num:.2})")
 
 
+def case_get_tube(case, tube):
+    try:
+        sampledata = case.get_tube(tube)
+    except RuntimeError:
+        sampledata = None
+    return sampledata
+
+
 def get_selected_markers(cases, tubes, marker_threshold=0.9):
     """Get a list of marker channels available in all tubes."""
     selected_markers = {}
     for tube in tubes:
         marker_counts = collections.Counter(
-            marker for t in [case.get_tube(tube) for case in cases]
+            marker for t in [case_get_tube(case, tube) for case in cases]
             if t is not None for marker in t.markers)
         print_marker_ratios(marker_counts, len(cases), tube)
         # get ratio of availability vs all cases
@@ -156,7 +164,7 @@ def preprocess_cases(cases: CaseCollection, tubes=("1", "2", "3")):
 
     with timing("Filter all"):
         all_cases, reasons = cases.filter_reasons(
-            materials=flowcat.ALLOWED_MATERIALS,
+            materials=mappings.ALLOWED_MATERIALS,
             tubes=tubes)
         print_diff(cases, all_cases)
         reason_count = collections.Counter([r for _, rs in reasons for r in rs])
@@ -196,7 +204,7 @@ def preprocess_cases(cases: CaseCollection, tubes=("1", "2", "3")):
 
 
 def main(args):
-    cases = flowcat.parser.get_dataset(args)
+    cases = parser.get_dataset(args)
     train, test = preprocess_cases(cases)
     save_case_collection(train, args.output / "train.json")
     save_case_collection(test, args.output / "test.json")
@@ -206,9 +214,9 @@ if __name__ == "__main__":
     PARSER = ArgumentParser(
         description="Get overview of available data and create a dataset used for SOM transformation."
     )
-    flowcat.parser.add_dataset_args(PARSER)
+    parser.add_dataset_args(PARSER)
     PARSER.add_argument(
-        "output", type=flowcat.utils.URLPath,
+        "output", type=utils.URLPath,
         help="Path to save output metadata",
     )
     main(PARSER.parse_args())

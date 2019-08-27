@@ -37,5 +37,5 @@ def add_dataset_args(parser: ArgumentParser) -> ArgumentParser:
 
 
 def get_dataset(args: Namespace) -> CaseCollection:
-    cases = io_functions.load_case_collection_from_caseinfo(args.input, args.meta)
+    cases = io_functions.load_case_collection_from_caseinfo(args.data, args.meta)
     return cases

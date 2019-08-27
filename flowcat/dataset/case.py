@@ -218,7 +218,10 @@ class Case:
         return found_all
 
     def has_markers(self, tube, markers):
-        tcase = self.get_tube(tube)
+        try:
+            tcase = self.get_tube(tube)
+        except RuntimeError:
+            tcase = None
         if tcase is None:
             return False;
         return tcase.has_markers(markers)
