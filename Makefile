@@ -1,6 +1,6 @@
 DATADIR = /data/flowcat-data/mll-flowdata/decCLL-9F
 DATAMETA = /data/flowcat-data/mll-flowdata/decCLL-9F/case_info_2018-12-15
-OUTDIR = ~/flowCat/output/test-2019-08
+OUTDIR = ~/flowCat/output/0-munich-data
 
 DSNAME = dataset
 
