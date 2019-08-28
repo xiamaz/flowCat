@@ -8,10 +8,9 @@ thereafter directly load using casecollection load.
 import json
 from datetime import datetime
 
-import flowcat
 from flowcat.dataset import case as fc_case, sample as fc_sample
 from flowcat.dataset.case_dataset import CaseCollection
-from flowcat.io_functions import save_case_collection
+from flowcat.io_functions import save_case_collection, load_case_collection
 from flowcat.utils import URLPath
 
 
@@ -71,7 +70,7 @@ data = [meta_to_case(meta, fcs_data_path) for meta in metadata]
 
 dataset = CaseCollection(data, data_path=fcs_data_path)
 
-outpath = flowcat.utils.URLPath("output/50-berlin-data/dataset")
+outpath = URLPath("output/50-berlin-data/dataset")
 
 save_case_collection(dataset, dataset_path / "casecollection.json")
 
