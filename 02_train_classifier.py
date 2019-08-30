@@ -5,7 +5,8 @@ Train models on Munich data and attempt to classify Bonn data.
 import numpy as np
 from sklearn.preprocessing import LabelBinarizer
 from tensorflow import keras
-from keras import layers, regularizers, models
+from tensorflow.keras import layers, regularizers, models  # pylint: disable=import-error
+# from keras import layers, regularizers, models
 from argmagic import argmagic
 
 from flowcat import utils, io_functions, mappings
@@ -21,31 +22,39 @@ def create_model_multi_input(input_shapes, yshape, global_decay=5e-4):
         inputs.append(ix)
         x = layers.Conv2D(
             filters=32, kernel_size=2, activation="relu", strides=1,
-            # kernel_regularizer=regularizers.l2(global_decay),
+            kernel_regularizer=regularizers.l2(global_decay),
         )(ix)
         x = layers.Conv2D(
             filters=32, kernel_size=2, activation="relu", strides=1,
-            # kernel_regularizer=regularizers.l2(global_decay),
+            kernel_regularizer=regularizers.l2(global_decay),
         )(x)
-        x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
+        # x = layers.Conv2D(
+        #     filters=32, kernel_size=2, activation="relu", strides=1,
+        #     kernel_regularizer=regularizers.l2(global_decay),
+        # )(x)
+        # x = layers.Conv2D(
+        #     filters=64, kernel_size=2, activation="relu", strides=1,
+        #     # kernel_regularizer=regularizers.l2(global_decay),
+        # )(x)
+        # x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
         x = layers.Conv2D(
             filters=32, kernel_size=2, activation="relu", strides=1,
-            # kernel_regularizer=regularizers.l2(global_decay),
+            kernel_regularizer=regularizers.l2(global_decay),
         )(x)
         x = layers.Conv2D(
-            filters=32, kernel_size=2, activation="relu", strides=1,
-            # kernel_regularizer=regularizers.l2(global_decay),
+            filters=64, kernel_size=2, activation="relu", strides=1,
+            kernel_regularizer=regularizers.l2(global_decay),
         )(x)
-        x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
-        x = layers.GlobalAveragePooling2D()(x)
+        # x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
+        # x = layers.GlobalAveragePooling2D()(x)
+        x = layers.GlobalMaxPooling2D()(x)
         segments.append(x)
 
-    x = layers.average(segments)
+    x = layers.maximum(segments)
     # x = layers.Conv2D(
     #     filters=32, kernel_size=2, activation="relu", strides=1,
     #     kernel_regularizer=regularizers.l2(global_decay))(x)
     # x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
-    # x = layers.BatchNormalization()(x)
     # x = layers.Dropout(0.2)(x)
 
     # x = layers.Flatten()(ix)
@@ -57,21 +66,25 @@ def create_model_multi_input(input_shapes, yshape, global_decay=5e-4):
     # x = layers.BatchNormalization()(x)
     # x = layers.Dropout(0.2)(x)
     x = layers.Dense(
-        units=128, activation="relu", kernel_initializer="uniform",
-        # kernel_regularizer=regularizers.l2(global_decay)
+        units=128, activation="relu",
+        # kernel_initializer="uniform",
+        kernel_regularizer=regularizers.l2(global_decay)
     )(x)
+    # x = layers.BatchNormalization()(x)
     x = layers.Dense(
-        units=64, activation="relu", kernel_initializer="uniform",
-        # kernel_regularizer=regularizers.l2(global_decay)
+        units=64, activation="relu",
+        # kernel_initializer="uniform",
+        kernel_regularizer=regularizers.l2(global_decay)
     )(x)
+    # x = layers.BatchNormalization()(x)
     # x = layers.BatchNormalization()(x)
     # x = layers.Dropout(0.2)(x)
 
-    final = layers.Dense(
-        units=yshape, activation="sigmoid"
+    x = layers.Dense(
+        units=yshape, activation="softmax"
     )(x)
 
-    model = models.Model(inputs=inputs, outputs=final)
+    model = models.Model(inputs=inputs, outputs=x)
     for layer in model.layers:
         print(layer.output_shape)
     return model
@@ -135,10 +148,11 @@ def main(data: utils.URLPath, output: utils.URLPath):
         write_grads=True,
         write_images=True,
     )
+    nan_callback = keras.callbacks.TerminateOnNaN()
 
     model.fit_generator(
         epochs=100, shuffle=True,
-        callbacks=[tensorboard_callback],
+        callbacks=[tensorboard_callback, nan_callback],
         generator=trainseq, validation_data=validseq)
 
     model.save(str(output / "model.h5"))

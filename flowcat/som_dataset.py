@@ -6,7 +6,7 @@ from typing import List, Tuple, Dict
 import numpy as np
 import pandas as pd
 
-from keras.utils import Sequence
+from tensorflow import keras
 
 from flowcat import utils, io_functions
 from flowcat.dataset.som import SOM
@@ -115,7 +115,7 @@ class SOMDataset:
         return f"<SOMDataset {len(self)} cases>"
 
 
-class SOMSequence(Sequence):
+class SOMSequence(keras.utils.Sequence):
 
     def __init__(self, dataset: SOMDataset, binarizer, batch_size: int = 32, tube=1):
         self.dataset = dataset
