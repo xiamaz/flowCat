@@ -1,36 +1,54 @@
+#!/usr/bin/env python3
 """
 Train models on Munich data and attempt to classify Bonn data.
 """
 import numpy as np
 from sklearn.preprocessing import LabelBinarizer
+from tensorflow import keras
 from keras import layers, regularizers, models
 from argmagic import argmagic
 
-import flowcat
-from flowcat import utils, io_functions
+from flowcat import utils, io_functions, mappings
 from flowcat.som_dataset import SOMDataset, SOMSequence
 
 
 def create_model_multi_input(input_shapes, yshape, global_decay=5e-4):
     segments = []
     inputs = []
+    print(input_shapes)
     for xshape in input_shapes:
         ix = layers.Input(shape=xshape)
         inputs.append(ix)
         x = layers.Conv2D(
-            filters=12, kernel_size=3, activation="relu", strides=1,
-            kernel_regularizer=regularizers.l2(global_decay))(ix)
+            filters=32, kernel_size=2, activation="relu", strides=1,
+            # kernel_regularizer=regularizers.l2(global_decay),
+        )(ix)
+        x = layers.Conv2D(
+            filters=32, kernel_size=2, activation="relu", strides=1,
+            # kernel_regularizer=regularizers.l2(global_decay),
+        )(x)
+        x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
+        x = layers.Conv2D(
+            filters=32, kernel_size=2, activation="relu", strides=1,
+            # kernel_regularizer=regularizers.l2(global_decay),
+        )(x)
+        x = layers.Conv2D(
+            filters=32, kernel_size=2, activation="relu", strides=1,
+            # kernel_regularizer=regularizers.l2(global_decay),
+        )(x)
+        x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
+        x = layers.GlobalAveragePooling2D()(x)
         segments.append(x)
 
-    x = layers.maximum(segments)
+    x = layers.average(segments)
     # x = layers.Conv2D(
     #     filters=32, kernel_size=2, activation="relu", strides=1,
     #     kernel_regularizer=regularizers.l2(global_decay))(x)
-    x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
+    # x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
     # x = layers.BatchNormalization()(x)
-    x = layers.Dropout(0.2)(x)
+    # x = layers.Dropout(0.2)(x)
 
-    x = layers.Flatten()(ix)
+    # x = layers.Flatten()(ix)
 
     # x = layers.Dense(
     #     units=128, activation="relu", kernel_initializer="uniform",
@@ -39,17 +57,23 @@ def create_model_multi_input(input_shapes, yshape, global_decay=5e-4):
     # x = layers.BatchNormalization()(x)
     # x = layers.Dropout(0.2)(x)
     x = layers.Dense(
+        units=128, activation="relu", kernel_initializer="uniform",
+        # kernel_regularizer=regularizers.l2(global_decay)
+    )(x)
+    x = layers.Dense(
         units=64, activation="relu", kernel_initializer="uniform",
-        kernel_regularizer=regularizers.l2(global_decay)
+        # kernel_regularizer=regularizers.l2(global_decay)
     )(x)
     # x = layers.BatchNormalization()(x)
-    x = layers.Dropout(0.2)(x)
+    # x = layers.Dropout(0.2)(x)
 
     final = layers.Dense(
         units=yshape, activation="sigmoid"
     )(x)
 
     model = models.Model(inputs=inputs, outputs=final)
+    for layer in model.layers:
+        print(layer.output_shape)
     return model
 
 
@@ -80,7 +104,7 @@ def main(data: utils.URLPath, output: utils.URLPath):
         data: Path to som dataset
         output: Output path
     """
-    tubes = ("1", "2", "3")
+    tubes = ("1", "2")
 
     munich = SOMDataset.from_path(data)
     train, validate = munich.split(ratio=0.9, stratified=True)
@@ -91,7 +115,7 @@ def main(data: utils.URLPath, output: utils.URLPath):
     io_functions.save_json(validate_ids, output / "ids_validate.json")
 
     selected_tubes = {tube: munich.config[tube] for tube in tubes}
-    groups = flowcat.mappings.GROUPS
+    groups = mappings.GROUPS
 
     config = {
         "tubes": selected_tubes,
@@ -99,13 +123,22 @@ def main(data: utils.URLPath, output: utils.URLPath):
     }
     io_functions.save_json(config, output / "config.json")
 
-    binarizer, model = get_model(selected_tubes, flowcat.mappings.GROUPS, global_decay=5e-3)
+    binarizer, model = get_model(selected_tubes, mappings.GROUPS, global_decay=5e-6)
 
     trainseq = SOMSequence(train, binarizer, tube=tubes)
     validseq = SOMSequence(validate, binarizer, tube=tubes)
 
+    tensorboard_dir = str(output / "tensorboard")
+    tensorboard_callback = keras.callbacks.TensorBoard(
+        log_dir=str(tensorboard_dir),
+        histogram_freq=5,
+        write_grads=True,
+        write_images=True,
+    )
+
     model.fit_generator(
-        epochs=20,
+        epochs=100, shuffle=True,
+        callbacks=[tensorboard_callback],
         generator=trainseq, validation_data=validseq)
 
     model.save(str(output / "model.h5"))

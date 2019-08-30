@@ -9,7 +9,7 @@ import pandas as pd
 from keras.utils import Sequence
 
 from flowcat import utils, io_functions
-from flowcat.dataset.som import SOMCollection, SOM
+from flowcat.dataset.som import SOM
 
 
 def pad_array(array, pad_width):
@@ -60,10 +60,10 @@ class SOMDataset:
 
     @classmethod
     def from_path(cls, path):
-        config = io_functions.load_json(path + ".json")
+        config = io_functions.load_json(path + "_config.json")
         metadata = io_functions.load_csv(path + ".csv")
         tubes = list(config.keys())
-        som_cases = metadata.apply(load_som_cases, axis=1, args=(path + "np", tubes))
+        som_cases = metadata.apply(load_som_cases, axis=1, args=(path, tubes))
         return cls(data=som_cases, config=config)
 
     @property
