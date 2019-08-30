@@ -98,6 +98,7 @@ class SOMDataset:
             train = data[pivot:]
             validate = data[:pivot]
 
+        # reset index and shuffle randomly
         train.reset_index(drop=True, inplace=True)
         train = train.reindex(np.random.permutation(train.index))
         validate.reset_index(drop=True, inplace=True)
@@ -107,6 +108,18 @@ class SOMDataset:
             self.__class__(train, config=self.config),
             self.__class__(validate, config=self.config),
         )
+
+    def balance(self, num_per_group: int) -> SOMDataset:
+        """Randomly upsample groups with samples less than num_per_group,
+        randomly downsample groups with samples more than num_per_group."""
+        groups = []
+        all_data = self.data
+        for _, gdata in all_data.groupby(by=lambda s: all_data[s].group):
+            groups.append(gdata.sample(num_per_group, replace=True))
+        new_data = pd.concat(groups)
+        self.data = new_data
+        self.data.reset_index(drop=True, inplace=True)
+        return self
 
     def __len__(self):
         return self.data.shape[0]
