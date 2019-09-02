@@ -87,3 +87,34 @@ class SOMDatasetTestCase(shared.FlowcatTestCase):
         ]), np.array([[1, 0, 0]]))
         for a, b in zip(sequence[0], expected):
             assert_array_equal(a, b)
+
+        sequence_b2 = SOMSequence(dataset, binarizer, ["1"], batch_size=2)
+        expected_b2 = (np.array([[
+            [[[1, 1], [2, 1]], [[3, 1], [3, 2]]],
+            [[[1, 1], [2, 1]], [[3, 1], [3, 2]]],
+        ]]), np.array([[1, 0, 0], [1, 0, 0]]))
+        for a, b in zip(sequence_b2[0], expected_b2):
+            assert_array_equal(a, b)
+
+    def test_padding(self):
+        dataset = create_som_dataset(
+            [
+                ("1", "a", {"1": [[[1, 1], [2, 1]], [[3, 1], [3, 2]]]}),
+            ],
+            [
+                ("1", (2, 2, 2), ("x", "y"))
+            ]
+        )
+        binarizer = LabelBinarizer()
+        binarizer.fit(["a", "b", "c"])
+        sequence = SOMSequence(dataset, binarizer, ["1"], batch_size=1, pad_width=1)
+        expected_data = np.array([[
+            [
+                [[3, 2], [3, 1], [3, 2], [3, 1]],  # d c d c
+                [[2, 1], [1, 1], [2, 1], [1, 1]],  # b a b a
+                [[3, 2], [3, 1], [3, 2], [3, 1]],  # d c d c
+                [[2, 1], [1, 1], [2, 1], [1, 1]],  # b a b a
+            ]
+        ]])
+        result, _ = sequence[0]
+        assert_array_equal(result, expected_data)
