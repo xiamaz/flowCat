@@ -3,9 +3,14 @@ Shared functions used by all tests.
 """
 import os
 import pathlib
+import unittest
+
 import numpy as np
 import pandas as pd
+from pandas.testing import assert_frame_equal
+
 import flowcat.utils as utils
+from flowcat.dataset import fcs
 
 # Path to test directory containing test files
 TESTPATH = utils.URLPath(__file__).parent
@@ -20,6 +25,32 @@ HISTO_PATH = DATAPATH / "histogram" / "abstract_normal"
 
 # set utils tmp path to another location
 utils.TMP_PATH = "tmp_test"
+
+
+def create_fcs(data, columns, meta=None) -> fcs.FCSData:
+    """Create fcs data from literal information."""
+    if meta:
+        meta = create_fcs_meta(meta)
+    return fcs.FCSData(pd.DataFrame(data, columns=columns), meta=meta)
+
+
+def create_fcs_meta(meta_dict: dict) -> dict:
+    """Create dict of namedtuples."""
+    return {
+        name: fcs.ChannelMeta(
+            pd.Interval(*interval),
+            exists
+        )
+        for name, (interval, exists) in meta_dict.items()
+    }
+
+
+class FlowcatTestCase(unittest.TestCase):
+    def assert_fcs_equal(self, data1: fcs.FCSData, data2: fcs.FCSData):
+        """Ensure that data and column information in two fcs are the same."""
+        assert_frame_equal(data1.data, data2.data)
+
+        self.assertDictEqual(data1.meta, data2.meta)
 
 
 class MockLoader:

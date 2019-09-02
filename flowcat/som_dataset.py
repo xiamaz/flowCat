@@ -13,11 +13,12 @@ from flowcat.dataset.som import SOM
 
 
 def pad_array(array, pad_width):
-    array = np.pad(array, pad_width=[
-        (pad_width, pad_width),
-        (pad_width, pad_width),
-        (0, 0),
-    ], mode="wrap")
+    if pad_width > 0:
+        array = np.pad(array, pad_width=[
+            (pad_width, pad_width),
+            (pad_width, pad_width),
+            (0, 0),
+        ], mode="wrap")
     return array
 
 
@@ -28,14 +29,17 @@ class SOMCase:
     metadata."""
 
     label: str
-    group: str
-    soms: Dict[str, utils.URLPath]
+    group: str = None
+    soms: Dict[str, utils.URLPath] = field(default_factory=dict)
     data: Dict[str, np.array] = field(default_factory=dict)
 
-    def get_tube(self, tube: str) -> SOM:
+    def get_tube(self, tube: str, store: bool = False) -> SOM:
         if tube not in self.data:
             sompath = self.soms[tube]
-            self.data[tube] = np.load(sompath)
+            data = np.load(sompath)
+            if store:
+                self.data[tube] = np.load(sompath)
+            return data
         return self.data[tube]
 
     def __repr__(self):
@@ -130,26 +134,38 @@ class SOMDataset:
 
 class SOMSequence(keras.utils.Sequence):
 
-    def __init__(self, dataset: SOMDataset, binarizer, batch_size: int = 32, tube=1):
+    def __init__(
+            self,
+            dataset: SOMDataset,
+            binarizer,
+            tube: List[int],
+            batch_size: int = 32,
+            pad_width: int = 0):
         self.dataset = dataset
         self.tube = tube
         self.batch_size = batch_size
         self.binarizer = binarizer
+        self.pad_width = pad_width
+
+        self._cache = {}
 
     def __len__(self) -> int:
         return int(np.ceil(len(self.dataset) / float(self.batch_size)))
 
     def __getitem__(self, idx: int) -> Tuple[np.array, np.array]:
+        if idx in self._cache:
+            return self._cache[idx]
+
         batch = self.dataset.data[idx * self.batch_size:(idx + 1) * self.batch_size]
 
         inputs = []
         for tube in self.tube:
-            dims = self.dataset.config[tube]["dims"]
             x_batch = np.array([
-                np.reshape(s.get_tube(tube), dims) for s in batch
+                pad_array(s.get_tube(tube), self.pad_width) for s in batch
             ])
             inputs.append(x_batch)
 
         y_labels = [s.group for s in batch]
         y_batch = self.binarizer.transform(y_labels)
+        self._cache[idx] = inputs, y_batch
         return inputs, y_batch

@@ -94,7 +94,7 @@ class FCSData:
 
     __slots__ = (
         "_data",  # pd dataframe of data
-        "_meta",  # dict of channel meta namedtuples
+        "_meta",  # dict of channel name to channel meta namedtuples
         "_channels",  # channel names
     )
 
