@@ -81,6 +81,10 @@ class SOMDataset:
             for group, data in self.data.groupby(by=lambda s: self.data[s].group)
         }
 
+    def filter_groups(self, groups: List[str]) -> SOMDataset:
+        newgroup = self.data[self.data.apply(lambda c: c.group in groups)]
+        return self.__class__(newgroup, config=self.config)
+
     def get_tube(self, tube: int) -> List[SOM]:
         return [s.get_tube(tube) for s in self.data]
 
@@ -118,11 +122,38 @@ class SOMDataset:
         randomly downsample groups with samples more than num_per_group."""
         groups = []
         all_data = self.data
+
         for _, gdata in all_data.groupby(by=lambda s: all_data[s].group):
             groups.append(gdata.sample(num_per_group, replace=True))
+
         new_data = pd.concat(groups)
         self.data = new_data
         self.data.reset_index(drop=True, inplace=True)
+        self.data = self.data.reindex(np.random.permutation(self.data.index))
+        return self
+
+    def balance_per_group(self, num_per_group: dict) -> SOMDataset:
+        """Randomly upsample groups in dict to the given count."""
+        groups = []
+        all_data = self.data
+
+        for name, gdata in all_data.groupby(by=lambda s: all_data[s].group):
+            try:
+                num = num_per_group[name]
+                groups.append(gdata.sample(num, replace=True))
+            except KeyError:
+                continue
+
+        new_data = pd.concat(groups)
+        self.data = new_data
+        self.data.reset_index(drop=True, inplace=True)
+        self.data = self.data.reindex(np.random.permutation(self.data.index))
+        return self
+
+    def map_groups(self, mapping: dict) -> SOMDataset:
+        """Map cases to new groups given inside the dict."""
+        for case in self.data:
+            case.group = mapping.get(case.group, case.group)
         return self
 
     def __len__(self):
@@ -138,7 +169,7 @@ class SOMSequence(keras.utils.Sequence):
             self,
             dataset: SOMDataset,
             binarizer,
-            tube: List[int],
+            tube: List[str],
             batch_size: int = 32,
             pad_width: int = 0):
         self.dataset = dataset
@@ -148,6 +179,10 @@ class SOMSequence(keras.utils.Sequence):
         self.pad_width = pad_width
 
         self._cache = {}
+
+    @property
+    def true_labels(self):
+        return [d.group for d in self.dataset.data]
 
     def __len__(self) -> int:
         return int(np.ceil(len(self.dataset) / float(self.batch_size)))

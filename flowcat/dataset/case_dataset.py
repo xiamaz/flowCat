@@ -211,6 +211,26 @@ class CaseCollection:
                 selected_tubes=self.selected_tubes),
         )
 
+    def balance(self, num):
+        """Balance classes to count given."""
+        case_groups = collections.defaultdict(list)
+        for case in self.cases:
+            case_groups[case.group].append(case)
+
+        balanced = []
+        for group_cases in case_groups.values():
+            balanced += random.choices(group_cases, k=num)
+        return self.__class__(
+            balanced,
+            selected_markers=self.selected_markers,
+            selected_tubes=self.selected_tubes
+        )
+
+    def shuffle(self):
+        """Shuffle cases."""
+        random.shuffle(self.cases)
+        return self
+
     def __repr__(self):
         return f"<{self.__class__.__name__} {len(self)} cases>"
 

@@ -61,6 +61,9 @@ MARKER_NAME_MAP = {
 }
 
 # name of main groups in defined order for plotting
+ALL_GROUPS = [
+    "CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "HCLv", "normal"
+]
 GROUPS = [
     "CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "normal"
 ]

@@ -58,6 +58,7 @@ def create_meta_from_fcs(meta: dict, data: pd.DataFrame) -> dict:
     return channel_metas
 
 
+
 def join_fcs_data(fcs_data: List[FCSData], channels=None) -> FCSData:
     """Join the given fcs files.
 
