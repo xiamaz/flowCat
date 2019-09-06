@@ -14,6 +14,52 @@ from flowcat import utils, io_functions, mappings
 from flowcat.som_dataset import SOMDataset, SOMSequence
 
 
+def create_model_early_merge(input_shapes, yshape, global_decay=5e-6):
+    inputs = []
+    for xshape in input_shapes:
+        ix = layers.Input(shape=xshape)
+        inputs.append(ix)
+
+    x = layers.concatenate(inputs)
+    # x = layers.Conv2D(
+    #     filters=32, kernel_size=2, activation="relu", strides=1,
+    #     kernel_regularizer=regularizers.l2(global_decay))(x)
+    # x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
+    # x = layers.Dropout(0.2)(x)
+
+    x = layers.Flatten()(ix)
+
+    x = layers.Dense(
+        units=128, activation="relu", kernel_initializer="uniform",
+        kernel_regularizer=regularizers.l2(global_decay)
+    )(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.Dropout(0.2)(x)
+    x = layers.Dense(
+        units=128, activation="relu",
+        # kernel_initializer="uniform",
+        kernel_regularizer=regularizers.l2(global_decay)
+    )(x)
+    # x = layers.BatchNormalization()(x)
+    x = layers.Dense(
+        units=64, activation="relu",
+        # kernel_initializer="uniform",
+        kernel_regularizer=regularizers.l2(global_decay)
+    )(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.Dropout(0.2)(x)
+
+    x = layers.Dense(
+        units=yshape, activation="softmax"
+    )(x)
+
+    model = models.Model(inputs=inputs, outputs=x)
+    for layer in model.layers:
+        print(layer.output_shape)
+    return model
+
+
 def create_model_multi_input(input_shapes, yshape, global_decay=5e-6):
     segments = []
     inputs = []
@@ -96,7 +142,8 @@ def get_model(channel_config, groups, **kwargs):
     inputs = tuple([*d["dims"][:-1], len(d["channels"])] for d in channel_config.values())
     output = len(groups)
 
-    model = create_model_multi_input(inputs, output, **kwargs)
+    # model = create_model_multi_input(inputs, output, **kwargs)
+    model = create_model_early_merge(inputs, output, **kwargs)
     model.compile(
         loss="categorical_crossentropy",
         # loss="binary_crossentropy",
