@@ -72,7 +72,7 @@ class SOMDataset:
 
     @property
     def labels(self):
-        return np.array([s.group for s in self.data])
+        return [s.label for s in self.data]
 
     @property
     def group_counts(self):
@@ -85,24 +85,27 @@ class SOMDataset:
         newgroup = self.data[self.data.apply(lambda c: c.group in groups)]
         return self.__class__(newgroup, config=self.config)
 
+    def filter(self, groups=None) -> SOMDataset:
+        return self.filter_groups(groups=groups)
+
     def get_tube(self, tube: int) -> List[SOM]:
         return [s.get_tube(tube) for s in self.data]
 
-    def split(self, ratio: float, stratified: bool = True) -> Tuple[SOMDataset, SOMDataset]:
-        if stratified:
+    def create_split(self, num: float, stratify: bool = True) -> Tuple[SOMDataset, SOMDataset]:
+        if stratify:
             trains = []
             valids = []
             for group, data in self.data.groupby(by=lambda s: self.data[s].group):
                 data.reset_index(drop=True, inplace=True)
                 data = data.reindex(np.random.permutation(data.index))
-                pivot = round(ratio * len(data))
+                pivot = round(num * len(data))
                 trains.append(data[:pivot])
                 valids.append(data[pivot:])
             train = pd.concat(trains)
             validate = pd.concat(valids)
         else:
             data = self.data.reindex(np.random.permutation(data.index))
-            pivot = round(ratio * len(data))
+            pivot = round(num * len(data))
             train = data[pivot:]
             validate = data[:pivot]
 
@@ -162,6 +165,12 @@ class SOMDataset:
     def __repr__(self):
         return f"<SOMDataset {len(self)} cases>"
 
+    def __iter__(self):
+        return iter(self.data)
+
+    def __getitem__(self, value):
+        return self.data[value]
+
 
 class SOMSequence(keras.utils.Sequence):
 
@@ -170,10 +179,12 @@ class SOMSequence(keras.utils.Sequence):
             dataset: SOMDataset,
             binarizer,
             tube: List[str],
+            get_array_fun,
             batch_size: int = 32,
             pad_width: int = 0):
         self.dataset = dataset
         self.tube = tube
+        self.get_array_fun = get_array_fun
         self.batch_size = batch_size
         self.binarizer = binarizer
         self.pad_width = pad_width
@@ -197,7 +208,8 @@ class SOMSequence(keras.utils.Sequence):
         for tube in self.tube:
             x_batch = np.array([
                 pad_array(
-                    s.get_tube(tube, kind="som").get_data().data,
+                    self.get_array_fun(s, tube),
+                    # s.get_tube(tube, kind="som").get_data().data,
                     self.pad_width,
                 ) for s in batch
             ])

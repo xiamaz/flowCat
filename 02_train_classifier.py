@@ -177,8 +177,8 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     mapping = group_mapping["map"]
     groups = group_mapping["groups"]
 
-    dataset = io_functions.load_case_collection(data, meta)
-    # dataset = SOMDataset.from_path(data)
+    # dataset = io_functions.load_case_collection(data, meta)
+    dataset = SOMDataset.from_path(data)
     if mapping:
         dataset = dataset.map_groups(mapping)
 
@@ -223,8 +223,11 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
 
     binarizer, model = get_model(selected_tubes, groups=groups, global_decay=5e-7)
 
-    trainseq = SOMSequence(train, binarizer, tube=tubes, batch_size=32, pad_width=pad_width)
-    validseq = SOMSequence(validate, binarizer, tube=tubes, batch_size=128, pad_width=pad_width)
+    def getter_fun(sample, tube):
+        return sample.get_tube(tube)
+
+    trainseq = SOMSequence(train, binarizer, tube=tubes, get_array_fun=getter_fun, batch_size=32, pad_width=pad_width)
+    validseq = SOMSequence(validate, binarizer, tube=tubes, get_array_fun=getter_fun, batch_size=128, pad_width=pad_width)
 
     tensorboard_dir = str(output / "tensorboard")
     tensorboard_callback = keras.callbacks.TensorBoard(
