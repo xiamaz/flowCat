@@ -182,7 +182,7 @@ class SOMSequence(keras.utils.Sequence):
 
     @property
     def true_labels(self):
-        return [d.group for d in self.dataset.data]
+        return self.dataset.groups
 
     def __len__(self) -> int:
         return int(np.ceil(len(self.dataset) / float(self.batch_size)))
@@ -191,12 +191,15 @@ class SOMSequence(keras.utils.Sequence):
         if idx in self._cache:
             return self._cache[idx]
 
-        batch = self.dataset.data[idx * self.batch_size:(idx + 1) * self.batch_size]
+        batch = self.dataset[idx * self.batch_size:(idx + 1) * self.batch_size]
 
         inputs = []
         for tube in self.tube:
             x_batch = np.array([
-                pad_array(s.get_tube(tube), self.pad_width) for s in batch
+                pad_array(
+                    s.get_tube(tube, kind="som").get_data().data,
+                    self.pad_width,
+                ) for s in batch
             ])
             inputs.append(x_batch)
 

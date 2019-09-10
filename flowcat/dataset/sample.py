@@ -197,5 +197,5 @@ class SOMSample(Sample):
         if self.data:
             return self.data
 
-        data = som.SOM(self.path)
+        data = som.SOM(self.path, self.markers)
         return data

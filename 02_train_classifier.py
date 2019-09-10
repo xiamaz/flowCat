@@ -164,7 +164,7 @@ def get_model(channel_config, groups, **kwargs):
     return binarizer, model
 
 
-def main(data: utils.URLPath, output: utils.URLPath):
+def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     """
     Args:
         data: Path to som dataset
@@ -177,18 +177,19 @@ def main(data: utils.URLPath, output: utils.URLPath):
     mapping = group_mapping["map"]
     groups = group_mapping["groups"]
 
-    dataset = SOMDataset.from_path(data)
+    dataset = io_functions.load_case_collection(data, meta)
+    # dataset = SOMDataset.from_path(data)
     if mapping:
         dataset = dataset.map_groups(mapping)
 
-    dataset = dataset.filter_groups(groups)
+    dataset = dataset.filter(groups=groups)
 
-    dataset_groups = {d.group for d in dataset.data}
+    dataset_groups = {d.group for d in dataset}
 
     if set(groups) != dataset_groups:
         raise RuntimeError(f"Group mismatch: {groups}, but got {dataset_groups}")
 
-    train, validate = dataset.split(ratio=0.9, stratified=True)
+    train, validate = dataset.create_split(0.9, stratify=True)
 
     # train = train.balance(2000)
     train = train.balance_per_group({
@@ -204,17 +205,17 @@ def main(data: utils.URLPath, output: utils.URLPath):
         "normal": 6000,
     })
 
-    train_ids = [t.label for t in train.data]
-    validate_ids = [t.label for t in validate.data]
-    io_functions.save_json(train_ids, output / "ids_train.json")
-    io_functions.save_json(validate_ids, output / "ids_validate.json")
+    io_functions.save_json(train.labels, output / "ids_train.json")
+    io_functions.save_json(validate.labels, output / "ids_validate.json")
 
-    selected_tubes = {tube: dataset.config[tube] for tube in tubes}
+    som_config = io_functions.load_json(data + "_config.json")
+    selected_tubes = {tube: som_config[tube] for tube in tubes}
 
     config = {
         "tubes": selected_tubes,
         "groups": groups,
     }
+    print(config)
     io_functions.save_json(config, output / "config.json")
 
     for tube in tubes:
