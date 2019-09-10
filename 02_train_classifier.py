@@ -214,6 +214,8 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     config = {
         "tubes": selected_tubes,
         "groups": groups,
+        "pad_width": pad_width,
+        "mapping": group_mapping,
     }
     io_functions.save_json(config, output / "config.json")
 

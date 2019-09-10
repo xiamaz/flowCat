@@ -193,7 +193,7 @@ class SOMSequence(keras.utils.Sequence):
 
     @property
     def true_labels(self):
-        return self.dataset.groups
+        return [d.group for d in self.dataset]
 
     def __len__(self) -> int:
         return int(np.ceil(len(self.dataset) / float(self.batch_size)))
