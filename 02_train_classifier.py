@@ -21,18 +21,23 @@ def create_model_early_merge(input_shapes, yshape, global_decay=5e-6):
         inputs.append(ix)
 
     x = layers.concatenate(inputs)
-    # x = layers.Conv2D(
-    #     filters=32, kernel_size=2, activation="relu", strides=1,
-    #     kernel_regularizer=regularizers.l2(global_decay))(x)
+    x = layers.Conv2D(
+        filters=64, kernel_size=4, activation="relu", strides=3,
+        kernel_regularizer=regularizers.l2(global_decay))(x)
+    x = layers.Conv2D(
+        filters=96, kernel_size=3, activation="relu", strides=2,
+        kernel_regularizer=regularizers.l2(global_decay))(x)
+    x = layers.Conv2D(
+        filters=128, kernel_size=1, activation="relu", strides=1,
+        kernel_regularizer=regularizers.l2(global_decay))(x)
+    x = layers.GlobalAveragePooling2D()(x)
     # x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
     # x = layers.Dropout(0.2)(x)
 
-    x = layers.Flatten()(ix)
-
-    x = layers.Dense(
-        units=128, activation="relu", kernel_initializer="uniform",
-        kernel_regularizer=regularizers.l2(global_decay)
-    )(x)
+    # x = layers.Dense(
+    #     units=128, activation="relu", kernel_initializer="uniform",
+    #     kernel_regularizer=regularizers.l2(global_decay)
+    # )(x)
     # x = layers.BatchNormalization()(x)
     # x = layers.Dropout(0.2)(x)
     x = layers.Dense(
