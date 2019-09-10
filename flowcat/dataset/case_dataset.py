@@ -204,7 +204,7 @@ class CaseCollection:
         else:
             labels = None
         train, test = model_selection.train_test_split(
-            self.cases, test_size=num, stratify=labels)
+            self.cases, train_size=num, stratify=labels)
         return (
             self.__class__(
                 train,

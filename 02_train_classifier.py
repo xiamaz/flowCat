@@ -215,7 +215,6 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
         "tubes": selected_tubes,
         "groups": groups,
     }
-    print(config)
     io_functions.save_json(config, output / "config.json")
 
     for tube in tubes:
