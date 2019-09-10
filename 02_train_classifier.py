@@ -223,6 +223,9 @@ def main(data: utils.URLPath, output: utils.URLPath):
 
     binarizer, model = get_model(selected_tubes, groups=groups, global_decay=5e-7)
 
+    import collections
+    print(collections.Counter([d.group for d in validate.data]))
+
     trainseq = SOMSequence(train, binarizer, tube=tubes, batch_size=32, pad_width=pad_width)
     validseq = SOMSequence(validate, binarizer, tube=tubes, batch_size=128, pad_width=pad_width)
 
