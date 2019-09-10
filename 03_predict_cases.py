@@ -3,10 +3,13 @@ import sys
 import math
 import os
 import logging
-import argparse
 
-from flowcat import utils, classify, configuration, io_functions
-from flowcat.dataset import case_dataset
+import numpy as np
+from sklearn import metrics
+from tensorflow import keras
+from argmagic import argmagic
+
+from flowcat import utils, io_functions, som_dataset, mappings
 
 
 LOGGER = logging.getLogger(__name__)
@@ -48,65 +51,82 @@ def args_loglevel(vlevel):
     return logging.DEBUG
 
 
-def run(args):
-    modelpath = args.modelpath
-    assert modelpath.exists(), f"{modelpath} not found"
+def main(
+        data: utils.URLPath,
+        meta: utils.URLPath,
+        labels: utils.URLPath,
+        model: utils.URLPath,
+):
+    """
+    """
+    pad_width = 1
+    dataset = io_functions.load_case_collection(data, meta)
+    test_labels = io_functions.load_json(labels)
+    dataset = dataset.filter(labels=test_labels)
 
-    LOGGER.info("Loading existing model at %s", modelpath)
-    model, transform, groups, filters = classify.load_model(modelpath)
+    model_config = io_functions.load_json(model / "config.json")
+    tubes = list(model_config["tubes"].keys())
+    groups = model_config["groups"]
 
-    casepath = args.cases
-    labelpath = args.labels
-    labels = io_functions.load_json(labelpath)
-    LOGGER.info("Loading %d labels in %s", len(labels), labelpath)
-    path = utils.get_path(casepath, args.pathconfig("input", "FCS"))
-    LOGGER.info("Loading cases in %s", casepath)
+    group_mapping = mappings.GROUP_MAPS["8class"]
+    mapping = group_mapping["map"]
+    if mapping:
+        dataset = dataset.map_groups(mapping)
 
-    cases = case_dataset.CaseCollection.from_path(path)
-    LOGGER.info("Additional filters: %s", filters)
-    filtered = cases.filter(labels=labels, **filters)
+    def bloodcall(case):
+        return case.used_material == mappings.Material.PERIPHERAL_BLOOD
+    bloodset = dataset.filter(custom_callback=bloodcall)
 
-    indata = transform(filtered)
-    predictions = classify.predict(model, indata, groups, filtered.labels)
+    print(np.mean([c.infiltration for c in bloodset]))
 
-    utils.save_csv(predictions, args.output)
+    def kmcall(case):
+        return case.used_material == mappings.Material.BONE_MARROW
+    kmset = dataset.filter(custom_callback=kmcall)
+    print(np.mean([c.infiltration for c in kmset]))
+    return
 
+    binarizer = io_functions.load_joblib(model / "binarizer.joblib")
 
-def main():
-    parser = argparse.ArgumentParser(description="Predict cases")
-    configuration.PathConfig.add_to_arguments(parser)
-    parser.add_argument(
-        "-v", "--verbose",
-        help="Control verbosity. -v is info, -vv is debug",
-        action="count")
-    parser.add_argument(
-        "--logpath", help="Optionally log to location")
-    parser.add_argument(
-        "--seed",
-        help="Seed for random number generator",  # TODO use seed
-        type=int)
-    parser.add_argument(
-        "--cases",
-        default="decCLL-9F",
-        help="Cases to be predicted.")
-    parser.add_argument(
-        "--output",
-        help="Output path.",
-        default="predictions.csv",
-        type=utils.URLPath)
-    parser.add_argument(
-        "modelpath",
-        help="Path to trained model directory",
-        type=utils.URLPath)
-    parser.add_argument(
-        "labels",
-        help="List of labels in a json file.",
-        type=utils.URLPath)
-    args = parser.parse_args()
+    def getter_fun(data, tube):
+        return data.get_tube(tube, kind="som").get_data().data
 
-    setup_logging_from_args(args)
-    run(args)
+    bseq = som_dataset.SOMSequence(
+        bloodset, binarizer,
+        tube=tubes,
+        get_array_fun=getter_fun,
+        batch_size=128,
+        pad_width=pad_width)
+    kseq = som_dataset.SOMSequence(
+        kmset, binarizer,
+        tube=tubes,
+        get_array_fun=getter_fun,
+        batch_size=128,
+        pad_width=pad_width)
+    model = keras.models.load_model(model / "model.h5")
 
+    preds = []
+    for pred in model.predict_generator(bseq):
+        preds.append(pred)
+    pred_arr = np.array(preds)
+    pred_labels = binarizer.inverse_transform(pred_arr)
+    true_labels = bseq.true_labels
+
+    confusion = metrics.confusion_matrix(true_labels, pred_labels, labels=groups)
+    acc = metrics.accuracy_score(true_labels, pred_labels)
+    print(groups, acc)
+    print(confusion)
+
+    preds = []
+    for pred in model.predict_generator(kseq):
+        preds.append(pred)
+    pred_arr = np.array(preds)
+    pred_labels = binarizer.inverse_transform(pred_arr)
+    true_labels = kseq.true_labels
+
+    confusion = metrics.confusion_matrix(true_labels, pred_labels, labels=groups)
+    acc = metrics.accuracy_score(true_labels, pred_labels)
+    print(groups, acc)
+    print(confusion)
 
 if __name__ == "__main__":
-    main()
+    argmagic(main)

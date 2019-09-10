@@ -38,6 +38,7 @@ def filter_case(
         date: Tuple[Union[str], Union[str]] = None,
         counts: int = None,
         materials: List[str] = None,
+        custom_callback = None,
         selected_markers: Dict[int, List[str]] = None,
 ) -> Tuple[bool, str]:
     """
@@ -95,6 +96,9 @@ def filter_case(
 
     if selected_markers and not case.has_selected_markers(selected_markers):
         reasons.append("selected_markers")
+
+    if custom_callback and not custom_callback(case):
+        reasons.append("custom_callback")
 
     return not bool(reasons), reasons
 
