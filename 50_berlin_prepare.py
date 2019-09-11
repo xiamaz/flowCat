@@ -10,7 +10,7 @@ from datetime import datetime
 
 from flowcat.dataset import case as fc_case, sample as fc_sample
 from flowcat.dataset.case_dataset import CaseCollection
-from flowcat.io_functions import save_case_collection, load_case_collection
+from flowcat.io_functions import save_case_collection, load_case_collection, save_json
 from flowcat.utils import URLPath
 
 
@@ -38,7 +38,7 @@ def meta_to_filepath(metadata: dict, data_url: "URLPath", tube: str, case_id: st
     return sample
 
 
-def meta_to_case(metadata: dict, data_url: "URLPath") -> flowcat.dataset.case.Case:
+def meta_to_case(metadata: dict, data_url: "URLPath") -> fc_case.Case:
     """Generate case objects from the given metadata dict."""
     case_id = str(metadata["id"])
     filepaths = [meta_to_filepath(metadata, data_url, str(tube), case_id) for tube in metadata["tubes"]]
@@ -70,7 +70,7 @@ data = [meta_to_case(meta, fcs_data_path) for meta in metadata]
 
 dataset = CaseCollection(data, data_path=fcs_data_path)
 
-outpath = URLPath("output/50-berlin-data/dataset")
+outpath = URLPath("output/5-berlin-data-test/dataset")
 
 save_case_collection(dataset, dataset_path / "casecollection.json")
 
@@ -87,6 +87,9 @@ selected = flowcat.marker_selection.get_selected_markers(
     ("1", "2", "3", "4"),
     marker_threshold=0.9)
 save_case_collection(selected, outpath / "known_groups.json")
+
+references = selected.sample(num=1)
+save_json(references, output / "references.json")
 
 selected_invalid, _ = invalid_dataset.filter_reasons(selected_markers=selected.selected_markers)
 save_case_collection(selected_invalid, outpath / "unknown_groups.json")
