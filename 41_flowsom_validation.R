@@ -52,9 +52,9 @@ get_fcs_data <- function(id, tube, dataset, ...) {
   # ReadInput(fcspath, compensate=F, transform=F, scale=T)
 }
 
-fcs_to_som_weights <- function(fcs) {
+fcs_to_som_weights <- function(fcs, ...) {
   fsom_ss <- ReadInput(fcs, transform=F, scale=T)
-  fsom_ss <- BuildSOM(fsom_ss)
+  fsom_ss <- BuildSOM(fsom_ss, ...)
   weights_df <- fsom_ss$map$codes
   colnames(weights_df) <- markernames(fcs)
   weights_df
@@ -64,25 +64,13 @@ som_weights_csv <- function(weights_df, path) {
   write.csv(weights_df, file=path)
 }
 
-plot_dir <- "output/4-flowsom-cmp/flowsom-samples"
-dir.create(plot_dir, recursive=T)
 
 dataset <- get_dataset("output/4-flowsom-cmp/samples")
 
-# generate some test images with case 1 and tube 1
-# pfcs_mi <- get_fcs_path(1, 1, dataset)
-# cat(pfcs_mi)
-# 
-# fcs_mi <- read.FCS(pfcs_mi, dataset=1, transformation=F)
-# fcs_ss <- read.FCS(pfcs_ss, dataset=1, transformation=F)
-# plt <- autoplot(fcs_mi, "CD45-KrOr", "SS INT LIN", bins=64)
-# ggsave(file.path(plot_dir, "test_missing.png"), plot=plt)
-# plt <- autoplot(fcs_ss, "CD45-KrOr", "SS INT LIN", bins=64)
-# ggsave(file.path(plot_dir, "test_sample01.png"), plot=plt)
+plot_dir <- "output/4-flowsom-cmp/flowsom-10"
+dir.create(plot_dir, recursive=T)
 
 # -------------------------
-
-# load reference weights
 
 num_cases <- nrow(dataset$meta)
 for (case_index in 1:num_cases) {
@@ -90,7 +78,23 @@ for (case_index in 1:num_cases) {
     label <- get_label(case_index, dataset)
     out_path <- file.path(plot_dir, sprintf("%s_t%d.csv", label, tube))
     fcs <- get_fcs_data(case_index, tube, dataset)
-    weights <- fcs_to_som_weights(fcs)
+    weights <- fcs_to_som_weights(fcs, xdim=10, ydim=10, codes=NULL, init=F)
+    som_weights_csv(weights, out_path)
+  }
+}
+
+plot_dir <- "output/4-flowsom-cmp/flowsom-32"
+dir.create(plot_dir, recursive=T)
+
+# -------------------------
+
+num_cases <- nrow(dataset$meta)
+for (case_index in 1:num_cases) {
+  for (tube in c(1, 2, 3)) {
+    label <- get_label(case_index, dataset)
+    out_path <- file.path(plot_dir, sprintf("%s_t%d.csv", label, tube))
+    fcs <- get_fcs_data(case_index, tube, dataset)
+    weights <- fcs_to_som_weights(fcs, xdim=32, ydim=32, codes=NULL, init=F)
     som_weights_csv(weights, out_path)
   }
 }
