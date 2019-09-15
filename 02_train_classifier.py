@@ -3,6 +3,7 @@
 Train models on Munich data and attempt to classify Bonn data.
 """
 import numpy as np
+import pandas as pd
 from sklearn import metrics
 from sklearn.preprocessing import LabelBinarizer
 from tensorflow import keras
@@ -10,7 +11,7 @@ from tensorflow.keras import layers, regularizers, models  # pylint: disable=imp
 # from keras import layers, regularizers, models
 from argmagic import argmagic
 
-from flowcat import utils, io_functions, mappings
+from flowcat import utils, io_functions, mappings, classification_utils
 from flowcat.som_dataset import SOMDataset, SOMSequence
 
 
@@ -149,15 +150,6 @@ def get_model(channel_config, groups, **kwargs):
 
     model = create_model_multi_input(inputs, output, **kwargs)
     # model = create_model_early_merge(inputs, output, **kwargs)
-    model.compile(
-        loss="categorical_crossentropy",
-        # loss="binary_crossentropy",
-        optimizer="adam",
-        # optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=epsilon),
-        metrics=[
-            "acc",
-        ]
-    )
 
     binarizer = LabelBinarizer()
     binarizer.fit(groups)
@@ -174,8 +166,10 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     pad_width = 1
 
     group_mapping = mappings.GROUP_MAPS["8class"]
-    mapping = group_mapping["map"]
-    groups = group_mapping["groups"]
+    # mapping = group_mapping["map"]
+    mapping = None
+    # groups = group_mapping["groups"]
+    groups = mappings.GROUPS
 
     # dataset = io_functions.load_case_collection(data, meta)
     dataset = SOMDataset.from_path(data)
@@ -192,12 +186,10 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     validate, train = dataset.create_split(50, stratify=True)
 
     group_count = train.group_count
-    num_cases = sum(group_count.values())
-    balanced_nums = num_cases / len(dataset_groups)
-    balanced_loss_weights = [balanced_nums / group_count.get(g, balanced_nums) for g in groups]
-    min_ratio = min(balanced_loss_weights)
-    balanced_loss_weights = {i: v / min_ratio for i, v in enumerate(balanced_loss_weights)}
-    print(balanced_loss_weights)
+    group_weights = classification_utils.calculate_group_weights(group_count)
+    group_weights = {
+        i: group_weights.get(g, 1.0) for i, g in enumerate(groups)
+    }
 
     # train = train.balance(2000)
     # train = train.balance_per_group({
@@ -231,13 +223,54 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
         x, y, z = selected_tubes[tube]["dims"]
         selected_tubes[tube]["dims"] = (x + 2 * pad_width, y + 2 * pad_width, z)
 
+    cost_mapping = {
+        ("CLL", "MBL"): 0.5,
+        ("MBL", "CLL"): 0.5,
+        ("MCL", "PL"): 0.5,
+        ("PL", "MCL"): 0.5,
+        ("LPL", "MZL"): 0.5,
+        ("MZL", "LPL"): 0.5,
+        ("CLL", "normal"): 2,
+        ("MBL", "normal"): 2,
+        ("MCL", "normal"): 2,
+        ("PL", "normal"): 2,
+        ("LPL", "normal"): 2,
+        ("MZL", "normal"): 2,
+        ("FL", "normal"): 2,
+        ("HCL", "normal"): 2,
+    }
+    cost_matrix = classification_utils.build_cost_matrix(cost_mapping, groups)
+
     binarizer, model = get_model(selected_tubes, groups=groups, global_decay=5e-7)
+
+    model.compile(
+        loss=classification_utils.WeightedCategoricalCrossentropy(cost_matrix),
+        # loss="categorical_crossentropy",
+        # loss="binary_crossentropy",
+        optimizer="adam",
+        # optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=epsilon),
+        metrics=[
+            "acc",
+        ]
+    )
 
     def getter_fun(sample, tube):
         return sample.get_tube(tube)
 
-    trainseq = SOMSequence(train, binarizer, tube=tubes, get_array_fun=getter_fun, batch_size=32, pad_width=pad_width)
-    validseq = SOMSequence(validate, binarizer, tube=tubes, get_array_fun=getter_fun, batch_size=128, pad_width=pad_width)
+    trainseq = SOMSequence(
+        train,
+        binarizer,
+        tube=tubes,
+        get_array_fun=getter_fun,
+        batch_size=32,
+        pad_width=pad_width)
+    validseq = SOMSequence(
+        validate,
+        binarizer,
+        tube=tubes,
+        get_array_fun=getter_fun,
+        batch_size=128,
+        pad_width=pad_width)
 
     tensorboard_dir = str(output / "tensorboard")
     tensorboard_callback = keras.callbacks.TensorBoard(
@@ -251,7 +284,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     model.fit_generator(
         epochs=15, shuffle=True,
         callbacks=[tensorboard_callback, nan_callback],
-        class_weight=balanced_loss_weights,
+        class_weight=group_weights,
         generator=trainseq, validation_data=validseq)
 
     model.save(str(output / "model.h5"))
@@ -265,10 +298,17 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     true_labels = validseq.true_labels
 
     confusion = metrics.confusion_matrix(true_labels, pred_labels, labels=groups)
-    print(groups)
+    confusion = pd.DataFrame(confusion, index=groups, columns=groups)
     print(confusion)
-    balanced = metrics.balanced_accuracy_score(true_labels, pred_labels)
-    print(balanced)
+    io_functions.save_csv(confusion, output / "validation_confusion.csv")
+    metrics_results = {
+        "balanced": metrics.balanced_accuracy_score(true_labels, pred_labels),
+        "f1_micro": metrics.f1_score(true_labels, pred_labels, average="micro"),
+        "f1_macro": metrics.f1_score(true_labels, pred_labels, average="macro"),
+        "mcc": metrics.matthews_corrcoef(true_labels, pred_labels),
+    }
+    print(metrics_results)
+    io_functions.save_json(metrics_results, output / "validation_metrics.json")
 
     # preds = []
     # for pred in model.predict_generator(validseq):

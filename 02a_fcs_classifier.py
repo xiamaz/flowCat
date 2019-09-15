@@ -140,7 +140,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     group_count = train.group_count
     group_weights = classification_utils.calculate_group_weights(group_count)
     group_weights = {
-        group_weights.get(g, 1.0) for g in enumerate(group_count)
+        i: group_weights.get(g, 1.0) for i, g in enumerate(groups)
     }
 
     io_functions.save_json(train.labels, output / "ids_train.json")
@@ -216,6 +216,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
             tensorboard_callback,
             nan_callback
         ],
+        class_weight=group_weights,
         generator=train_seq, validation_data=validate_seq)
 
     model.save(str(output / "model.h5"))
