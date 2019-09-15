@@ -47,7 +47,7 @@ class SOMCase:
 
 
 def load_som_cases(row, path, tubes):
-    sompath = path / row["label"]
+    sompath = path / str(row["label"])
     soms = {
         tube: sompath + f"_t{tube}.npy" for tube in tubes
     }
@@ -75,7 +75,7 @@ class SOMDataset:
         return [s.label for s in self.data]
 
     @property
-    def group_counts(self):
+    def group_count(self):
         return {
             group: len(data)
             for group, data in self.data.groupby(by=lambda s: self.data[s].group)
@@ -98,7 +98,10 @@ class SOMDataset:
             for group, data in self.data.groupby(by=lambda s: self.data[s].group):
                 data.reset_index(drop=True, inplace=True)
                 data = data.reindex(np.random.permutation(data.index))
-                pivot = round(num * len(data))
+                if num < 1:
+                    pivot = round(num * len(data))
+                else:
+                    pivot = int(num)
                 trains.append(data[:pivot])
                 valids.append(data[pivot:])
             train = pd.concat(trains)
@@ -106,6 +109,10 @@ class SOMDataset:
         else:
             data = self.data.reindex(np.random.permutation(data.index))
             pivot = round(num * len(data))
+            if num < 1:
+                pivot = round(num * len(data))
+            else:
+                pivot = int(num)
             train = data[pivot:]
             validate = data[:pivot]
 

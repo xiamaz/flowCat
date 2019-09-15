@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Train models on Munich data and attempt to classify Bonn data.
+Train de-novo classifier for berlin som data.
 """
 import numpy as np
 from sklearn import metrics
@@ -149,15 +149,6 @@ def get_model(channel_config, groups, **kwargs):
 
     model = create_model_multi_input(inputs, output, **kwargs)
     # model = create_model_early_merge(inputs, output, **kwargs)
-    model.compile(
-        loss="categorical_crossentropy",
-        # loss="binary_crossentropy",
-        optimizer="adam",
-        # optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=epsilon),
-        metrics=[
-            "acc",
-        ]
-    )
 
     binarizer = LabelBinarizer()
     binarizer.fit(groups)
@@ -170,7 +161,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
         data: Path to som dataset
         output: Output path
     """
-    tubes = ("1", "2")
+    tubes = ("2", "3", "4")
     pad_width = 1
 
     group_mapping = mappings.GROUP_MAPS["8class"]
@@ -182,14 +173,14 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     if mapping:
         dataset = dataset.map_groups(mapping)
 
-    dataset = dataset.filter(groups=groups)
+    dataset = dataset.filter(groups=[g for g in groups if g not in ("LPL", "MZL")])
 
     dataset_groups = {d.group for d in dataset}
 
-    if set(groups) != dataset_groups:
-        raise RuntimeError(f"Group mismatch: {groups}, but got {dataset_groups}")
+    # if set(groups) != dataset_groups:
+    #     raise RuntimeError(f"Group mismatch: {groups}, but got {dataset_groups}")
 
-    validate, train = dataset.create_split(50, stratify=True)
+    validate, train = dataset.create_split(10, stratify=True)
 
     group_count = train.group_count
     num_cases = sum(group_count.values())
@@ -233,11 +224,43 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
 
     binarizer, model = get_model(selected_tubes, groups=groups, global_decay=5e-7)
 
+    model_path = utils.URLPath("output/0-munich-data/classifier-cmpback-balanced-multiinput/model.h5")
+    base_model = keras.models.load_model(str(model_path))
+    for layer in model.layers:
+        if "input" in layer.name:
+            continue
+        try:
+            layer.set_weights(base_model.get_layer(name=layer.name).get_weights())
+        except ValueError:
+            print("Could not transfer weights for layer {}".format(layer.name))
+    # for layer in model.layers[len(tubes) + 2:-2]:
+    #     layer.trainable = False
+    model.compile(
+        loss="categorical_crossentropy",
+        # loss="binary_crossentropy",
+        optimizer="adam",
+        # optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=epsilon),
+        metrics=[
+            "acc",
+        ]
+    )
+    model.summary()
+
     def getter_fun(sample, tube):
         return sample.get_tube(tube)
 
-    trainseq = SOMSequence(train, binarizer, tube=tubes, get_array_fun=getter_fun, batch_size=32, pad_width=pad_width)
-    validseq = SOMSequence(validate, binarizer, tube=tubes, get_array_fun=getter_fun, batch_size=128, pad_width=pad_width)
+    trainseq = SOMSequence(
+        train, binarizer,
+        tube=tubes,
+        get_array_fun=getter_fun,
+        batch_size=32,
+        pad_width=pad_width)
+    validseq = SOMSequence(
+        validate, binarizer,
+        tube=tubes,
+        get_array_fun=getter_fun,
+        batch_size=128,
+        pad_width=pad_width)
 
     tensorboard_dir = str(output / "tensorboard")
     tensorboard_callback = keras.callbacks.TensorBoard(
@@ -249,7 +272,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     nan_callback = keras.callbacks.TerminateOnNaN()
 
     model.fit_generator(
-        epochs=15, shuffle=True,
+        epochs=30, shuffle=True,
         callbacks=[tensorboard_callback, nan_callback],
         class_weight=balanced_loss_weights,
         generator=trainseq, validation_data=validseq)

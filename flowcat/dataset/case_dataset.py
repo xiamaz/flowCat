@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import List, Tuple
 
 from dataslots import with_slots
+import numpy as np
 import pandas as pd
 from sklearn import model_selection
 
@@ -199,19 +200,34 @@ class CaseCollection:
 
     def create_split(self, num, stratify=True):
         """Split the data into two groups."""
+        cases = pd.Series(self.cases)
         if stratify:
-            labels = [d.group for d in self.cases]
+            trains = []
+            tests = []
+            for group, data in cases.groupby(by=lambda s: cases[s].group):
+                if num < 1:
+                    pivot = round(num * len(data))
+                else:
+                    pivot = int(num)
+                data = data.tolist()
+                random.shuffle(data)
+                trains += data[:pivot]
+                tests += data[pivot:]
         else:
-            labels = None
-        train, test = model_selection.train_test_split(
-            self.cases, train_size=num, stratify=labels)
+            data = cases.reindex(np.random.permutation(cases.index))
+            if num < 1:
+                pivot = round(num * len(data))
+            else:
+                pivot = int(num)
+            trains = data[:pivot].tolist()
+            tests = data[pivot:].tolist()
         return (
             self.__class__(
-                train,
+                trains,
                 selected_markers=self.selected_markers,
                 selected_tubes=self.selected_tubes),
             self.__class__(
-                test,
+                tests,
                 selected_markers=self.selected_markers,
                 selected_tubes=self.selected_tubes),
         )

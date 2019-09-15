@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Train models on Munich data and attempt to classify Bonn data.
+Train de-novo classifier for berlin som data.
 """
 import numpy as np
 from sklearn import metrics
@@ -147,8 +147,8 @@ def get_model(channel_config, groups, **kwargs):
     inputs = tuple([*d["dims"][:-1], len(d["channels"])] for d in channel_config.values())
     output = len(groups)
 
+    # model = create_model_multi_input(inputs, output, **kwargs)
     model = create_model_multi_input(inputs, output, **kwargs)
-    # model = create_model_early_merge(inputs, output, **kwargs)
     model.compile(
         loss="categorical_crossentropy",
         # loss="binary_crossentropy",
@@ -170,7 +170,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
         data: Path to som dataset
         output: Output path
     """
-    tubes = ("1", "2")
+    tubes = ("2", "3", "4")
     pad_width = 1
 
     group_mapping = mappings.GROUP_MAPS["8class"]
@@ -182,14 +182,14 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     if mapping:
         dataset = dataset.map_groups(mapping)
 
-    dataset = dataset.filter(groups=groups)
+    dataset = dataset.filter(groups=[g for g in groups if g not in ("LPL", "MZL")])
 
     dataset_groups = {d.group for d in dataset}
 
-    if set(groups) != dataset_groups:
-        raise RuntimeError(f"Group mismatch: {groups}, but got {dataset_groups}")
+    # if set(groups) != dataset_groups:
+    #     raise RuntimeError(f"Group mismatch: {groups}, but got {dataset_groups}")
 
-    validate, train = dataset.create_split(50, stratify=True)
+    validate, train = dataset.create_split(10, stratify=True)
 
     group_count = train.group_count
     num_cases = sum(group_count.values())
@@ -236,8 +236,18 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     def getter_fun(sample, tube):
         return sample.get_tube(tube)
 
-    trainseq = SOMSequence(train, binarizer, tube=tubes, get_array_fun=getter_fun, batch_size=32, pad_width=pad_width)
-    validseq = SOMSequence(validate, binarizer, tube=tubes, get_array_fun=getter_fun, batch_size=128, pad_width=pad_width)
+    trainseq = SOMSequence(
+        train, binarizer,
+        tube=tubes,
+        get_array_fun=getter_fun,
+        batch_size=32,
+        pad_width=pad_width)
+    validseq = SOMSequence(
+        validate, binarizer,
+        tube=tubes,
+        get_array_fun=getter_fun,
+        batch_size=128,
+        pad_width=pad_width)
 
     tensorboard_dir = str(output / "tensorboard")
     tensorboard_callback = keras.callbacks.TensorBoard(

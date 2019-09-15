@@ -59,7 +59,7 @@ def main():
 
     # load datasets
     somdataset = sd.SOMDataset.from_path(c_sommaps)
-    cases = cc.CaseCollection.from_path(c_cases,how="case_info.json")
+    cases = cc.CaseCollection.from_path(c_cases, how="case_info.json")
 
     # filter datasets
     test_labels = flowutils.load_json(c_labels)

@@ -26,7 +26,7 @@ CASE_REQUIRED_FIELDS = "date", "id", "filepaths"
 
 def assert_in_dict(fields, data):
     for sfield in fields:
-        assert sfield in data, f"{field} is required"
+        assert sfield in data, f"{sfield} is required"
 
 
 def filter_case(
