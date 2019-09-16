@@ -8,7 +8,7 @@ TRAINDATA = --data $(DATADIR) --meta $(OUTDIR)/$(DSNAME)/train.json
 TESTDATA = --data $(DATADIR) --meta $(OUTDIR)/$(DSNAME)/test.json
 
 REFERENCE_DATA = $(OUTDIR)/$(DSNAME)/reference.json
-REFERENCE_SOM = $(OUTDIR)/reference
+REFERENCE_SOM = $(OUTDIR)/reference-minmax
 
 SOM_DATASET = $(OUTDIR)/som
 

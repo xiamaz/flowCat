@@ -49,7 +49,7 @@ def train_model(dataset, markers=None, tensorboard=None, marker_name_only=False)
             "initial_learning_rate": 0.05,  # default: 0.05
             "end_learning_rate": 0.01,  # default: 0.01
             "learning_cooling": "linear",
-            "initial_radius": 24,
+            "initial_radius": 7,
             "end_radius": 2,
             "radius_cooling": "linear",
             # "marker_images": sommodels.fcssom.MARKER_IMAGES_NAME_ONLY,
