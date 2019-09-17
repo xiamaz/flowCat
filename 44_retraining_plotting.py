@@ -49,6 +49,7 @@ def main():
     output = utils.URLPath("output/4-flowsom-cmp/retrain_figures")
     output.mkdir()
     data = utils.URLPath("output/4-flowsom-cmp/retrain_tests_32_learning_rate")
+    # data = utils.URLPath("output/4-flowsom-cmp/retrain_tests_32_radius")
 
     datasets = load_datasets(data)
     groups = mappings.GROUPS
@@ -56,4 +57,5 @@ def main():
     group = "CLL"
 
     joined_datasets = merged_data(datasets, group, tube)
-    plot_hexplot_datasets(joined_datasets, ("CD45-KrOr", "SS INT LIN"), output / "test.png")
+    # plot_hexplot_datasets(joined_datasets, ("CD45-KrOr", "SS INT LIN"), output / "radius_cll_cd_45_ss.png")
+    plot_hexplot_datasets(joined_datasets, ("CD20-PC7", "CD5-PacBlue"), output / "learn_rate_cd20_cd5.png")

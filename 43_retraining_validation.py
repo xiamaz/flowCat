@@ -46,16 +46,26 @@ def main(data: utils.URLPath, reference: utils.URLPath, output: utils.URLPath):
         "initial_radius": 4,
         "end_radius": 1,
     }
+    # settings = [
+    #     ("learning_rate_001_0001", {"initial_learning_rate": 0.01, "end_learning_rate": 0.001}),
+    #     ("learning_rate_001_001", {"initial_learning_rate": 0.01, "end_learning_rate": 0.01}),
+    #     ("learning_rate_005_0001", {"initial_learning_rate": 0.05, "end_learning_rate": 0.001}),
+    #     ("learning_rate_005_001", {"initial_learning_rate": 0.05, "end_learning_rate": 0.01}),
+    #     ("learning_rate_005_005", {"initial_learning_rate": 0.05, "end_learning_rate": 0.05}),
+    #     ("learning_rate_05_0001", {"initial_learning_rate": 0.5, "end_learning_rate": 0.001}),
+    #     ("learning_rate_05_001", {"initial_learning_rate": 0.5, "end_learning_rate": 0.01}),
+    #     ("learning_rate_05_01", {"initial_learning_rate": 0.5, "end_learning_rate": 0.1}),
+    #     ("learning_rate_05_05", {"initial_learning_rate": 0.5, "end_learning_rate": 0.5}),
+    # ]
     settings = [
-        ("learning_rate_001_0001", {"initial_learning_rate": 0.01, "end_learning_rate": 0.001}),
-        ("learning_rate_001_001", {"initial_learning_rate": 0.01, "end_learning_rate": 0.01}),
-        ("learning_rate_005_0001", {"initial_learning_rate": 0.05, "end_learning_rate": 0.001}),
-        ("learning_rate_005_001", {"initial_learning_rate": 0.05, "end_learning_rate": 0.01}),
-        ("learning_rate_005_005", {"initial_learning_rate": 0.05, "end_learning_rate": 0.05}),
-        ("learning_rate_05_0001", {"initial_learning_rate": 0.5, "end_learning_rate": 0.001}),
-        ("learning_rate_05_001", {"initial_learning_rate": 0.5, "end_learning_rate": 0.01}),
-        ("learning_rate_05_01", {"initial_learning_rate": 0.5, "end_learning_rate": 0.1}),
-        ("learning_rate_05_05", {"initial_learning_rate": 0.5, "end_learning_rate": 0.5}),
+        ("radius_24_1", {"initial_radius": 24, "end_radius": 1}),
+        ("radius_24_2", {"initial_radius": 24, "end_radius": 2}),
+        ("radius_24_1", {"initial_radius": 16, "end_radius": 1}),
+        ("radius_16_2", {"initial_radius": 16, "end_radius": 2}),
+        ("radius_8_1", {"initial_radius": 8, "end_radius": 1}),
+        ("radius_8_2", {"initial_radius": 8, "end_radius": 2}),
+        ("radius_4_1", {"initial_radius": 4, "end_radius": 1}),
+        ("radius_4_2", {"initial_radius": 4, "end_radius": 2}),
     ]
     for name, setting in settings:
         model = io_functions.load_casesom(
