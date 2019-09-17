@@ -31,6 +31,10 @@ class SOM:
     def dims(self):
         return self.data.shape
 
+    def get_dataframe(self):
+        """Return as new pandas dataframe."""
+        return pd.DataFrame(self.data.reshape((-1, len(self.markers))), columns=self.markers)
+
     def get_padded(self, pad_width):
         """Return as new numpy array. Optionally with padding by adding zeros
         to the borders of the SOM.

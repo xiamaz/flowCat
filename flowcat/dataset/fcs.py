@@ -52,11 +52,13 @@ def create_meta_from_fcs(meta: dict, data: pd.DataFrame) -> dict:
     channel_metas = {
         c: ChannelMeta(
             pd.Interval(0, int(meta[f"$P{i + 1}R"]), closed="both"),
-            True)
+            True,
+            tuple(map(float, meta[f"$P{i + 1}E"].split(","))),
+            float(meta[f"$P{i + 1}G"]),
+        )
         for i, c in enumerate(data.columns)
     }
     return channel_metas
-
 
 
 def join_fcs_data(fcs_data: List[FCSData], channels=None) -> FCSData:
@@ -87,7 +89,7 @@ def join_fcs_data(fcs_data: List[FCSData], channels=None) -> FCSData:
     return FCSData(joined, meta=meta)
 
 
-ChannelMeta = namedtuple("ChannelMeta", field_names=["range", "exists"])
+ChannelMeta = namedtuple("ChannelMeta", field_names=["range", "exists", "pne", "png"])
 
 
 class FCSData:

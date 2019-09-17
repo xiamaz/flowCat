@@ -2,7 +2,6 @@ absl-py==0.7.1
 argmagic==0.0.5
 asn1crypto==0.24.0
 astor==0.8.0
-astroid==2.3.0
 backcall==0.1.0
 boto3==1.9.199
 botocore==1.12.199
@@ -39,9 +38,6 @@ lineedit==0.1.1
 Markdown==3.1.1
 matplotlib==3.1.1
 mccabe==0.6.1
-mkl-fft==1.0.14
-mkl-random==1.0.2
-mkl-service==2.3.0
 mock==3.0.5
 msgpack==0.6.1
 neovim==0.3.1
@@ -62,7 +58,6 @@ pycparser==2.19
 pydot==1.4.1
 pyflakes==2.1.1
 Pygments==2.4.2
-pylint==2.4.0.dev0
 Pympler==0.7
 pynvim==0.3.2
 pyOpenSSL==19.0.0
@@ -93,3 +88,4 @@ urllib3==1.25.3
 wcwidth==0.1.7
 Werkzeug==0.15.5
 wrapt==1.11.2
+pylint
