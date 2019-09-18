@@ -9,7 +9,7 @@ from sklearn import metrics
 from tensorflow import keras
 from argmagic import argmagic
 
-from flowcat import utils, io_functions, som_dataset, mappings
+from flowcat import utils, io_functions, som_dataset, mappings, classification_utils
 
 
 LOGGER = logging.getLogger(__name__)
@@ -57,18 +57,16 @@ def main(
         labels: utils.URLPath,
         model: utils.URLPath,
 ):
-    """
-    """
-    pad_width = 1
     dataset = io_functions.load_case_collection(data, meta)
     test_labels = io_functions.load_json(labels)
     dataset = dataset.filter(labels=test_labels)
 
     model_config = io_functions.load_json(model / "config.json")
     tubes = list(model_config["tubes"].keys())
+    pad_width = model_config["pad_width"]
     groups = model_config["groups"]
 
-    group_mapping = mappings.GROUP_MAPS["8class"]
+    group_mapping = model_config["mapping"]
     mapping = group_mapping["map"]
     if mapping:
         dataset = dataset.map_groups(mapping)
@@ -102,7 +100,7 @@ def main(
         get_array_fun=getter_fun,
         batch_size=128,
         pad_width=pad_width)
-    model = keras.models.load_model(model / "model.h5")
+    model = keras.models.load_model(model / "model.h5", custom_objects={"loss": classification_utils.WeightedCategoricalCrossentropy()})
 
     preds = []
     for pred in model.predict_generator(bseq):

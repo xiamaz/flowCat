@@ -12,6 +12,7 @@ from argmagic import argmagic
 
 from flowcat import utils, io_functions, mappings, fcs_dataset, classification_utils
 from flowcat.dataset import case_dataset
+from flowcat.plots import confusion as plot_confusion
 
 
 class FCSSequence(keras.utils.Sequence):
@@ -111,6 +112,57 @@ def create_fcs_model(xshape, yshape, global_decay=5e-6):
     return model
 
 
+def map_labels(labels, mapping):
+    """Map labels to new labels defined by mapping."""
+    return [mapping.get(l, l) for l in labels]
+
+
+def generate_confusion(true_labels, pred_labels, groups, output):
+    """Calculate confusion matrix metrics and also create plots."""
+    confusion = metrics.confusion_matrix(true_labels, pred_labels, labels=groups)
+    confusion = pd.DataFrame(confusion, index=groups, columns=groups)
+    print(confusion)
+    io_functions.save_csv(confusion, output / "validation_confusion.csv")
+
+    plot_confusion.plot_confusion_matrix(
+        confusion, normalize=False, filename=output / "confusion_abs.png",
+        dendroname="dendro.png"
+    )
+    plot_confusion.plot_confusion_matrix(
+        confusion, normalize=True, filename=output / "confusion_norm.png",
+        dendroname=None
+    )
+    return confusion
+
+
+def generate_metrics(true_labels, pred_labels, groups, output):
+    """Generate numeric metrics."""
+    metrics_results = {
+        "balanced": metrics.balanced_accuracy_score(true_labels, pred_labels),
+        "f1_micro": metrics.f1_score(true_labels, pred_labels, average="micro"),
+        "f1_macro": metrics.f1_score(true_labels, pred_labels, average="macro"),
+        "mcc": metrics.matthews_corrcoef(true_labels, pred_labels),
+    }
+    print(metrics_results)
+    io_functions.save_json(metrics_results, output / "validation_metrics.json")
+    return metrics_results
+
+
+def generate_all_metrics(true_labels, pred_labels, mapping, output):
+    output.mkdir()
+
+    groups = mapping["groups"]
+    map_dict = mapping["map"]
+    if map_dict:
+        true_labels = map_labels(true_labels, map_dict)
+        pred_labels = map_labels(pred_labels, map_dict)
+
+    confusion = generate_confusion(true_labels, pred_labels, groups, output)
+    metrics = generate_metrics(true_labels, pred_labels, groups, output)
+
+    return confusion, metrics
+
+
 def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     """
     Args:
@@ -119,7 +171,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
         output: Output path
     """
     tubes = ("1", "2")
-    sample_size = 4096
+    sample_size = 512
     # group_mapping = mappings.GROUP_MAPS["6class"]
     # mapping = group_mapping["map"]
     mapping = None
@@ -134,7 +186,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     validate, train = dataset.create_split(50)
     print(train.group_count)
     # train = train.balance(1000).shuffle()
-    train = train.sample(2000).shuffle()
+    train = train.sample(100).shuffle()
     print(train.group_count)
 
     group_count = train.group_count
@@ -213,7 +265,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     model.fit_generator(
         epochs=20, shuffle=True,
         callbacks=[
-            tensorboard_callback,
+            # tensorboard_callback,
             nan_callback
         ],
         class_weight=group_weights,
@@ -229,18 +281,15 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     pred_labels = binarizer.inverse_transform(pred_arr)
     true_labels = validate_seq.true_labels
 
-    confusion = metrics.confusion_matrix(true_labels, pred_labels, labels=groups)
-    confusion = pd.DataFrame(confusion, index=groups, columns=groups)
-    print(confusion)
-    io_functions.save_csv(confusion, output / "validation_confusion.csv")
-    metrics_results = {
-        "balanced": metrics.balanced_accuracy_score(true_labels, pred_labels),
-        "f1_micro": metrics.f1_score(true_labels, pred_labels, average="micro"),
-        "f1_macro": metrics.f1_score(true_labels, pred_labels, average="macro"),
-        "mcc": metrics.matthews_corrcoef(true_labels, pred_labels),
-    }
-    print(metrics_results)
-    io_functions.save_json(metrics_results, output / "validation_metrics.json")
+    generate_all_metrics(
+        true_labels, pred_labels, {"groups": groups, "map": {}}, output / "unmapped")
+    for map_name, mapping in mappings.GROUP_MAPS.items():
+        output_path = output / map_name
+        # skip if more groups in map
+        print(f"--- MAPPING: {map_name} ---")
+        if len(mapping["groups"]) > len(groups):
+            continue
+        generate_all_metrics(true_labels, pred_labels, mapping, output_path)
 
     # preds = []
     # for pred in model.predict_generator(validseq):
