@@ -8,9 +8,8 @@ import logging
 from collections import namedtuple
 
 import numpy as np
-import pandas as pd
 
-import fcsparser
+from fcsparser.api import FCSParser
 
 from flowcat.utils import URLPath, outer_interval
 from flowcat.mappings import MARKER_NAME_MAP
@@ -34,29 +33,26 @@ def extract_name(marker):
     return name
 
 
-def create_meta_from_data(data: pd.DataFrame) -> dict:
-    """Get min max ranges from pandas dataframe."""
+def create_meta_from_data(data: np.array, channels: list) -> dict:
+    """Get min max ranges from numpy array."""
     min_values = data.min(axis=0)
     max_values = data.max(axis=0)
-    channel_metas = {}
-    for name, min_value in min_values.items():
-        max_value = max_values[name]
-        channel_metas[name] = ChannelMeta(
-            pd.Interval(min_value, max_value, closed="both"),
-            True)
+    channel_metas = {
+        name: ChannelMeta(min_value, max_value, (0, 0), 0)
+        for name, min_value, max_value in zip(channels, min_values, max_values)
+    }
     return channel_metas
 
 
-def create_meta_from_fcs(meta: dict, data: pd.DataFrame) -> dict:
+def create_meta_from_fcs(meta: dict, channels: list) -> dict:
     """Get ranges from pnr in metadata."""
     channel_metas = {
         c: ChannelMeta(
-            pd.Interval(0, int(meta[f"$P{i + 1}R"]), closed="both"),
-            True,
+            0, int(meta[f"$P{i + 1}R"]),
             tuple(map(float, meta[f"$P{i + 1}E"].split(","))),
             float(meta[f"$P{i + 1}G"]),
         )
-        for i, c in enumerate(data.columns)
+        for i, c in enumerate(channels)
     }
     return channel_metas
 
@@ -70,35 +66,28 @@ def join_fcs_data(fcs_data: List[FCSData], channels=None) -> FCSData:
     Returns:
         Merged single FCSData containing entries from all given fcsdata files.
     """
+    # outer join our data
     if channels is None:
-        channels = fcs_data[0].channels
+        channels = list(set(c for d in fcs_data for c in d.channels))
 
-    dfs = [data.align(channels).data for data in fcs_data]
-    joined = pd.concat(dfs)
-
-    all_meta = [data.meta for data in fcs_data]
-    meta = functools.reduce(
-        lambda x, y: {
-            name: ChannelMeta(
-                outer_interval(x[name].range, y[name].range),
-                x[name].exists or y[name].exists
-            ) for name in channels
-        }, all_meta
-    )
-
-    return FCSData(joined, meta=meta)
+    aligned = [data.align(channels) for data in fcs_data]
+    data = np.concatenate([a.data for a in aligned])
+    mask = np.concatenate([a.mask for a in aligned])
+    new_data = FCSData((data, mask), channels=channels)
+    return new_data
 
 
-ChannelMeta = namedtuple("ChannelMeta", field_names=["range", "exists", "pne", "png"])
+ChannelMeta = namedtuple("ChannelMeta", field_names=["min", "max", "pne", "png"])
 
 
 class FCSData:
     """Wrap FCS data with additional metadata"""
 
     __slots__ = (
-        "_data",  # pd dataframe of data
-        "_meta",  # dict of channel name to channel meta namedtuples
-        "_channels",  # channel names
+        "data",  # pd dataframe of data
+        "mask",  # np array mask for data
+        "meta",  # dict of channel name to channel meta namedtuples
+        "channels",  # channel names
     )
 
     default_encoding = "latin-1"
@@ -106,8 +95,9 @@ class FCSData:
 
     def __init__(
             self,
-            initdata: Union[pd.DataFrame, URLPath, FCSData],
-            meta: dict = None):
+            initdata: Union[URLPath, FCSData, tuple],
+            meta: dict = None,
+            channels: list = None,):
         """Create a new FCS object.
 
         Args:
@@ -118,114 +108,89 @@ class FCSData:
         """
         if isinstance(initdata, self.__class__):
             if meta is not None:
-                raise NotImplementedError("Meta not used for urlpath fcs objects.")
+                raise NotImplementedError("Meta not used for fcs object data input.")
 
-            self._data = initdata.data.copy()
-            self._meta = initdata.meta.copy()
+            self.data = initdata.data.copy()
+            self.mask = initdata.mask.copy()
+            self.meta = initdata.meta.copy()
+            self.channels = initdata.channels.copy()
         elif isinstance(initdata, URLPath):
             if meta is not None:
-                raise NotImplementedError("Meta not used for urlpath fcs objects.")
+                raise NotImplementedError("Meta not used for urlpath data input.")
 
-            meta, data = fcsparser.parse(
-                str(initdata), data_set=self.default_dataset, encoding=self.default_encoding)
-            self._data = data
-            self._meta = create_meta_from_fcs(meta, data)
-        elif isinstance(initdata, pd.DataFrame):
-            self._data = initdata
-            self._meta = meta or create_meta_from_data(initdata)
+            # meta, data = fcsparser.parse(
+            #     str(initdata), data_set=self.default_dataset, encoding=self.default_encoding)
+            parser = FCSParser(str(initdata), data_set=self.default_dataset, encoding=self.default_encoding)
+            self.data = parser.data
+            self.mask = np.ones(self.data.shape)
+            self.meta = create_meta_from_fcs(parser.annotation, parser.channel_names_s)
+            self.channels = list(parser.channel_names_s)
+        elif isinstance(initdata, tuple):
+            self.data, self.mask = initdata
+            if channels is None:
+                raise ValueError("Channels needed when initializing from np data")
+            self.meta = meta or create_meta_from_data(self.data, channels)
+            self.channels = channels
         else:
             raise RuntimeError(
                 "Invalid data for FCS. Either Path, similar object or tuple of data and metadata needed.")
 
-        self._data = self._data.astype("float32", copy=False)
-        self._channels = None
+        self.data = self.data.astype("float32", copy=False)
 
     @property
     def shape(self):
-        return self._data.shape
+        return self.data.shape
 
     @property
-    def channels(self) -> List[str]:
-        if self._channels is None:
-            self._channels = list(self._data.columns)
-        return self._channels
+    def ranges_array(self):
+        """Get min max ranges as numpy array."""
+        return np.array([
+            [meta.min, meta.max] for meta in self.meta.values()
+        ]).T
 
-    @property
-    def data(self) -> pd.DataFrame:
-        return self._data
-
-    @property
-    def meta(self) -> dict:
-        return self._meta
-
-    @property
-    def ranges_dataframe(self) -> pd.DataFrame:
-        """Return min and max range as dataframe."""
-        ranges_dict = {
-            n: {"min": m.range.left, "max": m.range.right}
-            for n, m in self.meta.items()
-        }
-        ranges = pd.DataFrame(data=ranges_dict, dtype="float32")
-        return ranges
-
-    def set_data(self, data):
-        if set(list(data.columns)) != set(self.channels):
-            raise FCSException("Channels are different in new data.")
-        self._data = data
-
-    def set_ranges_from_dataframe(self, ranges: pd.DataFrame):
-        """Set ranges from ranges dataframe with optional info on closedness."""
-        ranges = {
-            name: pd.Interval(
-                min_max["min"], min_max["max"],
-                self.meta[name].range.closed
-            ) for name, min_max in ranges.to_dict().items()
-        }
-        self.set_ranges(ranges)
-
-    def set_ranges(self, ranges: dict):
-        """Set meta ranges from dict mapping channel names to intervals."""
-        for name, channel_range in ranges.items():
-            self.set_range(name, channel_range)
-
-    def set_range(self, name, channel_range: pd.Interval):
-        self.meta[name] = ChannelMeta(channel_range, self.meta[name].exists)
+    def update_range(self, range_array):
+        for name, col in zip(self.meta, range_array.T):
+            self.meta[name] = self.meta[name]._replace(min=col[0], max=col[1])
 
     def rename(self, mapping: dict):
         """Rename columns based on the given mapping."""
-        self._data.rename(mapping, axis=1, inplace=True)
-        self._meta = {mapping.get(name, name) for name, meta in self.meta.items()}
-        self._channels = None
+        self.channels = [mapping.get(name, name) for name in self.channels]
+        self.meta = {mapping.get(name, name): data for name, data in self.meta.items()}
 
     def marker_to_name_only(self) -> FCSData:
         mapping = {c: extract_name(c) for c in self.channels}
         self.rename(mapping)
         return self
 
-    def add_missing_columns(self, channels: List[str], missing_val=np.nan) -> FCSData:
+    def reorder_channels(self, channels: List[str]) -> FCSData:
+        """Reorder columns based on list of channels given."""
+        if any(map(lambda c: c not in self.channels, channels)):
+            raise ValueError("Some given channels not contained in data.")
+        index = np.array([self.channels.index(c) for c in channels])
+        self.data = self.data[:, index]
+        self.mask = self.mask[:, index]
+        self.channels = channels
+
+    def add_missing_channels(self, channels: List[str]) -> FCSData:
         """Add missing columns in the given channel list to the dataframe and
         set them to the missing value."""
+        if any(map(lambda c: c in self.channels, channels)):
+            raise ValueError("Given channel already in data.")
         cur_channels = self.channels
-        missing_cols = {k: missing_val for k in channels if k not in cur_channels}
-        if len(missing_cols) / float(len(channels)) > 0.5:
-            LOGGER.warning("More %d columns are missing. Maybe something is wrong.", len(missing_cols))
+        new_channels = cur_channels + channels
 
-        self._data = self._data.assign(**missing_cols)
-        self._meta.update(
-            {
-                name: ChannelMeta(
-                    pd.Interval(missing_val, missing_val),
-                    False)
-                for name, missing_val in missing_cols.items()
-            }
-        )
-        self._channels = None
+        cur_dim_a, cur_dim_b = self.data.shape
+        new_len = len(channels)
+        newdata = np.zeros((cur_dim_a, cur_dim_b + new_len))
+        newdata[:, :-new_len] = self.data
+        newmask = np.zeros((cur_dim_a, cur_dim_b + new_len))
+        newmask[:, :-new_len] = self.mask
+
+        self.meta.update({name: ChannelMeta(0, 0, (0, 0), 0) for name in channels})
+        self.data = newdata
+        self.mask = newmask
+        self.channels = new_channels
         return self
-
-    def channel_mask(self):
-        """Return a 1/0 int array for the given channels, whether channels
-        exist or not."""
-        return np.array([self.meta[c].exists for c in self.channels])
 
     def align(
             self,
@@ -251,11 +216,15 @@ class FCSData:
         if name_only:
             copy.marker_to_name_only()
 
-        copy.add_missing_columns(channels, missing_val=missing_val)
+        dropped_channels = [c for c in copy.channels if c not in channels]
+        if dropped_channels:
+            copy.drop_channels(dropped_channels)
 
-        copy._data = copy._data[channels]
-        copy._meta = {name: copy._meta[name] for name in channels}
-        copy._channels = channels
+        missing_channels = [c for c in channels if c not in copy.channels]
+        if missing_channels:
+            copy.add_missing_channels(missing_channels)
+
+        copy.reorder_channels(channels)
         return copy
 
     def copy(self) -> FCSData:
@@ -275,10 +244,13 @@ class FCSData:
         Returns:
             self. This operation is done in place, so the original object will be modified!
         """
-        self._data.drop(channels, axis=1, inplace=True, errors="ignore")
+        remaining = [c for c in self.channels if c not in channels]
+        remaining_indices = np.array([self.channels.index(c) for c in remaining])
+        self.data = self.data[:, remaining_indices]
+        self.mask = self.mask[:, remaining_indices]
+        self.channels = remaining
         for channel in channels:
-            del self._meta[channel]
-        self._channels = None
+            del self.meta[channel]
         return self
 
     def __repr__(self):

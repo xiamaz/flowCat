@@ -197,15 +197,18 @@ class FCSSom:
 
         if getattr(self.scaler, "fcsdata_scaler", False):
             joined = self.scaler.fit_transform(joined)
-            res = joined.data
+            arr = joined.data
         else:
-            res = joined.data
-            res = self.scaler.fit_transform(res)
+            arr = joined.data
+            arr = self.scaler.fit_transform(arr)
 
+        mask = joined.mask
         if sample > 0:
-            res = res[np.random.choice(res.shape[0], sample, replace=False), :]
+            selection = np.random.choice(arr.shape[0], sample, replace=False)
+            arr = arr[selection, :]
+            mask = mask[selection, :]
 
-        self.model.train(res)
+        self.model.train(arr, mask)
         self.trained = True
         return self
 
@@ -222,10 +225,13 @@ class FCSSom:
             res = data.data
             res = scaler.transform(res)
 
+        mask = data.mask
         if sample > 0:
-            res = res[np.random.choice(res.shape[0], sample, replace=False), :]
+            selection = np.random.choice(res.shape[0], sample, replace=False)
+            res = res[selection, :]
+            mask = mask[selection, :]
 
-        weights = self.model.transform(res, label=label)
+        weights = self.model.transform(res, mask, label=label)
         somweights = self._create_som(weights)
         return somweights
 

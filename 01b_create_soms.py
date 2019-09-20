@@ -85,12 +85,9 @@ def main(args):
         args.model,
         # marker_images=flowcat.sommodels.fcssom.MARKER_IMAGES_NAME_ONLY,
         max_epochs=4,
-        initial_learning_rate=0.05,
-        end_learning_rate=0.01,
         batch_size=50000,
-        initial_radius=4,
+        initial_radius=16,
         end_radius=1,
-        # subsample_size=1000,
         tensorboard_dir=tensorboard_dir)
 
     transform_cases(cases, model, args.output)

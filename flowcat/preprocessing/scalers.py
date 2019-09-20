@@ -19,7 +19,7 @@ class FCSMinMaxScaler(FCSDataMixin, TransformerMixin, BaseEstimator):
         """Fit min max range to the given data."""
         self._model = MinMaxScaler()
         if self._fit_to_range:
-            data = X.ranges_dataframe
+            data = X.ranges_array
         else:
             data = X.data
         self._model.fit(data)
@@ -27,16 +27,8 @@ class FCSMinMaxScaler(FCSDataMixin, TransformerMixin, BaseEstimator):
 
     def transform(self, X, *_):
         """Transform data to be 0 min and 1 max using the fitted values."""
-        orig_data = X.data
-        data = self._model.transform(orig_data)
-        data = pd.DataFrame(data, columns=orig_data.columns, index=orig_data.index, dtype="float32")
-
-        orig_ranges = X.ranges_dataframe
-        ranges = self._model.transform(orig_ranges)
-        ranges = pd.DataFrame(ranges, columns=orig_ranges.columns, index=orig_ranges.index, dtype="float32")
-
-        X.set_data(data)
-        X.set_ranges_from_dataframe(ranges)
+        X.data = self._model.transform(X.data)
+        X.update_range(self._model.transform(X.ranges_array))
         return X
 
 
@@ -48,21 +40,11 @@ class FCSStandardScaler(FCSDataMixin, TransformerMixin, BaseEstimator):
 
     def fit(self, X, *_):
         """Fit standard deviation to the given data."""
-        self._model = StandardScaler()
-        data = X.data
-        self._model.fit(data)
+        self._model = StandardScaler().fit(X.data)
         return self
 
     def transform(self, X, *_):
         """Transform data to be zero mean and unit standard deviation"""
-        orig_data = X.data
-        data = self._model.transform(orig_data)
-        data = pd.DataFrame(data, columns=orig_data.columns, index=orig_data.index, dtype="float32")
-
-        orig_ranges = X.ranges_dataframe
-        ranges = self._model.transform(orig_ranges)
-        ranges = pd.DataFrame(ranges, columns=orig_ranges.columns, index=orig_ranges.index, dtype="float32")
-
-        X.set_data(data)
-        X.set_ranges_from_dataframe(ranges)
+        X.data = self._model.transform(X.data)
+        X.update_range(self._model.transform(X.ranges_array))
         return X
