@@ -86,7 +86,7 @@ def main(args):
         # marker_images=flowcat.sommodels.fcssom.MARKER_IMAGES_NAME_ONLY,
         max_epochs=4,
         batch_size=50000,
-        initial_radius=16,
+        initial_radius=8,
         end_radius=1,
         tensorboard_dir=tensorboard_dir)
 

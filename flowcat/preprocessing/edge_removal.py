@@ -8,7 +8,6 @@ import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 
 from flowcat.dataset import fcs
-from flowcat.utils.intervals import create_interval, inner_interval, series_in_interval
 
 from . import FCSDataMixin
 
@@ -18,52 +17,37 @@ LOGGER = logging.getLogger(__name__)
 
 class EdgeEventFilter(FCSDataMixin, TransformerMixin, BaseEstimator):
 
-    def __init__(self, channel_intervals: Dict[str, Union[tuple, pd.Interval]]):
+    def __init__(self, channels: list):
         """Intervals are either (x.xx, y.yy) or (None, x.xx) etc, they are always strict smaller"""
-        self._intervals = {
-            channel: create_interval(interval)
-            for channel, interval in channel_intervals.items()
-        }
+        self.trained = False
+        self.channels = channels
 
     def fit(self, X: fcs.FCSData, *_):
         """Fit model to extreme values in channels for sample."""
         data = X.data
-        for colname in self._intervals:
-            coldata = data[colname]
-            new_min = coldata.min()
-            new_max = coldata.max()
-            new_interval = create_interval((new_min, new_max))
-            self._intervals[colname] = new_interval
-
+        channels = X.channels
+        colindexes = [channels.index(c) for c in self.channels]
+        sel_cols = data[:, colindexes]
+        self._mins = sel_cols.min()
+        self._maxs = sel_cols.max()
+        self.trained = True
         return self
 
-    def transform(self, X: fcs.FCSData, *_, inplace=False) -> fcs.FCSData:
+    def transform(self, X: fcs.FCSData, *_) -> fcs.FCSData:
         """Remove all events outside of specified intervals.
         """
-        if not inplace:
-            X = X.copy()
+        if not self.trained:
+            raise RuntimeError("Model has not been trained yet.")
 
         data = X.data
-        meta = X.meta
+        channels = X.channels
 
-        all_contained = None
-        new_ranges = {}
-        for colname, interval in self._intervals.items():
-            newinterval = inner_interval(meta[colname].range, interval)
-            contained = series_in_interval(data[colname], newinterval)
-
-            if all_contained is None:
-                all_contained = contained
-            else:
-                all_contained &= contained
-
-            new_ranges[colname] = newinterval
+        sel_data = X.data[:, [channels.index(c) for c in self.channels]]
+        all_contained = ((sel_data > self._mins) & (sel_data < self._maxs)).all(axis=1)
 
         LOGGER.info("Filtered out %s/%s", sum(all_contained), data.shape[0])
-        data = data.loc[all_contained, :]
-        data.reset_index(drop=True, inplace=True)
-        X.set_data(data)
-        X.set_ranges(new_ranges)
+        X.data = data[all_contained, :]
+        X.mask = data[all_contained, :]
         return X
 
 

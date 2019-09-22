@@ -10,6 +10,7 @@ from collections import namedtuple
 import numpy as np
 
 from fcsparser.api import FCSParser
+import fcsparser
 
 from flowcat.utils import URLPath, outer_interval
 from flowcat.mappings import MARKER_NAME_MAP
@@ -118,8 +119,6 @@ class FCSData:
             if meta is not None:
                 raise NotImplementedError("Meta not used for urlpath data input.")
 
-            # meta, data = fcsparser.parse(
-            #     str(initdata), data_set=self.default_dataset, encoding=self.default_encoding)
             parser = FCSParser(str(initdata), data_set=self.default_dataset, encoding=self.default_encoding)
             self.data = parser.data
             self.mask = np.ones(self.data.shape)
@@ -151,6 +150,10 @@ class FCSData:
     def update_range(self, range_array):
         for name, col in zip(self.meta, range_array.T):
             self.meta[name] = self.meta[name]._replace(min=col[0], max=col[1])
+
+    def update_range_from_dict(self, range_dict):
+        for name, (min_val, max_val) in range_dict.items():
+            self.meta[name] = self.meta[name]._replace(min=min_val, max=max_val)
 
     def rename(self, mapping: dict):
         """Rename columns based on the given mapping."""

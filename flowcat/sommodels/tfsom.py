@@ -221,10 +221,9 @@ class TFSom:
     def __init__(
             self,
             dims, initialization=None, graph=None,
-            max_epochs=10, batch_size=10000, buffer_size=1_000_000,
+            max_epochs=10, batch_size=50000, buffer_size=1_000_000,
             initial_radius=None, end_radius=None, radius_cooling="linear",
             node_distance="euclidean", map_type="planar", std_coeff=0.5,
-            subsample_size=None,
             model_name="Self-Organizing-Map",
             tensorboard_dir=None, seed=None,
     ):
@@ -242,8 +241,6 @@ class TFSom:
             node_distance: Distance metric between nodes on the SOM map.
             map_type: Behavior of map edges. Either toroid (wrap-around) or planar (no wrap).
             std_coeff: Coefficient of the neighborhood function.
-            subsample_size: Size of subsamples from a single batch. None or a negative value will use the entire input
-                data.
             model_name: Name of the SOM model. Used for tensorboard directory names.
             tensorboard_dir: Directory to save tensorboard data to. If none, tensorboard will not be generated.
         """
@@ -252,8 +249,16 @@ class TFSom:
 
         self._m, self._n, self._dim = dims
 
-        self._initial_radius = max(self._m, self._n) / 2.0 if initial_radius is None else float(initial_radius)
-        self._end_radius = 1.0 if end_radius is None else float(end_radius)
+        if initial_radius is None:
+            self._initial_radius = max(self._m, self._n) / 2.0
+        else:
+            self._initial_radius = float(initial_radius)
+
+        if end_radius is None:
+            self._end_radius = 1.0
+        else:
+            self._end_radius = float(end_radius)
+
         self._radius_cooling = radius_cooling
 
         # node distance calculation option on the SOM map
@@ -278,8 +283,6 @@ class TFSom:
         self._training_op = None
         self._assign_trained_op = None
         self._reset_weights_op = None
-
-        self._subsample_size = subsample_size
 
         self._initialized = False
 
@@ -470,17 +473,6 @@ class TFSom:
 
         with tf.name_scope('Input'):
             input_tensor, mask_tensor = iterator.get_next()
-
-            if self._subsample_size:
-                # randomly select samples from the input for training
-                random_vals = tf.cast(
-                    tf.transpose(tf.expand_dims(
-                        tf.random_uniform(
-                            (self._subsample_size, )
-                        ) * tf.cast(tf.shape(input_tensor)[0], tf.float32), axis=0)),
-                    tf.int32)
-                input_tensor = tf.gather_nd(input_tensor, random_vals)
-                mask_tensor = tf.gather_nd(mask_tensor, random_vals)
 
         # Feed epoch via feed dict, makes everything much simpler
         with tf.name_scope('Epoch'):

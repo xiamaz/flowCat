@@ -183,8 +183,8 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
         data: Path to som dataset
         output: Output path
     """
-    tubes = ("1", "2", "3")
-    pad_width = 1
+    tubes = ("1", "2")
+    pad_width = 2
 
     group_mapping = mappings.GROUP_MAPS["8class"]
     mapping = group_mapping["map"]
@@ -285,7 +285,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
         optimizer="adam",
         # optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=epsilon),
         metrics=[
-            "acc",
+            keras.metrics.CategoricalAccuracy(),
         ]
     )
     with (output / "model_summary.txt").open("w") as summary_file:
@@ -323,7 +323,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     nan_callback = keras.callbacks.TerminateOnNaN()
 
     model.fit_generator(
-        epochs=15, shuffle=True,
+        epochs=30, shuffle=True,
         callbacks=[
             # tensorboard_callback,
             nan_callback

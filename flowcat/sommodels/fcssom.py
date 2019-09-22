@@ -5,12 +5,14 @@ import logging
 import numpy as np
 import pandas as pd
 
+from sklearn.pipeline import Pipeline
+
 import tensorflow as tf
 
 from flowcat.utils import URLPath
 from flowcat.dataset.fcs import FCSData, join_fcs_data
 from flowcat.dataset.som import SOM
-from flowcat.preprocessing import scalers
+from flowcat.preprocessing import scalers, edge_removal
 from .tfsom import create_initializer, TFSom
 
 
@@ -39,6 +41,20 @@ class MarkerMissingError(Exception):
 
 class InvalidScaler(Exception):
     pass
+
+
+def create_edge_removal(channels):
+    return Pipeline([
+        ("minmax", scalers.MinMaxScaler()),
+        ("edge", edge_removal.EdgeEventFilter(channels)),
+    ])
+
+
+PRESET_SCALERS = {
+    "StandardScaler": scalers.FCSStandardScaler,
+    "MinMaxScaler": scalers.MinMaxScaler,
+    "EdgeRemovalBasic": create_edge_removal,
+}
 
 
 def create_color_map(weights, cols, name="colormap", img_size=None):
@@ -76,6 +92,7 @@ class FCSSom:
             marker_images=None,
             name="fcssom",
             scaler="MinMaxScaler",
+            scaler_args=(),
             **kwargs):
         self.dims = dims
         m, n, dim = self.dims
@@ -122,16 +139,12 @@ class FCSSom:
                 self.add_weight_images(marker_images)
 
         self.model.initialize()
-
-        if scaler == "StandardScaler":
-            self.scaler = scalers.FCSStandardScaler()
-        elif scaler == "MinMaxScaler":
-            self.scaler = scalers.FCSMinMaxScaler()
+        if scaler in PRESET_SCALERS:
+            self.scaler = PRESET_SCALERS[scaler](*scaler_args)
+        elif scaler is not None:
+            self.scaler = scaler
         else:
-            if scaler is not None:
-                self.scaler = scaler
-            else:
-                raise InvalidScaler(scaler)
+            raise InvalidScaler(scaler)
 
     @property
     def config(self):
@@ -214,7 +227,7 @@ class FCSSom:
 
     def transform(self, data: FCSData, sample: int = -1, label: str = "", scaler=None) -> SOM:
         """Transform input fcs into retrained SOM node weights."""
-        data = data.align(self.markers, name_only=self.marker_name_only)
+        data = data.align(self.markers, name_only=self.marker_name_only, inplace=True)
 
         scaler = scaler or self.scaler
 

@@ -46,7 +46,7 @@ def train_model(dataset, markers=None, tensorboard=None, marker_name_only=False)
             "marker_name_only": marker_name_only,
             "max_epochs": 10,
             "batch_size": 50000,
-            "initial_radius": 24,
+            "initial_radius": 16,
             "end_radius": 2,
             "radius_cooling": "linear",
             # "marker_images": sommodels.fcssom.MARKER_IMAGES_NAME_ONLY,
