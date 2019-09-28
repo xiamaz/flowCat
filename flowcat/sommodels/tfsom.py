@@ -370,7 +370,8 @@ class TFSom:
             self._sess.run([init_op])
 
             # Get some metric variables which we will reset each epoch
-            self._epoch_start_init_vars += self._graph.get_collection(tf.GraphKeys.METRIC_VARIABLES)
+            if self.tensorboard:
+                self._epoch_start_init_vars += self._graph.get_collection(tf.GraphKeys.METRIC_VARIABLES)
             self._epoch_start_init = tf.variables_initializer(
                 self._epoch_start_init_vars
             )

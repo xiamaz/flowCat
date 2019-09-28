@@ -64,15 +64,26 @@ som_weights_csv <- function(weights_df, path) {
   write.csv(weights_df, file=path)
 }
 
+create_rolling <- function() {
+  values <- c()
+  function(delta) {
+    values <<- c(values, delta)[1:min(length(values) + 1, 11)]
+    # values <<- c(values, delta)
+    cat(delta, "Mean delta", mean(values), "\n")
+  }
+}
+
 
 dataset <- get_dataset("output/4-flowsom-cmp/samples")
 
-plot_dir <- "output/4-flowsom-cmp/flowsom-10"
+plot_dir <- "output/4-flowsom-cmp/flowsom-10-timing"
 dir.create(plot_dir, recursive=T)
 
 # -------------------------
 
 num_cases <- nrow(dataset$meta)
+start_time <- Sys.time()
+rolling_avg <- create_rolling()
 for (case_index in 1:num_cases) {
   for (tube in c(1, 2, 3)) {
     label <- get_label(case_index, dataset)
@@ -80,8 +91,13 @@ for (case_index in 1:num_cases) {
     fcs <- get_fcs_data(case_index, tube, dataset)
     weights <- fcs_to_som_weights(fcs, xdim=10, ydim=10, codes=NULL, init=F)
     som_weights_csv(weights, out_path)
+    end_time <- Sys.time()
+    delta <- end_time - start_time
+    rolling_avg(delta)
+    start_time <- end_time
   }
 }
+q()
 
 plot_dir <- "output/4-flowsom-cmp/flowsom-32"
 dir.create(plot_dir, recursive=T)

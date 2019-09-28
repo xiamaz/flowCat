@@ -23,8 +23,8 @@ def configure_print_logging(rootname="flowcat"):
     utils.add_logger(LOGGER, handlers, level=logging.DEBUG)
 
 
-def train_model(dataset, markers=None, tensorboard=None, marker_name_only=False):
-    """Create and train a SOM model using the given dataset."""
+def train_model(dataset, markers=None, size=32, scaler="RefitStandardScaler", tensorboard=None, marker_name_only=False):
+    """Create and train a SOM model using the given dataset"""
     if markers:
         selected_markers = io_functions.load_json(markers)
     else:
@@ -38,7 +38,7 @@ def train_model(dataset, markers=None, tensorboard=None, marker_name_only=False)
 
     # scaler = "StandardScaler"
     # scaler = "RefitStandardScaler"
-    scaler = "MinMaxScaler"
+    # scaler = "MinMaxScaler"
 
     model = sommodels.casesom.CaseSom(
         tubes=selected_markers,
@@ -47,12 +47,12 @@ def train_model(dataset, markers=None, tensorboard=None, marker_name_only=False)
             "marker_name_only": marker_name_only,
             "max_epochs": 10,
             "batch_size": 50000,
-            "initial_radius": 16,
+            "initial_radius": int(size / 2),
             "end_radius": 2,
             "radius_cooling": "linear",
             # "marker_images": sommodels.fcssom.MARKER_IMAGES_NAME_ONLY,
             "map_type": "toroid",
-            "dims": (32, 32, -1),
+            "dims": (size, size, -1),
             "scaler": scaler,
         })
     model.train(dataset)
@@ -75,6 +75,8 @@ def main(args):
     model = train_model(
         selected,
         markers=args.markers,
+        scaler=args.scaler,
+        size=args.size,
         tensorboard=tensorboard_dir,
         marker_name_only=args.marker_name_only)
 
@@ -92,6 +94,13 @@ if __name__ == "__main__":
         "--markers",
         help="Input json file mapping tube number to markers",
         type=utils.URLPath)
+    PARSER.add_argument(
+        "--size",
+        default=32,
+        type=int)
+    PARSER.add_argument(
+        "--scaler",
+        default="RefitStandardScaler")
     PARSER.add_argument(
         "--marker-name-only",
         help="Only use the marker name, not the antibody",

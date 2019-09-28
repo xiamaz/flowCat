@@ -79,10 +79,10 @@ def create_model_multi_input(input_shapes, yshape, global_decay=5e-6):
             filters=48, kernel_size=3, activation="relu", strides=1,
             kernel_regularizer=regularizers.l2(global_decay),
         )(x)
-        x = layers.Conv2D(
-            filters=48, kernel_size=2, activation="relu", strides=1,
-            kernel_regularizer=regularizers.l2(global_decay),
-        )(x)
+        # x = layers.Conv2D(
+        #     filters=48, kernel_size=2, activation="relu", strides=1,
+        #     kernel_regularizer=regularizers.l2(global_decay),
+        # )(x)
         x = layers.Conv2D(
             filters=64, kernel_size=2, activation="relu", strides=1,
             kernel_regularizer=regularizers.l2(global_decay),
@@ -183,7 +183,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
         data: Path to som dataset
         output: Output path
     """
-    tubes = ("1", "2")
+    tubes = ("1", "2", "3")
     pad_width = 2
 
     group_mapping = mappings.GROUP_MAPS["8class"]

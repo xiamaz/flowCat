@@ -54,6 +54,8 @@ PRESET_SCALERS = {
     "StandardScaler": scalers.FCSStandardScaler,
     "MinMaxScaler": scalers.MinMaxScaler,
     "EdgeRemovalBasic": create_edge_removal,
+    "RefitStandardScaler": lambda: scalers.RefitScaler(scalers.FCSStandardScaler),
+    "RefitMinMaxScaler": lambda: scalers.RefitScaler(scalers.FCSMinMaxScaler),
 }
 
 

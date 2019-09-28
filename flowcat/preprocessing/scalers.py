@@ -48,3 +48,15 @@ class FCSStandardScaler(FCSDataMixin, TransformerMixin, BaseEstimator):
         X.data = self._model.transform(X.data)
         X.update_range(self._model.transform(X.ranges_array))
         return X
+
+
+class RefitScaler(FCSDataMixin, TransformerMixin, BaseEstimator):
+    """Always refit the containing scaler class."""
+    def __init__(self, base):
+        self._base = base
+
+    def fit(self, *_):
+        return self
+
+    def transform(self, X, *_):
+        return self._base().fit_transform(X)
