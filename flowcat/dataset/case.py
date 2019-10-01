@@ -76,11 +76,14 @@ def filter_case(
     if date:
         date_min, date_max = date
         if date_min:
-            date_min = utils.str_to_date(date_min) if isinstance(date_min, str) else date
+            if isinstance(date_min, str):
+                date_min = utils.str_to_date(date_min)
+
             if case.date < date_min:
                 reasons.append("date_min")
         if date_max:
-            date_max = utils.str_to_date(date_max) if isinstance(date_max, str) else date
+            if isinstance(date_max, str):
+                date_max = utils.str_to_date(date_max)
             if case.date > date_max:
                 reasons.append("date_max")
 
