@@ -14,6 +14,18 @@ The general processing steps are:
 2. Classification
 3. Evaluation
 
+Conda can be used to install all required dependencies for the project.
+
+Hardware requirements: Nvidia GPU compatible with Cuda 10.0
+
+Software requirements can be installed with [miniconda](https://docs.conda.io/en/latest/miniconda.html).
+
+Create a new environment from the environment file given in the repo. This will create a new conda environment named `flowcat`.
+
+```sh
+conda env create -f environment.yml
+```
+
 ## Quick start
 
 ```sh
