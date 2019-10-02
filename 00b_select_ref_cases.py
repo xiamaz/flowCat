@@ -129,13 +129,13 @@ PARSER.add_argument(
 
 args = PARSER.parse_args()
 
-cases = io_functions.load_case_collection(args.data, args.meta)
+cases = io_functions.load_case_collection_from_caseinfo(args.data, args.meta)
 print(cases)
 
 input_args = {n: getattr(args, n) for n in filter_signature()}
 filtered, _ = cases.filter_reasons(**input_args)
 
-filtered = filtered.sample(args.sample)
+filtered = filtered.sample(1,args.sample)
 
 print("Found cases", filtered)
 print_cases(filtered)
