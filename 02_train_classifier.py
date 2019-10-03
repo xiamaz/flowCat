@@ -188,7 +188,7 @@ def plot_training_history(history, output):
     acc_plot.savefig(str(output), dpi=300)
 
 
-def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
+def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath, epochs: int = 30):
     """
     Args:
         data: Path to som dataset
@@ -334,7 +334,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     nan_callback = keras.callbacks.TerminateOnNaN()
 
     history = model.fit_generator(
-        epochs=30, shuffle=True,
+        epochs=epochs, shuffle=True,
         callbacks=[
             # tensorboard_callback,
             nan_callback
