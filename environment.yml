@@ -8,6 +8,7 @@ dependencies:
   - matplotlib
   - numpy=1.16.5
   - pandas
+  - pydot
   - pyflakes
   - pylint
   - python=3.7
