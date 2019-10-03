@@ -65,61 +65,11 @@ def create_model_early_merge(input_shapes, yshape, global_decay=5e-6):
     return model
 
 
-def create_model_multi_input(input_shapes, yshape, global_decay=5e-6):
-    segments = []
-    inputs = []
-    for xshape in input_shapes:
-        ix = layers.Input(shape=xshape)
-        inputs.append(ix)
-        x = layers.Conv2D(
-            filters=32, kernel_size=4, activation="relu", strides=1,
-            kernel_regularizer=regularizers.l2(global_decay),
-        )(ix)
-        x = layers.Conv2D(
-            filters=48, kernel_size=3, activation="relu", strides=1,
-            kernel_regularizer=regularizers.l2(global_decay),
-        )(x)
-        # x = layers.Conv2D(
-        #     filters=48, kernel_size=2, activation="relu", strides=1,
-        #     kernel_regularizer=regularizers.l2(global_decay),
-        # )(x)
-        x = layers.Conv2D(
-            filters=64, kernel_size=2, activation="relu", strides=1,
-            kernel_regularizer=regularizers.l2(global_decay),
-        )(x)
-        # x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
-
-        # x = layers.GlobalAveragePooling2D()(x)
-        x = layers.GlobalMaxPooling2D()(x)
-        segments.append(x)
-
-    x = layers.concatenate(segments)
-
-    x = layers.Dense(
-        units=64, activation="relu",
-        # kernel_initializer="uniform",
-        kernel_regularizer=regularizers.l2(global_decay)
-    )(x)
-    x = layers.Dense(
-        units=32, activation="relu",
-        # kernel_initializer="uniform",
-        kernel_regularizer=regularizers.l2(global_decay)
-    )(x)
-
-    x = layers.Dense(
-        units=yshape, activation="softmax"
-    )(x)
-
-    model = models.Model(inputs=inputs, outputs=x)
-    return model
-
-
 def get_model(channel_config, groups, **kwargs):
     inputs = tuple([*d["dims"][:-1], len(d["channels"])] for d in channel_config.values())
     output = len(groups)
 
-    model = create_model_multi_input(inputs, output, **kwargs)
-    # model = create_model_early_merge(inputs, output, **kwargs)
+    model = create_model_early_merge(inputs, output, **kwargs)
 
     binarizer = LabelBinarizer()
     binarizer.fit(groups)
