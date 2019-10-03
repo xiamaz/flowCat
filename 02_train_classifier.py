@@ -13,7 +13,7 @@ from argmagic import argmagic
 
 from flowcat import utils, io_functions, mappings, classification_utils
 from flowcat.som_dataset import SOMDataset, SOMSequence
-from flowcat.plots import confusion as plot_confusion
+from flowcat.plots import confusion as plot_confusion, history as plot_history
 
 
 def create_model_early_merge(input_shapes, yshape, global_decay=5e-6):
@@ -177,6 +177,17 @@ def generate_all_metrics(true_labels, pred_labels, mapping, output):
     return confusion, metrics
 
 
+def plot_training_history(history, output):
+    history_data = {
+        "accuracy": history.history["accuracy"],
+        "val_accuracy": history.history["val_accuracy"],
+        "loss": history.history["loss"],
+        "val_loss": history.history["val_loss"],
+    }
+    acc_plot = plot_history.plot_history(history_data, title="Training accuracy")
+    acc_plot.savefig(str(output), dpi=300)
+
+
 def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     """
     Args:
@@ -322,7 +333,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     # )
     nan_callback = keras.callbacks.TerminateOnNaN()
 
-    model.fit_generator(
+    history = model.fit_generator(
         epochs=30, shuffle=True,
         callbacks=[
             # tensorboard_callback,
@@ -350,6 +361,8 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
         if len(mapping["groups"]) > len(groups):
             continue
         generate_all_metrics(true_labels, pred_labels, mapping, output_path)
+
+    plot_training_history(history, output / "training.png")
 
 
 if __name__ == "__main__":
