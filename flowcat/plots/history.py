@@ -10,7 +10,7 @@ def plot_history(history_data: dict, title="") -> Figure:
     ax.set_title(title)
 
     for name, data in history_data.items():
-        ax.plot(data, legend=name)
+        ax.plot(data, label=name)
 
     ax.legend()
     fig.tight_layout()
