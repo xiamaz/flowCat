@@ -12,6 +12,6 @@ def plot_history(history_data: dict, title="") -> Figure:
     for name, data in history_data.items():
         ax.plot(data, legend=name)
 
-    ax.legent()
+    ax.legend()
     fig.tight_layout()
     return fig
