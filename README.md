@@ -30,14 +30,12 @@ conda env create -f environment.yml
 
 ```sh
 # split data into train and test dataset
-./00a_dataset_prepare.py --data <DATASET PATH> --meta <DATASET META> --output <DS DIR>
-# select cases from from the train cohort for training reference som
-./00b_select_ref_cases.py --data <DATASET PATH> --meta <TRAIN META> --output <DS DIR>/references.json
+./00_prepare_dataset.py --data <DATASET PATH> --meta <DATASET META> --output <DS DIR>
 
 # generate reference som
-./01a_create_ref_som.py --data <DATASET PATH> --meta <TRAIN META> <DS DIR>/references.json <REF SOM DIR>
-# transform individual soms
-./01b_create_soms.py --data <DATASET PATH> --meta <TRAIN META> <REF SOM DIR> <INDIV SOM OUTPUT>
+./01_generate_soms.py --data <DATASET PATH> --meta <TRAIN META> \
+                      --reference_ids <DS DIR>/references.json \
+                      --output <SOM DIR>
 
 # train classifier on transformed soms
 ./02_train_classifier.py --data <INDIV SOM> --meta <INDIV SOM>.json <MODEL DIR>

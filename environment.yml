@@ -21,5 +21,6 @@ dependencies:
     - git+https://github.com/jakob-he/keras-vis.git@multiinput
     - neovim
     - argmagic
+    - dataslots
 prefix: /usr/local/miniconda3/envs/flowcat
 
