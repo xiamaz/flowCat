@@ -179,8 +179,8 @@ def generate_all_metrics(true_labels, pred_labels, mapping, output):
 
 def plot_training_history(history, output):
     history_data = {
-        "accuracy": history.history["accuracy"],
-        "val_accuracy": history.history["val_accuracy"],
+        "accuracy": history.history["categorical_accuracy"],
+        "val_accuracy": history.history["val_categorical_accuracy"],
         "loss": history.history["loss"],
         "val_loss": history.history["val_loss"],
     }
