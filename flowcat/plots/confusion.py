@@ -61,11 +61,13 @@ def draw_confusion_matrix(
         Axes containing confusion matrix.
     """
     classes = list(confusion_matrix.columns)
+    sizes = np.ones(len(classes))
 
     confusion_matrix = confusion_matrix.values
 
     # set tick mark values and confusion matrix values for image plot
     tick_marks = np.arange(len(classes), dtype=float)
+    y_tick_marks = np.arange(len(classes), dtype=float)
     confusion_img = confusion_matrix.copy()
     if sizes is not None:
         for i, size in enumerate(sizes):
@@ -80,8 +82,10 @@ def draw_confusion_matrix(
     axes.imshow(confusion_img, interpolation='nearest', cmap=cmap)
     axes.set_xticks(tick_marks)
     axes.set_xticklabels(classes)
-    axes.set_yticks(tick_marks)
+    axes.set_yticks(y_tick_marks)
     axes.set_yticklabels(classes)
+    # workaround for mpl 3.1.1
+    axes.set_ylim(len(classes) - 0.5, -0.5)
     axes.set_ylabel('True label')
     axes.set_xlabel('Predicted label')
 
@@ -124,15 +128,23 @@ def draw_dendrogram(axes, confusion_matrix):
     return axes
 
 
+def plot_dendrogram(confusion_matrix) -> Figure:
+    """Create a figure containing a dendrogram from the given confusion
+    matrix."""
+    fig = Figure()
+    axes = fig.add_subplot(111)
+    draw_dendrogram(axes, confusion_matrix)
+    FigureCanvas(fig)
+    fig.tight_layout()
+    return fig
+
+
 def plot_confusion_matrix(
-        confusion_matrix,
-        normalize=False,
-        title="Confusion matrix",
-        cmap="Blues",  # pylint: disable=no-member
-        filename="confusion.png",
-        dendroname="dendro.png",
-        sizes=None, colorbar=False
-):
+        confusion_matrix: pd.DataFrame,
+        normalize: bool = False,
+        title: str = "Confusion matrix",
+        sizes: list = None
+) -> Figure:
     """
     This function prints and plots the confusion matrix.
     Normalization can be applied by setting `normalize=True`.
@@ -154,19 +166,11 @@ def plot_confusion_matrix(
         LOGGER.debug('Confusion matrix, without normalization')
         confusion_matrix = confusion_matrix.astype('int')
 
-    if filename is not None:
-        fig = Figure()
-        axes = fig.add_subplot(111)
-        axes.set_title(title)
-        draw_confusion_matrix(axes, confusion_matrix, sizes=sizes)
-        FigureCanvas(fig)
-        fig.tight_layout()
-        fig.savefig(str(filename), dpi=300)
+    fig = Figure(figsize=(7, 7))
+    FigureCanvas(fig)
+    axes = fig.add_subplot(111)
+    axes.set_title(title)
+    draw_confusion_matrix(axes, confusion_matrix, sizes=sizes)
+    fig.tight_layout()
 
-    if dendroname is not None:
-        fig = Figure()
-        axes = fig.add_subplot(111)
-        draw_dendrogram(axes, confusion_matrix)
-        FigureCanvas(fig)
-        fig.tight_layout()
-        fig.savefig(str(dendroname), dpi=300)
+    return fig

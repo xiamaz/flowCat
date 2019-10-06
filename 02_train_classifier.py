@@ -89,13 +89,9 @@ def generate_confusion(true_labels, pred_labels, groups, output):
     io_functions.save_csv(confusion, output / "validation_confusion.csv")
 
     plot_confusion.plot_confusion_matrix(
-        confusion, normalize=False, filename=output / "confusion_abs.png",
-        dendroname="dendro.png"
-    )
+        confusion, normalize=False).savefig(str(output / "confusion_abs.png"), dpi=300)
     plot_confusion.plot_confusion_matrix(
-        confusion, normalize=True, filename=output / "confusion_norm.png",
-        dendroname=None
-    )
+        confusion, normalize=True).savefig(str(output / "confusion_norm.png"), dpi=300)
     return confusion
 
 
@@ -147,11 +143,13 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath, epochs
     tubes = ("1", "2", "3")
     pad_width = 2
 
-    group_mapping = mappings.GROUP_MAPS["8class"]
+    group_mapping = {
+        "map": None,
+        "groups": mappings.GROUPS,
+    }
+    # group_mapping = mappings.GROUP_MAPS["8class"]
     mapping = group_mapping["map"]
     groups = group_mapping["groups"]
-    # mapping = None
-    # groups = mappings.GROUPS
 
     # dataset = io_functions.load_case_collection(data, meta)
     dataset = SOMDataset.from_path(data)
@@ -176,9 +174,9 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath, epochs
 
     # train = train.balance(2000)
     train = train.balance_per_group({
-        "CM": 6000,
-        # "CLL": 4000,
-        # "MBL": 2000,
+        # "CM": 6000,
+        "CLL": 4000,
+        "MBL": 2000,
         "MCL": 1000,
         "PL": 1000,
         "LPL": 1000,
