@@ -203,7 +203,7 @@ def preprocess_cases(cases: CaseCollection, tubes=("1", "2", "3")):
     return train_cases, test_cases
 
 
-def filter_reference(dataset, infiltration=20.0, sample=1):
+def filter_reference(dataset, infiltration=(20.0, None), sample=1):
     reference = dataset.filter(infiltration=infiltration).sample(sample)
     print("Reference cases:", reference)
     return reference
