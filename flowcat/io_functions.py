@@ -4,6 +4,7 @@ import json
 import re
 import logging
 import pickle
+import shutil
 from datetime import date
 
 import joblib
@@ -220,7 +221,21 @@ def save_case_collection(cases, destination: URLPath):
     save_json(cases, destination)
 
 
+def save_case_collection_with_data(cases, destination: URLPath):
+    sample_destination = destination / "data"
+    cases = cases.copy()
+    for case_obj in cases:
+        for case_sample in case_obj.samples:
+            sdest = sample_destination / case_sample.path
+            sdest.parent.mkdir()
+            shutil.copy(str(case_sample.complete_path), sdest)
+            case_sample.dataset_path = sample_destination
+
+    save_case_collection(cases, destination=destination / "meta.json")
+    return cases
+
+
 def load_case_collection(data_path: URLPath, meta_path: URLPath):
     cases = load_json(meta_path)
-    cases.data_path = data_path
+    cases.set_data_path(data_path)
     return cases

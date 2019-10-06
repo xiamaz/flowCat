@@ -261,6 +261,14 @@ class CaseCollection:
         random.shuffle(self.cases)
         return self
 
+    def set_data_path(self, data_path: utils.URLPath):
+        """Set data path for all cases."""
+        for case in self:
+            for sample in case.samples:
+                sample.dataset_path = data_path
+
+        self.data_path = data_path
+
     def __repr__(self):
         return f"<{self.__class__.__name__} {len(self)} cases>"
 

@@ -50,11 +50,11 @@ def filter_samples(
     return filtered
 
 
-def sampleinfo_to_sample(sample_info: dict, case_id: str, path: utils.URLPath) -> Sample:
+def sampleinfo_to_sample(sample_info: dict, case_id: str, dataset_path: utils.URLPath) -> Sample:
     """Create a tube sample from sample info dict."""
     assert "fcs" in sample_info and "path" in sample_info["fcs"], "Path to sample_info is missing"
     assert "date" in sample_info, "Date is missing"
-    path = path / utils.URLPath(sample_info["fcs"]["path"])
+    path = utils.URLPath(sample_info["fcs"]["path"])
     date = utils.str_to_date(sample_info["date"])
 
     tube = str(sample_info.get("tube", "0"))
@@ -70,6 +70,7 @@ def sampleinfo_to_sample(sample_info: dict, case_id: str, path: utils.URLPath) -
         id=sample_id,
         case_id=case_id,
         path=path,
+        dataset_path=dataset_path,
         date=date,
         tube=tube,
         material=material,
@@ -94,6 +95,7 @@ def fcssample_to_json(sample: FCSSample) -> dict:
     sdict = asdict(sample)
     sdict["date"] = sample.date.isoformat()
     sdict["path"] = str(sample.path)
+    del sdict["dataset_path"]
     del sdict["data"]  # never store data in json
     if sample.material:
         sdict["material"] = sample.material.name
@@ -106,15 +108,16 @@ def somsample_to_json(sample: SOMSample) -> dict:
     sdict = asdict(sample)
     sdict["date"] = sample.date.isoformat()
     sdict["path"] = str(sample.path)
+    del sdict["dataset_path"]
     del sdict["data"]  # never store data in json
     return sdict
 
 
-def json_to_sample(samplejson: dict) -> Sample:
+def json_to_sample(samplejson: dict, **kwargs) -> Sample:
     if "__fcssample__" in samplejson:
-        return json_to_fcssample(samplejson["__fcssample__"])
+        return json_to_fcssample(samplejson["__fcssample__"], **kwargs)
     elif "__somsample__" in samplejson:
-        return json_to_somsample(samplejson["__somsample__"])
+        return json_to_somsample(samplejson["__somsample__"], **kwargs)
     else:
         raise NotImplementedError("Unknown sample type")
 
@@ -146,7 +149,12 @@ class Sample:
     tube: str
     data: Any = None
     path: utils.URLPath = None
+    dataset_path: utils.URLPath = None
     markers: List[str] = field(default_factory=list)
+
+    @property
+    def complete_path(self):
+        return self.dataset_path / self.path
 
     def has_markers(self, markers: list) -> bool:
         """Return whether given list of markers are fulfilled."""
@@ -174,7 +182,7 @@ class FCSSample(Sample):
         if self.data:
             return self.data
 
-        data = fcs.FCSData(self.path)
+        data = fcs.FCSData(self.complete_path)
         return data
 
     def set_fcs_info(self):
@@ -197,5 +205,5 @@ class SOMSample(Sample):
         if self.data:
             return self.data
 
-        data = som.SOM(self.path, self.markers)
+        data = som.SOM(self.complete_path, self.markers)
         return data
