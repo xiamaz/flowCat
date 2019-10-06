@@ -3,9 +3,6 @@
 /cache
 /output
 
-# TODO: integrate test data into git repo itself
-/tests/data
-
 # python relevant files
 __pycache__
 *.pyc
