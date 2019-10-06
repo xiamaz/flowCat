@@ -22,7 +22,10 @@ def move_dataset(
         data: Current data fcs data.
         output: Destination directory to copy data to.
     """
-    dataset = io_functions.load_case_collection(data, meta)
+    if case_collection:
+        dataset = io_functions.load_case_collection_from_caseinfo(data, meta)
+    else:
+        dataset = io_functions.load_case_collection(data, meta)
     if filters:
         print(f"Filtering dataset using: {filters}")
         dataset = dataset.filter(**filters)
