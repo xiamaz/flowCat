@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Union
 import json
 import re
+import gzip
 import logging
 import pickle
 import shutil
@@ -74,15 +75,26 @@ def as_fc(d):
 
 def load_json(path: URLPath):
     """Load json data from a path as a simple function."""
-    with path.open("r") as jspath:
-        data = json.load(jspath, object_hook=as_fc)
+    if path.suffix == ".gz":
+        jsfile = gzip.open(str(path), "r", compresslevel=1)
+    else:
+        jsfile = path.open("r")
+    data = json.load(jsfile, object_hook=as_fc)
+
+    jsfile.close()
     return data
 
 
 def save_json(data, path: URLPath):
     """Write json data to a file as a simple function."""
-    with path.open("w") as jsfile:
-        json.dump(data, jsfile, cls=FCEncoder)
+    if path.suffix == ".gz":
+        jsfile = gzip.open(str(path), "w", compresslevel=1)
+    else:
+        jsfile = path.open("w")
+
+    json.dump(data, jsfile, cls=FCEncoder)
+
+    jsfile.close()
 
 
 def load_pickle(path: URLPath):
@@ -231,7 +243,7 @@ def save_case_collection_with_data(cases, destination: URLPath):
             shutil.copy(str(case_sample.complete_path), sdest)
             case_sample.dataset_path = sample_destination
 
-    save_case_collection(cases, destination=destination / "meta.json")
+    save_case_collection(cases, destination=destination / "meta.json.gz")
     return cases
 
 
