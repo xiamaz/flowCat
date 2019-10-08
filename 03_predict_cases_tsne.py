@@ -16,48 +16,57 @@ from argmagic import argmagic
 from flowcat import io_functions, utils, som_dataset
 
 
-def load_model(path: utils.URLPath):
-    """Load a classification model and accompanying binarizer."""
-    config = io_functions.load_json(path / "config.json")
-    model = keras.models.load_model(str(path / "model.h5"))
-    binarizer = io_functions.load_joblib(path / "binarizer.joblib")
-    return model, binarizer, config
+class SOMClassifier:
+    def __init__(self, model, binarizer, config, data_ids: dict = None):
+        self.model = model
+        self.config = config
+        self.binarizer = binarizer
+        self.data_ids = data_ids
+
+    @classmethod
+    def load(cls, path: utils.URLPath):
+        """Load classifier model from the given path."""
+        config = io_functions.load_json(path / "config.json")
+        model = keras.models.load_model(str(path / "model.h5"))
+        binarizer = io_functions.load_joblib(path / "binarizer.joblib")
+
+        data_ids = {
+            "validation": io_functions.load_json(path / "ids_validate.json"),
+            "train": io_functions.load_json(path / "ids_train.json"),
+        }
+        return cls(model, binarizer, config, data_ids=data_ids)
+
+    def get_validation_data(self, dataset: som_dataset.SOMDataset) -> som_dataset.SOMDataset:
+        return dataset.filter(labels=self.data_ids["validation"])
+
+    def create_sequence(
+        self,
+        dataset: som_dataset.SOMDataset,
+        batch_size: int = 128
+    ) -> som_dataset.SOMSequence:
+
+        def getter(data, tube):
+            return data.get_tube(tube, kind="som").get_data().data
+
+        seq = som_dataset.SOMSequence(
+            dataset, self.binarizer,
+            get_array_fun=getter,
+            tube=self.config["tubes"],
+            batch_size=batch_size,
+            pad_width=self.config["pad_width"],
+        )
+        return seq
 
 
-def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
-    data, model = map(utils.URLPath, (
-        "output/0-munich-data/som-minmax",
-        "output/simple-classifiers/test-conv-32-9class",
-    ))
-    output = utils.URLPath("output/model-analysis")
-    labels = io_functions.load_json(model / "ids_validate.json")
-    dataset = io_functions.load_case_collection(data, data + ".json")
-    validate = dataset.filter(labels=labels)
-
-    model, binarizer, config = load_model(model)
-
-    def getter(data, tube):
-        return data.get_tube(tube, kind="som").get_data().data
-
-    val_seq = som_dataset.SOMSequence(
-        validate, binarizer,
-        get_array_fun=getter,
-        tube=config["tubes"],
-        batch_size=128,
-        pad_width=config["pad_width"])
-
-    preds = np.array([p for p in model.predict_generator(val_seq)])
-    trues = np.concatenate([s for _, s in val_seq])
-
-    roc_path = output / "roc"
-    roc_path.mkdir()
-
+def create_roc_results(trues, preds, output, model):
+    """Create ROC and AUC metrics and save them to the given directory."""
+    output.mkdir()
     curves = {}
-    for i, group in enumerate(config["groups"]):
+    for i, group in enumerate(model.config["groups"]):
         curves[group] = metrics.roc_curve(trues[:, i], preds[:, i])
 
     auc = {}
-    for i, group in enumerate(config["groups"]):
+    for i, group in enumerate(model.config["groups"]):
         auc[group] = metrics.roc_auc_score(trues[:, i], preds[:, i])
 
     macro_auc = metrics.roc_auc_score(trues, preds, average="macro")
@@ -68,7 +77,7 @@ def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
             "macro": macro_auc,
             "micro": micro_auc,
         },
-        roc_path / "auc.json")
+        output / "auc.json")
 
     fig, ax = plt.subplots()
     for name, curve in curves.items():
@@ -81,27 +90,27 @@ def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
     ax.set_title("ROC one-vs-rest")
 
     fig.tight_layout()
-    fig.savefig(str(roc_path / "roc.png"), dpi=300)
+    fig.savefig(str(output / "roc.png"), dpi=300)
     plt.close()
 
+
+def create_threshold_results(trues, preds, output, model):
+    """Create threshold results from true and predicted."""
     # calculate accuracy for a certain certainty
     # how about w score above 0.95?
-    thres_path = output / "threshold"
-    thres_path.mkdir()
+    output.mkdir()
     threshold_results = []
     for threshold in np.arange(0.25, 1.0, 0.05):
         index_above = np.argwhere(np.any(preds > threshold, axis=1)).squeeze()
         sel_preds = preds[index_above, :]
         sel_trues = trues[index_above, :]
-        pred_labels = binarizer.inverse_transform(sel_preds)
-        true_labels = binarizer.inverse_transform(sel_trues)
-        findex = np.argwhere(pred_labels != true_labels).squeeze()
-        false_indexes = index_above[findex]
+        pred_labels = model.binarizer.inverse_transform(sel_preds)
+        true_labels = model.binarizer.inverse_transform(sel_trues)
         included = len(index_above) / len(preds)
         acc = metrics.accuracy_score(true_labels, pred_labels)
         print(threshold, included, acc)
         threshold_results.append((threshold, included, acc))
-    io_functions.save_json(threshold_results, thres_path / "thresholds.json")
+    io_functions.save_json(threshold_results, output / "thresholds.json")
 
     tarr = np.array(threshold_results)
     fig, ax = plt.subplots()
@@ -110,21 +119,27 @@ def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
     ax.legend()
     ax.set_xlabel("Score threshold")
     ax.set_ylabel("Classification accuracy / Included cases ratio")
-    fig.savefig(str(thres_path / "threshold.png"), dpi=300)
+    fig.savefig(str(output / "threshold.png"), dpi=300)
 
-    origmeta = io_functions.load_json(
-        utils.URLPath(
-            "/data/flowcat-data/mll-flowdata/CLL-9F/case_info_2018-09-13.json"
-        ))
 
-    false_labels = np.array(validate.labels)[false_indexes]
-    for index, label in zip(findex, false_labels):
-        case = validate.get_label(label)
-        print(case, pred_labels[index])
-        print(case.diagnosis)
-        for m in origmeta:
-            if m["id"] == label:
-                print(m["sureness"])
+def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
+    data, model, output = map(utils.URLPath, (
+        "output/som-fix-test/soms-test/som_r4_1",
+        "output/0-final/classifier-minmax",
+        "output/model-analysis"
+    ))
+    dataset = io_functions.load_case_collection(data, data + ".json")
+    dataset.set_data_path(utils.URLPath(""))
+
+    model = SOMClassifier.load(model)
+    validate = model.get_validation_data(dataset)
+    val_seq = model.create_sequence(validate)
+
+    preds = np.array([p for p in model.model.predict_generator(val_seq)])
+    trues = np.concatenate([s for _, s in val_seq])
+
+    create_roc_results(trues, preds, output / "roc", model)
+    create_threshold_results(trues, preds, output / "threshold", model)
 
     # tsne of result vectors
     embedding_path = output / "embedding-preds"
@@ -137,7 +152,7 @@ def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
 
     fig, ax = plt.subplots(figsize=(12, 8))
     all_pred_labels = val_seq.true_labels
-    for group in config["groups"]:
+    for group in model.config["groups"]:
         sel_dots = tsne_preds[np.array([i == group for i in all_pred_labels]), :]
         ax.scatter(sel_dots[:, 0], sel_dots[:, 1], label=group, s=16, marker="o")
     ax.legend()
@@ -149,7 +164,7 @@ def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
 
     # tsne of intermediate layers
     intermediate_model = keras.Model(
-        inputs=model.input, outputs=model.get_layer("concatenate").output)
+        inputs=model.model.input, outputs=model.model.get_layer("concatenate").output)
 
     intermed_preds = np.array([p for p in intermediate_model.predict_generator(val_seq)])
 
@@ -158,7 +173,7 @@ def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
 
     fig, ax = plt.subplots(figsize=(12, 8))
     all_pred_labels = val_seq.true_labels
-    for group in config["groups"]:
+    for group in model.config["groups"]:
         sel_dots = tsne_inter_preds[np.array([i == group for i in all_pred_labels]), :]
         ax.scatter(sel_dots[:, 0], sel_dots[:, 1], label=group, s=16, marker="o")
     ax.legend()
@@ -168,23 +183,16 @@ def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
     fig.savefig(str(embedding_path / "tsne_intermediate_validation_p30.png"), dpi=300)
     plt.close()
 
-
     # unknown data
     udata = utils.URLPath("output/unknown-cohorts-processing/som/som")
     udataset = io_functions.load_case_collection(udata, udata + ".json")
     udataset.set_data_path(utils.URLPath(""))
-    un_seq = som_dataset.SOMSequence(
-        udataset, binarizer,
-        get_array_fun=getter,
-        tube=config["tubes"],
-        batch_size=128,
-        pad_width=config["pad_width"])
-    upreds = np.array([p for p in model.predict_generator(un_seq)])
+    un_seq = model.create_sequence(udataset)
+    upreds = np.array([p for p in model.model.predict_generator(un_seq)])
     intermed_upreds = np.array([p for p in intermediate_model.predict_generator(un_seq)])
 
-    binarizer.inverse_transform(upreds)
-
-    tsne_upreds = manifold.TSNE(perplexity=30).fit_transform(upreds)
+    perplexity = 30
+    tsne_upreds = manifold.TSNE(perplexity=perplexity).fit_transform(upreds)
     fig, ax = plt.subplots(figsize=(12, 8))
     all_pred_labels = un_seq.true_labels
     for group in set(udataset.groups):
@@ -194,11 +202,11 @@ def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
     ax.set_xlabel("Component 1")
     ax.set_ylabel("Component 2")
     ax.set_title(f"TSNE (perplexity={perplexity})")
-    fig.savefig(str(embedding_path / "tsne_unknown_p30.png"), dpi=300)
+    fig.savefig(str(embedding_path / f"tsne_unknown_p{perplexity}.png"), dpi=300)
     plt.close()
 
     allpreds = np.concatenate((preds, upreds))
-    tsne_allpreds = manifold.TSNE(perplexity=30).fit_transform(allpreds)
+    tsne_allpreds = manifold.TSNE(perplexity=perplexity).fit_transform(allpreds)
     fig, ax = plt.subplots(figsize=(12, 8))
     all_pred_labels = val_seq.true_labels + un_seq.true_labels
     groups = set(udataset.groups + dataset.groups)
@@ -210,11 +218,12 @@ def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
     ax.set_xlabel("Component 1")
     ax.set_ylabel("Component 2")
     ax.set_title(f"TSNE (perplexity={perplexity})")
-    fig.savefig(str(embedding_path / "tsne_all_p30.png"), dpi=300)
+    fig.savefig(str(embedding_path / f"tsne_all_p{perplexity}.png"), dpi=300)
     plt.close()
 
+    perplexity = 50
     intermed_allpreds = np.concatenate((intermed_preds, intermed_upreds))
-    tsne_intermed_allpreds = manifold.TSNE(perplexity=30).fit_transform(intermed_allpreds)
+    tsne_intermed_allpreds = manifold.TSNE(perplexity=perplexity).fit_transform(intermed_allpreds)
     fig, ax = plt.subplots(figsize=(12, 8))
     all_pred_labels = val_seq.true_labels + un_seq.true_labels
     groups = set(udataset.groups + dataset.groups)
@@ -226,7 +235,36 @@ def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
     ax.set_xlabel("Component 1")
     ax.set_ylabel("Component 2")
     ax.set_title(f"TSNE (perplexity={perplexity})")
-    fig.savefig(str(embedding_path / "tsne_all_intermed_p30.png"), dpi=300)
+    fig.savefig(str(embedding_path / f"tsne_all_intermed_p{perplexity}.png"), dpi=300)
+    plt.close()
+
+    # create som tsne for known and unknown data
+    all_cases = validate.cases + udataset.cases
+
+    case_data = []
+    for case in all_cases:
+        somdata = np.concatenate([
+            case.get_tube(tube, kind="som").get_data().data
+            for tube in model.config["tubes"]
+        ], axis=2).flatten()
+        case_data.append(somdata)
+    case_data = np.array(case_data)
+
+    perplexity = 50
+    som_tsne = manifold.TSNE(perplexity=perplexity).fit_transform(case_data)
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    all_pred_labels = [c.group for c in all_cases]
+    groups = set(udataset.groups + dataset.groups)
+    colors = sns.cubehelix_palette(len(groups), rot=4, dark=0.30)
+    for i, group in enumerate(groups):
+        sel_dots = som_tsne[np.array([i == group for i in all_pred_labels]), :]
+        ax.scatter(sel_dots[:, 0], sel_dots[:, 1], label=group, s=16, marker="o", c=[colors[i]])
+    ax.legend()
+    ax.set_xlabel("Component 1")
+    ax.set_ylabel("Component 2")
+    ax.set_title(f"TSNE (perplexity={perplexity})")
+    fig.savefig(str(embedding_path / f"tsne_all_som_p{perplexity}.png"), dpi=300)
     plt.close()
 
 
