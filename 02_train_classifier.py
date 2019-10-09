@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 from sklearn import metrics
 from sklearn.preprocessing import LabelBinarizer
-from tensorflow import keras
-from tensorflow.keras import layers, regularizers, models  # pylint: disable=import-error
+import keras
+from keras import layers, regularizers, models  # pylint: disable=import-error
 # from keras import layers, regularizers, models
 from argmagic import argmagic
 
@@ -125,8 +125,8 @@ def generate_all_metrics(true_labels, pred_labels, mapping, output):
 
 def plot_training_history(history, output):
     history_data = {
-        "accuracy": history.history["categorical_accuracy"],
-        "val_accuracy": history.history["val_categorical_accuracy"],
+        "accuracy": history.history["acc"],
+        "val_accuracy": history.history["val_acc"],
         "loss": history.history["loss"],
         "val_loss": history.history["val_loss"],
     }
@@ -244,7 +244,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath, epochs
         optimizer="adam",
         # optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=epsilon),
         metrics=[
-            keras.metrics.CategoricalAccuracy(),
+            "accuracy"
         ]
     )
     with (output / "model_summary.txt").open("w") as summary_file:

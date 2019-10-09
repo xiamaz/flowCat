@@ -20,6 +20,7 @@ dependencies:
   - pip:
     - git+https://github.com/xiamaz/fcsparser.git
     - git+https://github.com/jakob-he/keras-vis.git@multiinput
+    - keras==2.2.5
     - neovim
     - argmagic==0.0.8
     - dataslots

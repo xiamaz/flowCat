@@ -1,7 +1,7 @@
 from typing import Dict
 import numpy as np
-import tensorflow.keras.backend as K
-from tensorflow.keras.losses import CategoricalCrossentropy
+import keras.backend as K
+from keras.losses import categorical_crossentropy
 
 
 def calculate_group_weights(group_count: Dict[str, int]) -> Dict[int, float]:
@@ -26,24 +26,21 @@ def build_cost_matrix(cost_mapping: Dict[tuple, float], groups: list):
     return cost_matrix
 
 
-class WeightedCategoricalCrossentropy(CategoricalCrossentropy):
+class WeightedCategoricalCrossentropy:
     """Source: https://github.com/keras-team/keras/issues/2115#issuecomment-530762739"""
 
     def __init__(self, cost_mat, name='weighted_categorical_crossentropy', **kwargs):
         assert(cost_mat.ndim == 2)
         assert(cost_mat.shape[0] == cost_mat.shape[1])
-
-        super().__init__(name=name, **kwargs)
         self.cost_mat = K.cast_to_floatx(cost_mat)
 
     def __call__(self, y_true, y_pred, sample_weight):
-        # cost_weight = get_sample_weights(y_true, y_pred, self.cost_mat)
+        cost_weight = get_sample_weights(y_true, y_pred, self.cost_mat)
         # cost_weight = K.print_tensor(cost_weight)
-        return super().__call__(
+        return categorical_crossentropy(
             y_true=y_true,
             y_pred=y_pred,
-            # sample_weight=cost_weight,
-        )
+        ) * cost_weight
 
 
 def get_sample_weights(y_true, y_pred, cost_m):
