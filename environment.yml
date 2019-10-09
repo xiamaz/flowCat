@@ -1,4 +1,4 @@
-name: flowcat-old
+name: flowcat
 channels:
   - defaults
 dependencies:
@@ -21,7 +21,7 @@ dependencies:
     - git+https://github.com/xiamaz/fcsparser.git
     - git+https://github.com/jakob-he/keras-vis.git@multiinput
     - neovim
-    - argmagic=0.0.8
+    - argmagic==0.0.8
     - dataslots
 prefix: /usr/local/miniconda3/envs/flowcat
 
