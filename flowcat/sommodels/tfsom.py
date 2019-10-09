@@ -21,7 +21,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # =================================================================================
-from __future__ import annotations
 import logging
 
 import numpy as np
@@ -685,7 +684,7 @@ class TFSom:
             self._sess.run(self._assign_trained_op)
         return self
 
-    def train(self, data, mask, label="learn") -> TFSom:
+    def train(self, data, mask, label="learn") -> "TFSom":
         """Train the network on the data provided by the input tensor.
         Args:
             data_iterable: Iterable object returning single pandas dataframes.

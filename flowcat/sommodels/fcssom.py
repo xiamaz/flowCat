@@ -1,5 +1,4 @@
-from __future__ import annotations
-from typing import Union, Iterable, Generator
+from typing import Union, Iterable
 import logging
 
 import numpy as np
@@ -253,7 +252,7 @@ class FCSSom:
     def transform_generator(
             self,
             data: Iterable[FCSData],
-            sample: int = -1) -> Generator[SOM]:
+            sample: int = -1) -> Iterable[SOM]:
         """Transform multiple samples."""
         for single in data:
             single = single.data

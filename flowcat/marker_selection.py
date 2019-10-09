@@ -1,7 +1,6 @@
 """
 Approaches for selecting valid marker sets from datasets.
 """
-from __future__ import annotations
 from typing import List, Dict
 import logging
 

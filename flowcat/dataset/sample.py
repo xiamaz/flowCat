@@ -5,9 +5,7 @@ calling Sample.get_fcs().
 """
 # pylint: skip-file
 # flake8: noqa
-from __future__ import annotations
-
-from typing import List, Tuple, Union, Any
+from typing import List, Tuple, Union, Any, Dict
 from dataclasses import dataclass, replace, field, asdict
 
 import pandas as pd
@@ -28,13 +26,13 @@ def _all_in(smaller, larger):
 
 
 def filter_samples(
-        samples: List[Sample],
+        samples: List["Sample"],
         tubes: List[int] = None,
         materials: List[str] = None,
         selected_markers: Dict[int, List[str]] = None,
         counts: int = None,
         **_
-) -> List[Sample]:
+) -> List["Sample"]:
     filtered = []
     for sample in samples:
         if tubes and sample.tube not in tubes:
@@ -50,7 +48,7 @@ def filter_samples(
     return filtered
 
 
-def sampleinfo_to_sample(sample_info: dict, case_id: str, dataset_path: utils.URLPath) -> Sample:
+def sampleinfo_to_sample(sample_info: dict, case_id: str, dataset_path: utils.URLPath) -> "Sample":
     """Create a tube sample from sample info dict."""
     assert "fcs" in sample_info and "path" in sample_info["fcs"], "Path to sample_info is missing"
     assert "date" in sample_info, "Date is missing"
@@ -80,7 +78,7 @@ def sampleinfo_to_sample(sample_info: dict, case_id: str, dataset_path: utils.UR
     return sample
 
 
-def sample_to_json(sample: Sample) -> dict:
+def sample_to_json(sample: "Sample") -> dict:
     """Store sample information in json format.
     This does NOT store data in json. Please do that manually and add a
     reference on the path attribute.
@@ -91,7 +89,7 @@ def sample_to_json(sample: Sample) -> dict:
         return {"__somsample__": somsample_to_json(sample)}
 
 
-def fcssample_to_json(sample: FCSSample) -> dict:
+def fcssample_to_json(sample: "FCSSample") -> dict:
     sdict = asdict(sample)
     sdict["date"] = sample.date.isoformat()
     sdict["path"] = str(sample.path)
@@ -104,7 +102,7 @@ def fcssample_to_json(sample: FCSSample) -> dict:
     return sdict
 
 
-def somsample_to_json(sample: SOMSample) -> dict:
+def somsample_to_json(sample: "SOMSample") -> dict:
     sdict = asdict(sample)
     sdict["date"] = sample.date.isoformat()
     sdict["path"] = str(sample.path)
@@ -113,7 +111,7 @@ def somsample_to_json(sample: SOMSample) -> dict:
     return sdict
 
 
-def json_to_sample(samplejson: dict, **kwargs) -> Sample:
+def json_to_sample(samplejson: dict, **kwargs) -> "Sample":
     if "__fcssample__" in samplejson:
         return json_to_fcssample(samplejson["__fcssample__"], **kwargs)
     elif "__somsample__" in samplejson:
@@ -122,7 +120,7 @@ def json_to_sample(samplejson: dict, **kwargs) -> Sample:
         raise NotImplementedError("Unknown sample type")
 
 
-def json_to_fcssample(samplejson: dict) -> FCSSample:
+def json_to_fcssample(samplejson: dict) -> "FCSSample":
     samplejson["date"] = utils.str_to_date(samplejson["date"])
     samplejson["path"] = utils.URLPath(samplejson["path"])
     if samplejson["material"]:
@@ -132,7 +130,7 @@ def json_to_fcssample(samplejson: dict) -> FCSSample:
     return FCSSample(**samplejson)
 
 
-def json_to_somsample(samplejson: dict) -> SOMSample:
+def json_to_somsample(samplejson: dict) -> "SOMSample":
     samplejson["date"] = utils.str_to_date(samplejson["date"])
     samplejson["path"] = utils.URLPath(samplejson["path"])
     samplejson["dims"] = tuple(samplejson["dims"])
@@ -145,7 +143,7 @@ class Sample:
     """Single sample from a certain tube."""
     id: str
     case_id: str
-    date: date
+    date: "date"
     tube: str
     data: Any = None
     path: utils.URLPath = None

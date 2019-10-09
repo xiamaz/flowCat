@@ -5,8 +5,6 @@ from flowcat.utils import URLPath
 from flowcat.dataset import fcs
 from flowcat.preprocessing import edge_removal
 
-from . import shared
-
 
 class EdgeRemovalTestCase(shared.FlowcatTestCase):
     def test_simple(self):

@@ -1,4 +1,3 @@
-from __future__ import annotations
 from dataclasses import dataclass, field
 from dataslots import with_slots
 from typing import List, Tuple, Dict

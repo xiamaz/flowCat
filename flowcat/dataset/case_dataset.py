@@ -1,8 +1,6 @@
 """
 Classes for managing collections of case and tubecase objects.
 """
-from __future__ import annotations
-
 import random
 import logging
 import collections
@@ -27,7 +25,7 @@ class DatasetError(Exception):
     pass
 
 
-def case_collection_to_json(cases: CaseCollection) -> dict:
+def case_collection_to_json(cases: "CaseCollection") -> dict:
     return {
         "cases": cases.cases,
         "selected_markers": cases.selected_markers,
@@ -36,7 +34,7 @@ def case_collection_to_json(cases: CaseCollection) -> dict:
     }
 
 
-def json_to_case_collection(jsonobj: dict) -> CaseCollection:
+def json_to_case_collection(jsonobj: dict) -> "CaseCollection":
     cases = CaseCollection(
         jsonobj["cases"],
         selected_markers=jsonobj["selected_markers"],
@@ -152,7 +150,7 @@ class CaseCollection:
             case.group = mapping.get(case.group, case.group)
         return self
 
-    def sample(self, count: int, groups: List[str] = None) -> CaseCollection:
+    def sample(self, count: int, groups: List[str] = None) -> "CaseCollection":
         """Select a sample from each group.
         Params:
             count: Number of cases in a single group.
@@ -173,7 +171,7 @@ class CaseCollection:
         filtered, _ = self.filter_reasons(labels=labels)
         return filtered
 
-    def filter_reasons(self, **kwargs) -> Tuple[CaseCollection, list]:
+    def filter_reasons(self, **kwargs) -> Tuple["CaseCollection", list]:
         """Filter dataset on given arguments. These are specified in
         case.filter_case.
 
@@ -194,7 +192,7 @@ class CaseCollection:
         filtered.add_filter_step(kwargs)
         return filtered, failed
 
-    def filter(self, **kwargs) -> CaseCollection:
+    def filter(self, **kwargs) -> "CaseCollection":
         filtered, _ = self.filter_reasons(**kwargs)
         return filtered
 
@@ -236,7 +234,7 @@ class CaseCollection:
         """Balance classes to count given."""
         return self.balance_per_group({g: num for g in set(self.groups)})
 
-    def balance_per_group(self, nums: dict) -> CaseCollection:
+    def balance_per_group(self, nums: dict) -> "CaseCollection":
         """Randomly upsample groups based on numbers in dictionary. If a group
         is missing from dict, all cases in that group will be included."""
         case_groups = collections.defaultdict(list)

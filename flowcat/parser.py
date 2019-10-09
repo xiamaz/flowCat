@@ -3,8 +3,6 @@
 """
 CLI Interface components.
 """
-from __future__ import annotations
-
 from flowcat import io_functions, utils, dataset
 
 
