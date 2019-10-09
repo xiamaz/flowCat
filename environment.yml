@@ -1,4 +1,4 @@
-name: flowcat
+name: flowcat-old
 channels:
   - defaults
 dependencies:
@@ -11,17 +11,17 @@ dependencies:
   - pydot
   - pyflakes
   - pylint
-  - python=3.7
+  - python=3.6
   - scikit-learn
   - scipy
   - seaborn
-  - tensorflow=1.14
-  - tensorflow-gpu=1.14
+  - tensorflow=1.12
+  - tensorflow-gpu=1.12
   - pip:
     - git+https://github.com/xiamaz/fcsparser.git
     - git+https://github.com/jakob-he/keras-vis.git@multiinput
     - neovim
-    - argmagic
+    - argmagic=0.0.8
     - dataslots
 prefix: /usr/local/miniconda3/envs/flowcat
 
