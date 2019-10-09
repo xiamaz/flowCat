@@ -87,7 +87,7 @@ def load_json(path: URLPath):
 def save_json(data, path: URLPath):
     """Write json data to a file as a simple function."""
     if path.suffix == ".gz":
-        jsfile = gzip.open(str(path), "w", compresslevel=1)
+        jsfile = gzip.open(str(path), "wt", compresslevel=1)
     else:
         jsfile = path.open("w")
 

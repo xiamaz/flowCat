@@ -221,8 +221,8 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
     cases = io_functions.load_case_collection_from_caseinfo(data, meta)
     train, test = preprocess_cases(cases)
     reference = filter_reference(train)
-    io_functions.save_case_collection(train, output / "train.json")
-    io_functions.save_case_collection(test, output / "test.json")
+    io_functions.save_case_collection(train, output / "train.json.gz")
+    io_functions.save_case_collection(test, output / "test.json.gz")
     io_functions.save_json(reference.labels, output / "references.json")
 
 
