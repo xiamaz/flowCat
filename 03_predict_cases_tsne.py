@@ -10,7 +10,7 @@ import seaborn as sns
 sns.set()
 sns.set_style("white")
 from sklearn import metrics
-from tensorflow import keras
+import keras
 from argmagic import argmagic
 
 from flowcat import io_functions, utils, som_dataset
@@ -122,11 +122,25 @@ def create_threshold_results(trues, preds, output, model):
     fig.savefig(str(output / "threshold.png"), dpi=300)
 
 
+def plot_embedded(transformed, true_labels, groups, colors, title=""):
+    fig, ax = plt.subplots(figsize=(12, 12))
+    for i, group in enumerate(groups):
+        sel_dots = transformed[np.array([i == group for i in true_labels]), :]
+        ax.scatter(sel_dots[:, 0], sel_dots[:, 1], label=group, s=16, marker="o", c=[colors[i]])
+    ax.legend()
+    ax.set_xlabel("Component 1")
+    ax.set_ylabel("Component 2")
+    if title:
+        ax.set_title(title)
+    fig.tight_layout()
+    return fig
+
+
 def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
     data, model, output = map(utils.URLPath, (
         "output/som-fix-test/soms-test/som_r4_1",
-        "output/0-final/classifier-minmax",
-        "output/model-analysis"
+        "output/0-final/classifier-minmax-new",
+        "output/0-final/model-analysis"
     ))
     dataset = io_functions.load_case_collection(data, data + ".json")
     dataset.set_data_path(utils.URLPath(""))
@@ -135,8 +149,8 @@ def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
     validate = model.get_validation_data(dataset)
     val_seq = model.create_sequence(validate)
 
+    trues = np.concatenate([val_seq[i][1] for i in range(len(val_seq))])
     preds = np.array([p for p in model.model.predict_generator(val_seq)])
-    trues = np.concatenate([s for _, s in val_seq])
 
     create_roc_results(trues, preds, output / "roc", model)
     create_threshold_results(trues, preds, output / "threshold", model)
@@ -145,98 +159,39 @@ def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
     embedding_path = output / "embedding-preds"
     embedding_path.mkdir()
 
-    from sklearn import manifold
-    perplexity = 50
-    tsne_pred_model = manifold.TSNE(perplexity=perplexity)
-    tsne_preds = tsne_pred_model.fit_transform(preds)
+    pred_labels = val_seq.true_labels
+    groups = model.config["groups"]
+    groups.remove("normal")
+    groups = ["normal", *groups]
+    all_groups = groups + ["AML", "MM", "HCLv"]
+    colors = sns.cubehelix_palette(len(all_groups), rot=4, dark=0.30)
 
-    fig, ax = plt.subplots(figsize=(12, 8))
-    all_pred_labels = val_seq.true_labels
-    for group in model.config["groups"]:
-        sel_dots = tsne_preds[np.array([i == group for i in all_pred_labels]), :]
-        ax.scatter(sel_dots[:, 0], sel_dots[:, 1], label=group, s=16, marker="o")
-    ax.legend()
-    ax.set_xlabel("Component 1")
-    ax.set_ylabel("Component 2")
-    ax.set_title(f"TSNE (perplexity={perplexity})")
-    fig.savefig(str(embedding_path / "tsne_validation_p50.png"), dpi=300)
-    plt.close()
+    from sklearn import manifold
+    from umap import UMAP
+    perplexity = 50
 
     # tsne of intermediate layers
     intermediate_model = keras.Model(
-        inputs=model.model.input, outputs=model.model.get_layer("concatenate").output)
-
+        inputs=model.model.input, outputs=model.model.get_layer("concatenate_1").output)
     intermed_preds = np.array([p for p in intermediate_model.predict_generator(val_seq)])
-
-    perplexity = 30
-    tsne_inter_preds = manifold.TSNE(perplexity=perplexity).fit_transform(intermed_preds)
-
-    fig, ax = plt.subplots(figsize=(12, 8))
-    all_pred_labels = val_seq.true_labels
-    for group in model.config["groups"]:
-        sel_dots = tsne_inter_preds[np.array([i == group for i in all_pred_labels]), :]
-        ax.scatter(sel_dots[:, 0], sel_dots[:, 1], label=group, s=16, marker="o")
-    ax.legend()
-    ax.set_xlabel("Component 1")
-    ax.set_ylabel("Component 2")
-    ax.set_title(f"TSNE (perplexity={perplexity})")
-    fig.savefig(str(embedding_path / "tsne_intermediate_validation_p30.png"), dpi=300)
-    plt.close()
 
     # unknown data
     udata = utils.URLPath("output/unknown-cohorts-processing/som/som")
     udataset = io_functions.load_case_collection(udata, udata + ".json")
     udataset.set_data_path(utils.URLPath(""))
     un_seq = model.create_sequence(udataset)
-    upreds = np.array([p for p in model.model.predict_generator(un_seq)])
     intermed_upreds = np.array([p for p in intermediate_model.predict_generator(un_seq)])
 
-    perplexity = 30
-    tsne_upreds = manifold.TSNE(perplexity=perplexity).fit_transform(upreds)
-    fig, ax = plt.subplots(figsize=(12, 8))
-    all_pred_labels = un_seq.true_labels
-    for group in set(udataset.groups):
-        sel_dots = tsne_upreds[np.array([i == group for i in all_pred_labels]), :]
-        ax.scatter(sel_dots[:, 0], sel_dots[:, 1], label=group, s=16, marker="o")
-    ax.legend()
-    ax.set_xlabel("Component 1")
-    ax.set_ylabel("Component 2")
-    ax.set_title(f"TSNE (perplexity={perplexity})")
-    fig.savefig(str(embedding_path / f"tsne_unknown_p{perplexity}.png"), dpi=300)
-    plt.close()
+    all_intermed = np.concatenate((intermed_preds, intermed_upreds))
+    all_labels = pred_labels + un_seq.true_labels
 
-    allpreds = np.concatenate((preds, upreds))
-    tsne_allpreds = manifold.TSNE(perplexity=perplexity).fit_transform(allpreds)
-    fig, ax = plt.subplots(figsize=(12, 8))
-    all_pred_labels = val_seq.true_labels + un_seq.true_labels
-    groups = set(udataset.groups + dataset.groups)
-    colors = sns.cubehelix_palette(len(groups), rot=4, dark=0.30)
-    for i, group in enumerate(groups):
-        sel_dots = tsne_allpreds[np.array([i == group for i in all_pred_labels]), :]
-        ax.scatter(sel_dots[:, 0], sel_dots[:, 1], label=group, s=16, marker="o", c=[colors[i]])
-    ax.legend()
-    ax.set_xlabel("Component 1")
-    ax.set_ylabel("Component 2")
-    ax.set_title(f"TSNE (perplexity={perplexity})")
-    fig.savefig(str(embedding_path / f"tsne_all_p{perplexity}.png"), dpi=300)
-    plt.close()
+    umap_inter_all = UMAP(n_neighbors=30).fit_transform(all_intermed)
+    plot_embedded(umap_inter_all, all_labels, all_groups, colors=colors).savefig(
+        str(embedding_path / f"umap_intermediate_all.png"), dpi=300)
 
-    perplexity = 50
-    intermed_allpreds = np.concatenate((intermed_preds, intermed_upreds))
-    tsne_intermed_allpreds = manifold.TSNE(perplexity=perplexity).fit_transform(intermed_allpreds)
-    fig, ax = plt.subplots(figsize=(12, 8))
-    all_pred_labels = val_seq.true_labels + un_seq.true_labels
-    groups = set(udataset.groups + dataset.groups)
-    colors = sns.cubehelix_palette(len(groups), rot=4, dark=0.30)
-    for i, group in enumerate(groups):
-        sel_dots = tsne_intermed_allpreds[np.array([i == group for i in all_pred_labels]), :]
-        ax.scatter(sel_dots[:, 0], sel_dots[:, 1], label=group, s=16, marker="o", c=[colors[i]])
-    ax.legend()
-    ax.set_xlabel("Component 1")
-    ax.set_ylabel("Component 2")
-    ax.set_title(f"TSNE (perplexity={perplexity})")
-    fig.savefig(str(embedding_path / f"tsne_all_intermed_p{perplexity}.png"), dpi=300)
-    plt.close()
+    tsne_inter_all = manifold.TSNE(perplexity=perplexity).fit_transform(all_intermed)
+    plot_embedded(tsne_inter_all, all_labels, all_groups, colors=colors).savefig(
+        str(embedding_path / f"tsne_intermediate_all_p{perplexity}.png"), dpi=300)
 
     # create som tsne for known and unknown data
     all_cases = validate.cases + udataset.cases
@@ -251,21 +206,13 @@ def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
     case_data = np.array(case_data)
 
     perplexity = 50
-    som_tsne = manifold.TSNE(perplexity=perplexity).fit_transform(case_data)
+    umap_som_all = UMAP(n_neighbors=30).fit_transform(case_data)
+    plot_embedded(umap_som_all, all_labels, all_groups, colors=colors).savefig(
+        str(embedding_path / f"umap_som_all.png"), dpi=300)
 
-    fig, ax = plt.subplots(figsize=(12, 8))
-    all_pred_labels = [c.group for c in all_cases]
-    groups = set(udataset.groups + dataset.groups)
-    colors = sns.cubehelix_palette(len(groups), rot=4, dark=0.30)
-    for i, group in enumerate(groups):
-        sel_dots = som_tsne[np.array([i == group for i in all_pred_labels]), :]
-        ax.scatter(sel_dots[:, 0], sel_dots[:, 1], label=group, s=16, marker="o", c=[colors[i]])
-    ax.legend()
-    ax.set_xlabel("Component 1")
-    ax.set_ylabel("Component 2")
-    ax.set_title(f"TSNE (perplexity={perplexity})")
-    fig.savefig(str(embedding_path / f"tsne_all_som_p{perplexity}.png"), dpi=300)
-    plt.close()
+    tsne_som_all = manifold.TSNE(perplexity=perplexity).fit_transform(case_data)
+    plot_embedded(tsne_som_all, all_labels, all_groups, colors=colors).savefig(
+        str(embedding_path / f"tsne_som_all_p{perplexity}.png"), dpi=300)
 
 
 if __name__ == "__main__":

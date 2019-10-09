@@ -1,6 +1,7 @@
 name: flowcat
 channels:
   - defaults
+  - conda-forge
 dependencies:
   - flake8
   - jedi
@@ -15,6 +16,7 @@ dependencies:
   - scikit-learn
   - scipy
   - seaborn
+  - umap-learn=0.3.10
   - tensorflow=1.12
   - tensorflow-gpu=1.12
   - pip:
