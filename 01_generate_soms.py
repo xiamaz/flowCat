@@ -127,10 +127,16 @@ def main(
     dataset = io_functions.load_case_collection(data, meta)
 
     if reference is None:
-        reference = train_model(dataset, modelargs=modelargs)
+        reference_ids = io_functions.load_json(reference_ids)
+        reference_dataset = dataset.filter(labels=reference_ids)
+        print("Training reference SOM on", reference_dataset)
+        reference = train_model(reference_dataset, modelargs=modelargs)
         reference_output = output / "reference"
         io_functions.save_casesom(reference, reference_output)
         reference = reference_output
+
+    if mode == "fit":
+        return
 
     if transargs is None:
         transargs = {
@@ -151,4 +157,10 @@ def main(
 
 
 if __name__ == "__main__":
+    handlers = [
+        utils.create_handler(logging.StreamHandler(), level=logging.INFO)
+    ]
+
+    utils.add_logger("flowcat", handlers, level=logging.DEBUG)
+    utils.add_logger(LOGGER, handlers, level=logging.DEBUG)
     argmagic(main)

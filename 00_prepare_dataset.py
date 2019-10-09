@@ -155,6 +155,9 @@ def preprocess_cases(cases: CaseCollection, tubes=("1", "2", "3")):
         print_diff(cases, deduplicated)
         cases = deduplicated
 
+    with block("Select only specific groups"):
+        cases = cases.filter(groups=mappings.GROUPS)
+
     with block("Filter cases on selected markers"):
         selected_cases = get_selected_markers(cases, tubes)
         print_diff(cases, selected_cases)
