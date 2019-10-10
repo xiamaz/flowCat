@@ -13,6 +13,9 @@ from sklearn import metrics
 import keras
 from argmagic import argmagic
 
+from sklearn import manifold
+from umap import UMAP
+
 from flowcat import io_functions, utils, som_dataset
 
 
@@ -123,11 +126,11 @@ def create_threshold_results(trues, preds, output, model):
 
 
 def plot_embedded(transformed, true_labels, groups, colors, title=""):
-    fig, ax = plt.subplots(figsize=(12, 12))
+    fig, ax = plt.subplots(figsize=(6, 6))
     for i, group in enumerate(groups):
         sel_dots = transformed[np.array([i == group for i in true_labels]), :]
         ax.scatter(sel_dots[:, 0], sel_dots[:, 1], label=group, s=16, marker="o", c=[colors[i]])
-    ax.legend()
+    # ax.legend()
     ax.set_xlabel("Component 1")
     ax.set_ylabel("Component 2")
     if title:
@@ -137,11 +140,11 @@ def plot_embedded(transformed, true_labels, groups, colors, title=""):
 
 
 def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
-    data, model, output = map(utils.URLPath, (
-        "output/som-fix-test/soms-test/som_r4_1",
-        "output/0-final/classifier-minmax-new",
-        "output/0-final/model-analysis"
-    ))
+    # data, model, output = map(utils.URLPath, (
+    #     "output/som-fix-test/soms-test/som_r4_1",
+    #     "output/0-final/classifier-minmax-new",
+    #     "output/0-final/model-analysis"
+    # ))
     dataset = io_functions.load_case_collection(data, data + ".json")
     dataset.set_data_path(utils.URLPath(""))
 
@@ -165,9 +168,6 @@ def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
     groups = ["normal", *groups]
     all_groups = groups + ["AML", "MM", "HCLv"]
     colors = sns.cubehelix_palette(len(all_groups), rot=4, dark=0.30)
-
-    from sklearn import manifold
-    from umap import UMAP
     perplexity = 50
 
     # tsne of intermediate layers
@@ -213,6 +213,15 @@ def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
     tsne_som_all = manifold.TSNE(perplexity=perplexity).fit_transform(case_data)
     plot_embedded(tsne_som_all, all_labels, all_groups, colors=colors).savefig(
         str(embedding_path / f"tsne_som_all_p{perplexity}.png"), dpi=300)
+
+    # plot legend
+    fig = plt.figure()
+    patches = [
+        mpl.patches.Patch(color=color, label=group)
+        for group, color in zip(all_groups, colors)
+    ]
+    fig.legend(patches, all_groups, loc='center', frameon=False)
+    fig.savefig(str(embedding_path / "legend.png"), dpi=300)
 
 
 if __name__ == "__main__":
