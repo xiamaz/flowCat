@@ -1,7 +1,6 @@
 """
 Basic FCS data types in order to include more metadata.
 """
-from __future__ import annotations
 from typing import Union, List
 import functools
 import logging
@@ -12,7 +11,7 @@ import numpy as np
 from fcsparser.api import FCSParser
 import fcsparser
 
-from flowcat.utils import URLPath, outer_interval
+from flowcat.utils import URLPath
 from flowcat.mappings import MARKER_NAME_MAP
 
 
@@ -58,7 +57,7 @@ def create_meta_from_fcs(meta: dict, channels: list) -> dict:
     return channel_metas
 
 
-def join_fcs_data(fcs_data: List[FCSData], channels=None) -> FCSData:
+def join_fcs_data(fcs_data: List["FCSData"], channels=None) -> "FCSData":
     """Join the given fcs files.
 
     Args:
@@ -96,7 +95,7 @@ class FCSData:
 
     def __init__(
             self,
-            initdata: Union[URLPath, FCSData, tuple],
+            initdata: Union[URLPath, "FCSData", tuple],
             meta: dict = None,
             channels: list = None,):
         """Create a new FCS object.
@@ -160,12 +159,12 @@ class FCSData:
         self.channels = [mapping.get(name, name) for name in self.channels]
         self.meta = {mapping.get(name, name): data for name, data in self.meta.items()}
 
-    def marker_to_name_only(self) -> FCSData:
+    def marker_to_name_only(self) -> "FCSData":
         mapping = {c: extract_name(c) for c in self.channels}
         self.rename(mapping)
         return self
 
-    def reorder_channels(self, channels: List[str]) -> FCSData:
+    def reorder_channels(self, channels: List[str]) -> "FCSData":
         """Reorder columns based on list of channels given."""
         if any(map(lambda c: c not in self.channels, channels)):
             raise ValueError("Some given channels not contained in data.")
@@ -174,7 +173,7 @@ class FCSData:
         self.mask = self.mask[:, index]
         self.channels = channels
 
-    def add_missing_channels(self, channels: List[str]) -> FCSData:
+    def add_missing_channels(self, channels: List[str]) -> "FCSData":
         """Add missing columns in the given channel list to the dataframe and
         set them to the missing value."""
         if any(map(lambda c: c in self.channels, channels)):
@@ -200,7 +199,7 @@ class FCSData:
             channels: List[str],
             missing_val=np.nan,
             name_only: bool = False,
-            inplace: bool = False) -> FCSData:
+            inplace: bool = False) -> "FCSData":
         """Return aligned copy of FCS data.
 
         Args:
@@ -230,17 +229,17 @@ class FCSData:
         copy.reorder_channels(channels)
         return copy
 
-    def copy(self) -> FCSData:
+    def copy(self) -> "FCSData":
         return self.__class__(self)
 
-    def drop_empty(self) -> FCSData:
+    def drop_empty(self) -> "FCSData":
         """Drop all channels containing nix in the channel name.
         """
         nix_cols = [c for c in self.channels if "nix" in c]
         self.drop_channels(nix_cols)
         return self
 
-    def drop_channels(self, channels) -> FCSData:
+    def drop_channels(self, channels) -> "FCSData":
         """Drop the given columns from the data.
         Args:
             channels: List of channels or channel name to drop. Will not throw an error if the name is not found.

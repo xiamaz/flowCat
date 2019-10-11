@@ -6,9 +6,6 @@ from numpy.testing import assert_array_equal, assert_allclose
 
 from flowcat.sommodels import tfsom
 
-from .shared import TESTPATH
-
-
 SEED = 42
 
 
@@ -31,21 +28,11 @@ class TFSomTestCase(unittest.TestCase):
         model.train(data, mask)
 
         expected = np.array([
-            79, 64, 92, 95, 39, 41, 39, 86, 35,
-            7, 70, 55, 50, 88, 60, 10, 90,
-            18, 15, 86, 51, 63, 96, 37, 75, 87,
-            79, 98, 20, 90, 23, 6, 74, 88,
-            70, 53, 29, 39, 93, 5, 85, 83,
-            53, 4, 38, 78, 45, 5, 78, 33, 90,
-            11, 64, 51, 1, 13, 17, 30, 48, 68,
-            97, 48, 59, 45, 91, 58, 87, 6, 12,
-            73, 67, 15, 59, 59, 31, 3, 70, 8, 69,
-            71, 16, 9, 57, 77, 59, 30, 40, 6, 14,
-            68, 2, 56, 64, 11, 37, 20, 98, 64, 40, 74
+            51, 93, 90, 70, 63, 38, 62, 60, 26, 32
         ])
 
-        newdata = np.random.rand(100, 4)
-        newmask = np.ones((100, 4))
+        newdata = np.random.rand(10, 4)
+        newmask = np.ones((10, 4))
         mapped, = model.run_till_op("BMU_Indices/map_to_node_index", newdata, newmask, 0)
         assert_array_equal(mapped, expected)
 

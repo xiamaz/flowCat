@@ -6,8 +6,6 @@ from numpy.testing import assert_array_almost_equal
 from flowcat.dataset import fcs
 from flowcat.preprocessing import scalers
 
-from .shared import TESTPATH
-
 
 class MinMaxScalerTest(unittest.TestCase):
 

@@ -3,25 +3,32 @@ import unittest
 
 import numpy as np
 from numpy.testing import assert_array_equal
-import fcsparser
 
 from flowcat.dataset import fcs
 
-from . import shared
+
+def create_fcs(data, columns, meta=None) -> fcs.FCSData:
+    """Create fcs data from literal information."""
+    if meta:
+        meta = create_fcs_meta(meta)
+    return fcs.FCSData(data, columns=columns, meta=meta)
+
+
+def create_fcs_meta(meta_dict: dict) -> dict:
+    """Create dict of namedtuples."""
+    return {
+        name: fcs.ChannelMeta(
+            pd.Interval(*interval),
+            exists
+        )
+        for name, (interval, exists) in meta_dict.items()
+    }
 
 
 class TestFCS(unittest.TestCase):
 
     def test_simple(self):
         """Test simple creation of FCS data objects."""
-        with self.subTest("from path"):
-            fcs.FCSData(shared.DATAPATH / "fcs/cll1_1.lmd")
-
-        with self.subTest("from another object"):
-            first = fcs.FCSData(shared.DATAPATH / "fcs/cll1_1.lmd")
-            second = fcs.FCSData(first)
-            assert_array_equal(first.data, second.data)
-
         with self.subTest("from np array"):
             data = np.random.rand(10, 4)
             mask = np.ones((10, 4))
@@ -141,28 +148,31 @@ class TestFCS(unittest.TestCase):
 
     def test_join(self):
         with self.subTest("diff_same_channels"):
-            first = fcs.FCSData(shared.DATAPATH / "fcs/cll1_1.lmd")
-            second = fcs.FCSData(shared.DATAPATH / "fcs/cll2_1.lmd")
+            data = np.random.rand(10, 4)
+            mask = np.ones((10, 4))
+            channels = ["a", "b", "c", "d"]
+            first = fcs.FCSData((data, mask), channels=channels)
+            data = np.random.rand(10, 4)
+            mask = np.ones((10, 4))
+            channels = ["a", "b", "c", "d"]
+            second = fcs.FCSData((data, mask), channels=channels)
             joined = fcs.join_fcs_data([first, second])
-            self.assertEqual(joined.shape, (100000, 12))
+            self.assertEqual(joined.shape, (20, 4))
             self.assertEqual(set(joined.channels), {
-                'FMC7-FITC',
-                'CD23-APC',
-                'FS INT LIN',
-                'CD10-PE',
-                'CD5-PacBlue',
-                'SS INT LIN',
-                'CD20-PC7',
-                'CD45-KrOr',
-                'CD79b-PC5.5',
-                'nix-APCA700',
-                'CD19-APCA750',
-                'IgM-ECD'
+                "a", "b", "c", "d"
             })
 
-        with self.subTest("same_case"):
-            first = fcs.FCSData(shared.DATAPATH / "fcs/cll1_1.lmd")
-            second = fcs.FCSData(shared.DATAPATH / "fcs/cll1_2.lmd")
+        with self.subTest("diff channels"):
+            data = np.random.rand(10, 4)
+            mask = np.ones((10, 4))
+            channels = ["a", "b", "c", "d"]
+            first = fcs.FCSData((data, mask), channels=channels)
+            data = np.random.rand(10, 4)
+            mask = np.ones((10, 4))
+            channels = ["e", "f", "c", "d"]
+            second = fcs.FCSData((data, mask), channels=channels)
             joined = fcs.join_fcs_data([first, second])
-            self.assertEqual(joined.shape, (100000, 19))
-            self.assertEqual(max(np.sum(joined.mask, axis=0)), 100000)
+            self.assertEqual(joined.shape, (20, 6))
+            self.assertEqual(set(joined.channels), {
+                "a", "b", "c", "d", "e", "f",
+            })

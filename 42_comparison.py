@@ -87,10 +87,10 @@ def load_fcs_data(case, tubes):
         fcs_meta = fcs_data.meta
         columns = fcs_data.channels
 
-        for channel in columns:
-            ch_meta = fcs_meta[channel]
-            if ch_meta.pne == (0.0, 0.0) and ch_meta.png != 1.0:
-                fcs_df[channel] *= ch_meta.png
+        # for i, channel in enumerate(columns):
+        #     ch_meta = fcs_meta[channel]
+        #     if ch_meta.pne == (0.0, 0.0) and ch_meta.png != 1.0:
+        #         fcs_array[i] *= ch_meta.png
 
         fcs_df = StandardScaler().fit_transform(fcs_df)
         fcs[tube] = pd.DataFrame(fcs_df, columns=columns)
@@ -157,16 +157,8 @@ cases = io_functions.load_case_collection(
 # flowcat_path = utils.URLPath("output/4-flowsom-cmp/flowcat-denovo")
 # flowcat_ref_path = flowcat.utils.URLPath("output/4-flowsom-cmp/flowcat-refsom")
 
-output = utils.URLPath("output/4-flowsom-cmp/figures")
+output = utils.URLPath("output/4-flowsom-cmp/figures-refit")
 tubes = ("1", "2", "3")
-
-flowsom_sample_path = utils.URLPath("output/4-flowsom-cmp/flowsom-10")
-flowcat_sample_path = utils.URLPath("output/4-flowsom-cmp/flowcat-10")
-paths = {
-    "fcs": None,
-    "flowsom": flowsom_sample_path,
-    "flowcat": flowcat_sample_path,
-}
 groups = set(cases.groups)
 
 from collections import defaultdict
@@ -187,12 +179,14 @@ def merge_case_data(case_datas):
 
 
 flowsom_sample_path = utils.URLPath("output/4-flowsom-cmp/flowsom-10")
-flowcat_sample_path = utils.URLPath("output/4-flowsom-cmp/flowcat-10")
+flowcat_sample_path = utils.URLPath("output/4-flowsom-cmp/flowcat-refit-s10")
 paths = {
     "fcs": None,
     "flowsom": flowsom_sample_path,
     "flowcat": flowcat_sample_path,
 }
+
+groups = ["HCL"]
 
 for group in groups:
     case_datas = []

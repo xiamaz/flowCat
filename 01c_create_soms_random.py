@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Create SOM maps to be used as references and individual maps to be used for
-visualization and classification.
+Create SOMs that are always reinitialized from random initial values.
 """
 import argparse
 import logging
@@ -11,6 +10,7 @@ import pandas as pd
 
 from flowcat import utils, io_functions, parser
 from flowcat.dataset import sample, case_dataset
+from flowcat.sommodels import casesom
 
 
 LOGGER = logging.getLogger(__name__)
@@ -72,23 +72,35 @@ def main(args):
     cases."""
     cases = io_functions.load_case_collection(args.data, args.meta)
     # cases = cases.sample(1, groups=["CLL", "normal"])
+    selected_markers = cases.selected_markers
+    marker_name_only = False
 
     if args.tensorboard:
         tensorboard_dir = args.output / "tensorboard"
     else:
         tensorboard_dir = None
 
+    # scaler = "RefitMinMaxScaler"
+    scaler = args.scaler
     # Training parameters for the model can be respecified, the only difference
     # between transform and normal traninig, is that after a transformation is
     # completed, the original weights will be restored to the model.
-    model = io_functions.load_casesom(
-        args.model,
-        # marker_images=flowcat.sommodels.fcssom.MARKER_IMAGES_NAME_ONLY,
-        max_epochs=4,
-        batch_size=50000,
-        initial_radius=4,
-        end_radius=1,
-        tensorboard_dir=tensorboard_dir)
+    model = casesom.CaseSom(
+        tubes=selected_markers,
+        tensorboard_dir=tensorboard_dir,
+        modelargs={
+            "marker_name_only": marker_name_only,
+            "max_epochs": 5,
+            "batch_size": 50000,
+            "initial_radius": int(args.size / 2),
+            "end_radius": 1,
+            "radius_cooling": "linear",
+            # "marker_images": sommodels.fcssom.MARKER_IMAGES_NAME_ONLY,
+            "map_type": "toroid",
+            "dims": (args.size, args.size, -1),
+            "scaler": scaler,
+        }
+    )
 
     transform_cases(cases, model, args.output)
 
@@ -101,8 +113,12 @@ if __name__ == "__main__":
         help="Flag to enable tensorboard logging",
         action="store_true")
     PARSER.add_argument(
-        "model",
-        type=utils.URLPath)
+        "--size",
+        default=32,
+        type=int)
+    PARSER.add_argument(
+        "--scaler",
+        default="MinMaxScaler")
     PARSER.add_argument(
         "output",
         type=utils.URLPath)

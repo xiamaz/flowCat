@@ -5,9 +5,7 @@ calling Sample.get_fcs().
 """
 # pylint: skip-file
 # flake8: noqa
-from __future__ import annotations
-
-from typing import List, Tuple, Union, Any
+from typing import List, Tuple, Union, Any, Dict
 from dataclasses import dataclass, replace, field, asdict
 
 import pandas as pd
@@ -28,13 +26,13 @@ def _all_in(smaller, larger):
 
 
 def filter_samples(
-        samples: List[Sample],
+        samples: List["Sample"],
         tubes: List[int] = None,
         materials: List[str] = None,
         selected_markers: Dict[int, List[str]] = None,
         counts: int = None,
         **_
-) -> List[Sample]:
+) -> List["Sample"]:
     filtered = []
     for sample in samples:
         if tubes and sample.tube not in tubes:
@@ -50,11 +48,11 @@ def filter_samples(
     return filtered
 
 
-def sampleinfo_to_sample(sample_info: dict, case_id: str, path: utils.URLPath) -> Sample:
+def sampleinfo_to_sample(sample_info: dict, case_id: str, dataset_path: utils.URLPath) -> "Sample":
     """Create a tube sample from sample info dict."""
     assert "fcs" in sample_info and "path" in sample_info["fcs"], "Path to sample_info is missing"
     assert "date" in sample_info, "Date is missing"
-    path = path / utils.URLPath(sample_info["fcs"]["path"])
+    path = utils.URLPath(sample_info["fcs"]["path"])
     date = utils.str_to_date(sample_info["date"])
 
     tube = str(sample_info.get("tube", "0"))
@@ -70,6 +68,7 @@ def sampleinfo_to_sample(sample_info: dict, case_id: str, path: utils.URLPath) -
         id=sample_id,
         case_id=case_id,
         path=path,
+        dataset_path=dataset_path,
         date=date,
         tube=tube,
         material=material,
@@ -79,7 +78,7 @@ def sampleinfo_to_sample(sample_info: dict, case_id: str, path: utils.URLPath) -
     return sample
 
 
-def sample_to_json(sample: Sample) -> dict:
+def sample_to_json(sample: "Sample") -> dict:
     """Store sample information in json format.
     This does NOT store data in json. Please do that manually and add a
     reference on the path attribute.
@@ -90,10 +89,11 @@ def sample_to_json(sample: Sample) -> dict:
         return {"__somsample__": somsample_to_json(sample)}
 
 
-def fcssample_to_json(sample: FCSSample) -> dict:
+def fcssample_to_json(sample: "FCSSample") -> dict:
     sdict = asdict(sample)
     sdict["date"] = sample.date.isoformat()
     sdict["path"] = str(sample.path)
+    del sdict["dataset_path"]
     del sdict["data"]  # never store data in json
     if sample.material:
         sdict["material"] = sample.material.name
@@ -102,24 +102,25 @@ def fcssample_to_json(sample: FCSSample) -> dict:
     return sdict
 
 
-def somsample_to_json(sample: SOMSample) -> dict:
+def somsample_to_json(sample: "SOMSample") -> dict:
     sdict = asdict(sample)
     sdict["date"] = sample.date.isoformat()
     sdict["path"] = str(sample.path)
+    del sdict["dataset_path"]
     del sdict["data"]  # never store data in json
     return sdict
 
 
-def json_to_sample(samplejson: dict) -> Sample:
+def json_to_sample(samplejson: dict, **kwargs) -> "Sample":
     if "__fcssample__" in samplejson:
-        return json_to_fcssample(samplejson["__fcssample__"])
+        return json_to_fcssample(samplejson["__fcssample__"], **kwargs)
     elif "__somsample__" in samplejson:
-        return json_to_somsample(samplejson["__somsample__"])
+        return json_to_somsample(samplejson["__somsample__"], **kwargs)
     else:
         raise NotImplementedError("Unknown sample type")
 
 
-def json_to_fcssample(samplejson: dict) -> FCSSample:
+def json_to_fcssample(samplejson: dict) -> "FCSSample":
     samplejson["date"] = utils.str_to_date(samplejson["date"])
     samplejson["path"] = utils.URLPath(samplejson["path"])
     if samplejson["material"]:
@@ -129,7 +130,7 @@ def json_to_fcssample(samplejson: dict) -> FCSSample:
     return FCSSample(**samplejson)
 
 
-def json_to_somsample(samplejson: dict) -> SOMSample:
+def json_to_somsample(samplejson: dict) -> "SOMSample":
     samplejson["date"] = utils.str_to_date(samplejson["date"])
     samplejson["path"] = utils.URLPath(samplejson["path"])
     samplejson["dims"] = tuple(samplejson["dims"])
@@ -142,11 +143,16 @@ class Sample:
     """Single sample from a certain tube."""
     id: str
     case_id: str
-    date: date
+    date: "date"
     tube: str
     data: Any = None
     path: utils.URLPath = None
+    dataset_path: utils.URLPath = None
     markers: List[str] = field(default_factory=list)
+
+    @property
+    def complete_path(self):
+        return self.dataset_path / self.path
 
     def has_markers(self, markers: list) -> bool:
         """Return whether given list of markers are fulfilled."""
@@ -174,7 +180,7 @@ class FCSSample(Sample):
         if self.data:
             return self.data
 
-        data = fcs.FCSData(self.path)
+        data = fcs.FCSData(self.complete_path)
         return data
 
     def set_fcs_info(self):
@@ -197,5 +203,5 @@ class SOMSample(Sample):
         if self.data:
             return self.data
 
-        data = som.SOM(self.path, self.markers)
+        data = som.SOM(self.complete_path, self.markers)
         return data

@@ -7,12 +7,12 @@ model and never for model development.
 import time
 import contextlib
 import enum
-from argparse import ArgumentParser
 import collections
 
-from flowcat import parser, utils, mappings
+from argmagic import argmagic
+
+from flowcat import parser, utils, mappings, io_functions
 from flowcat.dataset.case_dataset import CaseCollection
-from flowcat.io_functions import save_case_collection
 
 
 @contextlib.contextmanager
@@ -155,6 +155,9 @@ def preprocess_cases(cases: CaseCollection, tubes=("1", "2", "3")):
         print_diff(cases, deduplicated)
         cases = deduplicated
 
+    with block("Select only specific groups"):
+        cases = cases.filter(groups=mappings.GROUPS)
+
     with block("Filter cases on selected markers"):
         selected_cases = get_selected_markers(cases, tubes)
         print_diff(cases, selected_cases)
@@ -203,20 +206,28 @@ def preprocess_cases(cases: CaseCollection, tubes=("1", "2", "3")):
     return train_cases, test_cases
 
 
-def main(args):
-    cases = parser.get_dataset(args)
+def filter_reference(dataset, infiltration=(20.0, None), sample=1):
+    reference = dataset.filter(infiltration=infiltration).sample(sample)
+    print("Reference cases:", reference)
+    return reference
+
+
+def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath):
+    """Split test and train dataset, remove duplicates and create a list of
+    ids used for creating the reference SOM.
+
+    Args:
+        data: Path to fcs data.
+        meta: Path to case metadata using case_info format.
+        output: Dath to output split dataset information.
+    """
+    cases = io_functions.load_case_collection_from_caseinfo(data, meta)
     train, test = preprocess_cases(cases)
-    save_case_collection(train, args.output / "train.json")
-    save_case_collection(test, args.output / "test.json")
+    reference = filter_reference(train)
+    io_functions.save_case_collection(train, output / "train.json.gz")
+    io_functions.save_case_collection(test, output / "test.json.gz")
+    io_functions.save_json(reference.labels, output / "references.json")
 
 
 if __name__ == "__main__":
-    PARSER = ArgumentParser(
-        description="Get overview of available data and create a dataset used for SOM transformation."
-    )
-    parser.add_dataset_args(PARSER)
-    PARSER.add_argument(
-        "output", type=utils.URLPath,
-        help="Path to save output metadata",
-    )
-    main(PARSER.parse_args())
+    argmagic(main)

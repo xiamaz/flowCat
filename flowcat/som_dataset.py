@@ -1,4 +1,3 @@
-from __future__ import annotations
 from dataclasses import dataclass, field
 from dataslots import with_slots
 from typing import List, Tuple, Dict
@@ -81,17 +80,17 @@ class SOMDataset:
             for group, data in self.data.groupby(by=lambda s: self.data[s].group)
         }
 
-    def filter_groups(self, groups: List[str]) -> SOMDataset:
+    def filter_groups(self, groups: List[str]) -> "SOMDataset":
         newgroup = self.data[self.data.apply(lambda c: c.group in groups)]
         return self.__class__(newgroup, config=self.config)
 
-    def filter(self, groups=None) -> SOMDataset:
+    def filter(self, groups=None) -> "SOMDataset":
         return self.filter_groups(groups=groups)
 
     def get_tube(self, tube: int) -> List[SOM]:
         return [s.get_tube(tube) for s in self.data]
 
-    def create_split(self, num: float, stratify: bool = True) -> Tuple[SOMDataset, SOMDataset]:
+    def create_split(self, num: float, stratify: bool = True) -> Tuple["SOMDataset", "SOMDataset"]:
         if stratify:
             trains = []
             valids = []
@@ -127,7 +126,7 @@ class SOMDataset:
             self.__class__(validate, config=self.config),
         )
 
-    def balance(self, num_per_group: int) -> SOMDataset:
+    def balance(self, num_per_group: int) -> "SOMDataset":
         """Randomly upsample groups with samples less than num_per_group,
         randomly downsample groups with samples more than num_per_group."""
         groups = []
@@ -142,7 +141,7 @@ class SOMDataset:
         self.data = self.data.reindex(np.random.permutation(self.data.index))
         return self
 
-    def balance_per_group(self, num_per_group: dict) -> SOMDataset:
+    def balance_per_group(self, num_per_group: dict) -> "SOMDataset":
         """Randomly upsample groups in dict to the given count."""
         groups = []
         all_data = self.data
@@ -160,7 +159,7 @@ class SOMDataset:
         self.data = self.data.reindex(np.random.permutation(self.data.index))
         return self
 
-    def map_groups(self, mapping: dict) -> SOMDataset:
+    def map_groups(self, mapping: dict) -> "SOMDataset":
         """Map cases to new groups given inside the dict."""
         for case in self.data:
             case.group = mapping.get(case.group, case.group)

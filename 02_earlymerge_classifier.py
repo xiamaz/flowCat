@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 from sklearn import metrics
 from sklearn.preprocessing import LabelBinarizer
-import keras
-from keras import layers, regularizers, models  # pylint: disable=import-error
+from tensorflow import keras
+from tensorflow.keras import layers, regularizers, models  # pylint: disable=import-error
 # from keras import layers, regularizers, models
 from argmagic import argmagic
 
@@ -16,46 +16,46 @@ from flowcat.som_dataset import SOMDataset, SOMSequence
 from flowcat.plots import confusion as plot_confusion, history as plot_history
 
 
-def create_model_multi_input(input_shapes, yshape, global_decay=5e-6):
-    segments = []
+def create_model_early_merge(input_shapes, yshape, global_decay=5e-6):
     inputs = []
     for xshape in input_shapes:
         ix = layers.Input(shape=xshape)
         inputs.append(ix)
-        x = layers.Conv2D(
-            filters=32, kernel_size=4, activation="relu", strides=1,
-            kernel_regularizer=regularizers.l2(global_decay),
-        )(ix)
-        x = layers.Conv2D(
-            filters=48, kernel_size=3, activation="relu", strides=1,
-            kernel_regularizer=regularizers.l2(global_decay),
-        )(x)
-        # x = layers.Conv2D(
-        #     filters=48, kernel_size=2, activation="relu", strides=1,
-        #     kernel_regularizer=regularizers.l2(global_decay),
-        # )(x)
-        x = layers.Conv2D(
-            filters=64, kernel_size=2, activation="relu", strides=1,
-            kernel_regularizer=regularizers.l2(global_decay),
-        )(x)
-        # x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
 
-        # x = layers.GlobalAveragePooling2D()(x)
-        x = layers.GlobalMaxPooling2D()(x)
-        segments.append(x)
+    x = layers.concatenate(inputs)
+    x = layers.Conv2D(
+        filters=64, kernel_size=4, activation="relu", strides=3,
+        kernel_regularizer=regularizers.l2(global_decay))(x)
+    x = layers.Conv2D(
+        filters=96, kernel_size=3, activation="relu", strides=2,
+        kernel_regularizer=regularizers.l2(global_decay))(x)
+    x = layers.Conv2D(
+        filters=128, kernel_size=1, activation="relu", strides=1,
+        kernel_regularizer=regularizers.l2(global_decay))(x)
+    x = layers.GlobalAveragePooling2D()(x)
+    # x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
+    # x = layers.Dropout(0.2)(x)
 
-    x = layers.concatenate(segments)
-
+    # x = layers.Dense(
+    #     units=128, activation="relu", kernel_initializer="uniform",
+    #     kernel_regularizer=regularizers.l2(global_decay)
+    # )(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.Dropout(0.2)(x)
+    x = layers.Dense(
+        units=128, activation="relu",
+        # kernel_initializer="uniform",
+        kernel_regularizer=regularizers.l2(global_decay)
+    )(x)
+    # x = layers.BatchNormalization()(x)
     x = layers.Dense(
         units=64, activation="relu",
         # kernel_initializer="uniform",
         kernel_regularizer=regularizers.l2(global_decay)
     )(x)
-    x = layers.Dense(
-        units=32, activation="relu",
-        # kernel_initializer="uniform",
-        kernel_regularizer=regularizers.l2(global_decay)
-    )(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.Dropout(0.2)(x)
 
     x = layers.Dense(
         units=yshape, activation="softmax"
@@ -69,7 +69,7 @@ def get_model(channel_config, groups, **kwargs):
     inputs = tuple([*d["dims"][:-1], len(d["channels"])] for d in channel_config.values())
     output = len(groups)
 
-    model = create_model_multi_input(inputs, output, **kwargs)
+    model = create_model_early_merge(inputs, output, **kwargs)
 
     binarizer = LabelBinarizer()
     binarizer.fit(groups)
@@ -89,9 +89,13 @@ def generate_confusion(true_labels, pred_labels, groups, output):
     io_functions.save_csv(confusion, output / "validation_confusion.csv")
 
     plot_confusion.plot_confusion_matrix(
-        confusion, normalize=False).savefig(str(output / "confusion_abs.png"), dpi=300)
+        confusion, normalize=False, filename=output / "confusion_abs.png",
+        dendroname="dendro.png"
+    )
     plot_confusion.plot_confusion_matrix(
-        confusion, normalize=True).savefig(str(output / "confusion_norm.png"), dpi=300)
+        confusion, normalize=True, filename=output / "confusion_norm.png",
+        dendroname=None
+    )
     return confusion
 
 
@@ -125,8 +129,8 @@ def generate_all_metrics(true_labels, pred_labels, mapping, output):
 
 def plot_training_history(history, output):
     history_data = {
-        "accuracy": history.history["acc"],
-        "val_accuracy": history.history["val_acc"],
+        "accuracy": history.history["categorical_accuracy"],
+        "val_accuracy": history.history["val_categorical_accuracy"],
         "loss": history.history["loss"],
         "val_loss": history.history["val_loss"],
     }
@@ -143,13 +147,11 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath, epochs
     tubes = ("1", "2", "3")
     pad_width = 2
 
-    group_mapping = {
-        "map": None,
-        "groups": mappings.GROUPS,
-    }
-    # group_mapping = mappings.GROUP_MAPS["8class"]
+    group_mapping = mappings.GROUP_MAPS["8class"]
     mapping = group_mapping["map"]
     groups = group_mapping["groups"]
+    # mapping = None
+    # groups = mappings.GROUPS
 
     # dataset = io_functions.load_case_collection(data, meta)
     dataset = SOMDataset.from_path(data)
@@ -174,9 +176,9 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath, epochs
 
     # train = train.balance(2000)
     train = train.balance_per_group({
-        # "CM": 6000,
-        "CLL": 4000,
-        "MBL": 2000,
+        "CM": 6000,
+        # "CLL": 4000,
+        # "MBL": 2000,
         "MCL": 1000,
         "PL": 1000,
         "LPL": 1000,
@@ -244,7 +246,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath, epochs
         optimizer="adam",
         # optimizer=optimizers.Adam(lr=0.0, decay=0.0, epsilon=epsilon),
         metrics=[
-            "accuracy"
+            keras.metrics.CategoricalAccuracy(),
         ]
     )
     with (output / "model_summary.txt").open("w") as summary_file:

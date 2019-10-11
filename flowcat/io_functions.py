@@ -1,9 +1,10 @@
-from __future__ import annotations
 from typing import Union
 import json
 import re
+import gzip
 import logging
 import pickle
+import shutil
 from datetime import date
 
 import joblib
@@ -73,15 +74,26 @@ def as_fc(d):
 
 def load_json(path: URLPath):
     """Load json data from a path as a simple function."""
-    with path.open("r") as jspath:
-        data = json.load(jspath, object_hook=as_fc)
+    if path.suffix == ".gz":
+        jsfile = gzip.open(str(path), "r", compresslevel=1)
+    else:
+        jsfile = path.open("r")
+    data = json.load(jsfile, object_hook=as_fc)
+
+    jsfile.close()
     return data
 
 
 def save_json(data, path: URLPath):
     """Write json data to a file as a simple function."""
-    with path.open("w") as jsfile:
-        json.dump(data, jsfile, cls=FCEncoder)
+    if path.suffix == ".gz":
+        jsfile = gzip.open(str(path), "wt", compresslevel=1)
+    else:
+        jsfile = path.open("w")
+
+    json.dump(data, jsfile, cls=FCEncoder)
+
+    jsfile.close()
 
 
 def load_pickle(path: URLPath):
@@ -220,7 +232,21 @@ def save_case_collection(cases, destination: URLPath):
     save_json(cases, destination)
 
 
+def save_case_collection_with_data(cases, destination: URLPath):
+    sample_destination = destination / "data"
+    cases = cases.copy()
+    for case_obj in cases:
+        for case_sample in case_obj.samples:
+            sdest = sample_destination / case_sample.path
+            sdest.parent.mkdir()
+            shutil.copy(str(case_sample.complete_path), sdest)
+            case_sample.dataset_path = sample_destination
+
+    save_case_collection(cases, destination=destination / "meta.json.gz")
+    return cases
+
+
 def load_case_collection(data_path: URLPath, meta_path: URLPath):
     cases = load_json(meta_path)
-    cases.data_path = data_path
+    cases.set_data_path(data_path)
     return cases

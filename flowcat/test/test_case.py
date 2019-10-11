@@ -4,8 +4,6 @@ import datetime
 
 from flowcat.dataset import case
 
-from . import shared
-
 
 def create_date(dstr):
     return datetime.datetime.strptime(dstr, "%Y-%m-%d").date()
@@ -34,7 +32,7 @@ class TestCaseGenerated(unittest.TestCase):
         }
         for tname, tdata in tests.items():
             with self.subTest(name=tname):
-                tcase = case.Case(tdata)
+                tcase = case.caseinfo_to_case(tdata, "")
                 self.assertEqual(tcase.id, tdata["id"])
                 self.assertEqual(tcase.date, create_date(tdata["date"]))
                 self.assertEqual(tcase.infiltration, tdata["infiltration"] if "infiltration" in tdata else 0.0)
@@ -69,7 +67,7 @@ class TestCaseGenerated(unittest.TestCase):
         for tname, tdata in missing_tests.items():
             with self.subTest(tname):
                 with self.assertRaisesRegex(AssertionError, r"^\w+ is required$"):
-                    case.Case(tdata)
+                    case.caseinfo_to_case(tdata, "")
 
         conversion_tests = {
             "strinfil": ({
@@ -121,14 +119,15 @@ class TestCaseGenerated(unittest.TestCase):
         for tname, (tdata, truth) in conversion_tests.items():
             with self.subTest(tname):
                 if isinstance(truth, float):
-                    tcase = case.Case(tdata)
+                    tcase = case.caseinfo_to_case(tdata, "")
                     self.assertEqual(tcase.infiltration, truth)
                 else:
                     with self.assertRaises(truth):
+                        case.caseinfo_to_case(tdata, "")
                         case.Case(tdata)
 
-    def test_filepaths(self):
-        """Check correct creation of filepaths."""
+    def test_samples(self):
+        """Check correct creation of samples."""
         base_obj = {
             "id": "12345",
             "date": "2018-10-10",
@@ -148,5 +147,5 @@ class TestCaseGenerated(unittest.TestCase):
         for tname, tpathdata in tests.items():
             with self.subTest(tname):
                 tdata = {**base_obj, "filepaths": tpathdata}
-                tcase = case.Case(tdata)
-                self.assertEqual(tcase.filepaths[0].path, tpathdata[0]["fcs"]["path"])
+                tcase = case.caseinfo_to_case(tdata, "")
+                self.assertEqual(str(tcase.samples[0].path), tpathdata[0]["fcs"]["path"])

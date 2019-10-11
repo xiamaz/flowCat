@@ -3,12 +3,10 @@
 """
 CLI Interface components.
 """
-from __future__ import annotations
-
 from flowcat import io_functions, utils, dataset
 
 
-def add_dataset_args(parser: ArgumentParser) -> ArgumentParser:
+def add_dataset_args(parser: "ArgumentParser") -> "ArgumentParser":
     """Add arguments for specifying a defined case dataset.
 
     An input and a meta instance will be added.
@@ -36,6 +34,6 @@ def add_dataset_args(parser: ArgumentParser) -> ArgumentParser:
     return parser
 
 
-def get_dataset(args: Namespace) -> CaseCollection:
+def get_dataset(args: "Namespace") -> "CaseCollection":
     cases = io_functions.load_case_collection_from_caseinfo(args.data, args.meta)
     return cases

@@ -1,5 +1,4 @@
-from __future__ import annotations
-from typing import Iterable, List, Generator, Dict, Tuple
+from typing import Iterable, List, Dict, Tuple
 import datetime
 
 from flowcat import utils
@@ -54,7 +53,7 @@ class CaseSingleSom:
     def weights(self):
         return self.model.weights
 
-    def train(self, data: Iterable[case.Case], *args, **kwargs) -> CaseSingleSom:
+    def train(self, data: Iterable[case.Case], *args, **kwargs) -> "CaseSingleSom":
         tsamples = [c.get_tube(self.tube).get_data() for c in data]
         self.model.train(tsamples)
         self.train_labels = [c.id for c in data]
@@ -83,7 +82,7 @@ class CaseSingleSom:
             self,
             data: Iterable[case.Case],
             *args, **kwargs
-    ) -> Generator[Tuple[case.Case, sample.SOMSample]]:
+    ) -> Iterable[Tuple[case.Case, sample.SOMSample]]:
         for casedata in data:
             yield casedata, self.transform(casedata, *args, **kwargs)
 
@@ -124,7 +123,7 @@ class CaseSom:
     def tubes(self):
         return list(self.models.keys())
 
-    def train(self, data: Iterable[case.Case], *args, **kwargs) -> CaseSom:
+    def train(self, data: Iterable[case.Case], *args, **kwargs) -> "CaseSom":
         for tube, model in self.models.items():
             print(f"Training tube {tube}")
             model.train(data, *args, **kwargs)
@@ -140,7 +139,7 @@ class CaseSom:
         newcase = data.copy(samples=samples)
         return newcase
 
-    def transform_generator(self, data: Iterable[case.Case], **kwargs) -> Generator[Tuple[case.Case, sample.SOMSample]]:
+    def transform_generator(self, data: Iterable[case.Case], **kwargs) -> Iterable[Tuple[case.Case, sample.SOMSample]]:
         for tube, model in self.models.items():
             for single in data:
                 yield single, model.transform(single, **kwargs)

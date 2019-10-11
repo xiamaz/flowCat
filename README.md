@@ -1,80 +1,95 @@
 flowCat: Automated classification of MFC data
 =============================================
 
-Organization and general discussion at:
-[Trello](https://trello.com/b/Krk9nkPg/flowcat).
-
 Discussion channel: [Mattermost](https://mm.meb.uni-bonn.de).
 
-Running the main project
-------------------------
+This tool generated self-organizing maps from raw flow cytometry data stored
+in fcs files. Afterwards the generated SOM weights are used to classify
+diagnoses using a simple CNN.
 
-1. `00a_dataset_prepare.py`
-    
-    Split a given dataset directory into a test and a training set. The
-    splitting parameters are hardcoded in `preprocess_cases`.
+The general processing steps are:
 
-    The default will generate a dataset split on the data 2018-06-30.
+0. Data QC
+1. SOM Transformation
+2. Classification
+3. Evaluation
 
-    The generated output are two new metadata json files as well as config
-    files.
+Conda can be used to install all required dependencies for the project.
 
-    Usage:
-    
-    ```{.sh}
-    ./00a_dataset_prepare.py [-h] <PATH_TO_DATASET> <OUTPUT>
-    ```
+Hardware requirements: Nvidia GPU compatible with Cuda 10.0
 
-    Generated datsets in the output directory can be loaded into new python
-    datasets.
+Software requirements can be installed with [miniconda](https://docs.conda.io/en/latest/miniconda.html).
 
-    ```python
-    flowcat.CaseCollection.from_path(path=<PATH_TO_DATASET>, metapath=<PATH_OUTPUT>)
-    ```
+Create a new environment from the environment file given in the repo. This will create a new conda environment named `flowcat`.
 
-2. `00b_select_ref_cases.py`
+```sh
+conda env create -f environment.yml
+```
 
-    A reference SOM needs to be created for transforming single cases on the
-    basis of a selection of cases.
+## Quick start
 
-    The given script will output a list of case ids for a given dataset and
-    given selection parameters. These directly map to the parameters for the
-    `filter_reasons` function.
+```sh
+# split data into train and test dataset
+./00_prepare_dataset.py --data <DATASET PATH> --meta <DATASET META> --output <DS DIR>
 
-    ```{.sh}
-    ./00b_select_ref_cases.py --input /data/flowdata --meta /data/flowdata/meta --groups CLL,normal test.json
-    ```
+# generate reference som
+./01_generate_soms.py --data <DATASET PATH> --meta <TRAIN META> \
+                      --reference_ids <DS DIR>/references.json \
+                      --output <SOM DIR>
 
-    The metadata should point to a basename for both a meta.json and a optional
-    meta_config.json.
+# train classifier on transformed soms
+./02_train_classifier.py --data <INDIV SOM> --meta <INDIV SOM>.json <MODEL DIR>
+# generate results on test set
+TODO
+```
 
-3. `01a_generate_ref_som.py`
+## 0. Data QC
 
-    Create a reference SOM using the previously generated test.json.
+Main reason is to ensure that input data contains all necessary channels in the
+correct tubes for processing and the data has been sampled from the correct
+material (currently only peripheral blood and bone marrow).
 
-4. `01b_create_soms.py`
+- `./00a_dataset_prepare.py` removed duplicated cases in cohorts and splits the
+  dataset into a train and a test cohort, the test cohort data is only used in
+  final evaluation
 
-    Generate SOMs for all cases in the initial dataset.
+- `./00b_select_ref_cases.py` selects n cases from each cohort with some
+  selection criteria, such as high infiltration. These are used for generating
+  the reference SOM.
 
-5. `02_train_model.py`
+- `./00c_dataset_channel_plots.py` plots channel intensity plots for all
+  cohorts.
 
-    Train a CNN model with validation split.
+`00a` and `00b` are needed for the next step.
 
-6. `03a_create_soms_test.py`
 
-    Generate test-set SOMs using the same reference.
+## 1. SOM generation
 
-7. `03b_test_model.py`
+Each fcs file from a patient is used to generate a single FCS file.
 
-    Get prediction accuracy using the previously generated model.
+- `./01a_create_ref_som.py` created a SOM from a sample of data using random
+  initialization. This is afterwards used to create individual soms.
 
-Performance considerations
---------------------------
+- `./01b_create_soms.py` creates individual SOMs for all cases in the dataset.
 
-IO of input data can become the limiting factor, especially if the FCS
-files are loaded on-demand from S3 for the FCS end-to-end model.
-Consider downloading the whole dataset before running the classifier
-itself. This can be done with aws-cli.
+## 2. Classification model training
+
+Train a classifier on the generated SOM data to classify a property in the
+cases.
+
+- `./02_train_classifier.py` trains a new CNN. The train data is split again
+  into the data used for training the model and for validating the model output.
+
+## 3. Classification model evaluation
+
+- `./03_predict_cases.py` generates predictions for new cases in the test
+  cohort.
+
+
+## AWS data
+
+In order to work with data saved on AWS, use the following command to sync a
+local folder with the remote content.
 
 ``` {.sh}
 aws sync s3://mll-flowdata/<DATASET NAME> <DATASET NAME>
@@ -91,4 +106,4 @@ Navigate there to read them in your browser.
 Contributions
 -------------
 
-tensorflow SOM code taken from cgorman.
+tensorflow SOM code adapted from cgorman.

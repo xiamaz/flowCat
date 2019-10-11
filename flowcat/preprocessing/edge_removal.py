@@ -1,6 +1,5 @@
 """Remove events on axis edges.
 """
-from __future__ import annotations
 from typing import Dict, Union
 import logging
 

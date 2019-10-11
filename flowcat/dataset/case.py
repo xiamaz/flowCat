@@ -3,7 +3,6 @@ Objects abstracting basic case information.
 
 Look at tests/test_case.py to see how cases can be defined from simple dicts.
 """
-from __future__ import annotations
 
 import logging
 import functools
@@ -30,7 +29,7 @@ def assert_in_dict(fields, data):
 
 
 def filter_case(
-        case: Case,
+        case: "Case",
         tubes: List[str] = None,
         labels: List[str] = None,
         groups: List[str] = None,
@@ -76,11 +75,14 @@ def filter_case(
     if date:
         date_min, date_max = date
         if date_min:
-            date_min = utils.str_to_date(date_min) if isinstance(date_min, str) else date
+            if isinstance(date_min, str):
+                date_min = utils.str_to_date(date_min)
+
             if case.date < date_min:
                 reasons.append("date_min")
         if date_max:
-            date_max = utils.str_to_date(date_max) if isinstance(date_max, str) else date
+            if isinstance(date_max, str):
+                date_max = utils.str_to_date(date_max)
             if case.date > date_max:
                 reasons.append("date_max")
 
@@ -103,7 +105,7 @@ def filter_case(
     return not bool(reasons), reasons
 
 
-def caseinfo_to_case(caseinfo: dict, sample_path: utils.URLPath) -> Case:
+def caseinfo_to_case(caseinfo: dict, sample_path: utils.URLPath) -> "Case":
     # required keys
     assert_in_dict(CASE_REQUIRED_FIELDS, caseinfo)
     case_id = caseinfo["id"]
@@ -133,7 +135,7 @@ def caseinfo_to_case(caseinfo: dict, sample_path: utils.URLPath) -> Case:
     return case
 
 
-def case_to_json(case: Case) -> dict:
+def case_to_json(case: "Case") -> dict:
     casedict = asdict(case)
     if casedict["used_material"]:
         casedict["used_material"] = casedict["used_material"].name
@@ -144,7 +146,7 @@ def case_to_json(case: Case) -> dict:
     return casedict
 
 
-def json_to_case(jscase: dict) -> Case:
+def json_to_case(jscase: dict) -> "Case":
     if jscase["used_material"]:
         material = mappings.Material[jscase["used_material"]]
     else:

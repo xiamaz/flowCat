@@ -1,8 +1,6 @@
 """
 Basic functions for working with timestamps and timing functions.
 """
-from __future__ import annotations
-
 import time
 import datetime
 import contextlib
