@@ -32,7 +32,7 @@ class SOMCase:
     soms: Dict[str, utils.URLPath] = field(default_factory=dict)
     data: Dict[str, np.array] = field(default_factory=dict)
 
-    def get_tube(self, tube: str, store: bool = False) -> SOM:
+    def get_tube(self, tube: str, store: bool = False, **_) -> SOM:
         if tube not in self.data:
             sompath = self.soms[tube]
             data = np.load(sompath)
@@ -86,6 +86,9 @@ class SOMDataset:
 
     def filter(self, groups=None) -> "SOMDataset":
         return self.filter_groups(groups=groups)
+
+    def get_labels(self, labels: List[str]) -> List["SOMCase"]:
+        return self.data[self.data.apply(lambda c: c.label in labels)]
 
     def get_tube(self, tube: int) -> List[SOM]:
         return [s.get_tube(tube) for s in self.data]
@@ -201,15 +204,12 @@ class SOMSequence(keras.utils.Sequence):
     def true_labels(self):
         return [d.group for d in self.dataset]
 
-    def __len__(self) -> int:
-        return int(np.ceil(len(self.dataset) / float(self.batch_size)))
+    def get_batch_by_label(self, labels: List[str]) -> Tuple[np.array, np.array]:
+        """Get a batch containing only the given labels."""
+        batch = self.dataset.get_labels(labels)
+        return self._create_batch(batch)
 
-    def __getitem__(self, idx: int) -> Tuple[np.array, np.array]:
-        if idx in self._cache:
-            return self._cache[idx]
-
-        batch = self.dataset[idx * self.batch_size:(idx + 1) * self.batch_size]
-
+    def _create_batch(self, batch: List[SOMCase]) -> Tuple[np.array, np.array]:
         inputs = []
         for tube in self.tube:
             x_batch = np.array([
@@ -223,5 +223,17 @@ class SOMSequence(keras.utils.Sequence):
 
         y_labels = [s.group for s in batch]
         y_batch = self.binarizer.transform(y_labels)
-        self._cache[idx] = inputs, y_batch
         return inputs, y_batch
+
+    def __len__(self) -> int:
+        return int(np.ceil(len(self.dataset) / float(self.batch_size)))
+
+    def __getitem__(self, idx: int) -> Tuple[np.array, np.array]:
+        if idx in self._cache:
+            return self._cache[idx]
+
+        batch = self.dataset[idx * self.batch_size:(idx + 1) * self.batch_size]
+
+        batch_data = self._create_batch(batch)
+        self._cache[idx] = batch_data
+        return batch_data
