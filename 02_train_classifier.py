@@ -2,6 +2,7 @@
 """
 Train models on Munich data and attempt to classify Bonn data.
 """
+from importlib import import_module
 import numpy as np
 import pandas as pd
 from sklearn import metrics
@@ -35,7 +36,7 @@ def create_model_multi_input(input_shapes, yshape, global_decay=5e-6):
         #     kernel_regularizer=regularizers.l2(global_decay),
         # )(x)
         x = layers.Conv2D(
-            filters=64, kernel_size=2, activation="relu", strides=1,
+            filters=64, kernel_size=2, activation="relu", strides=2,
             kernel_regularizer=regularizers.l2(global_decay),
         )(x)
         # x = layers.MaxPooling2D(pool_size=2, strides=2)(x)
@@ -65,11 +66,14 @@ def create_model_multi_input(input_shapes, yshape, global_decay=5e-6):
     return model
 
 
-def get_model(channel_config, groups, **kwargs):
+def get_model(channel_config, groups, model, **kwargs):
     inputs = tuple([*d["dims"][:-1], len(d["channels"])] for d in channel_config.values())
     output = len(groups)
 
-    model = create_model_multi_input(inputs, output, **kwargs)
+    if model:
+        model = import_module(model).create_model(inputs, output, **kwargs)
+    else:
+        model = create_model_multi_input(inputs, output, **kwargs)
 
     binarizer = LabelBinarizer()
     binarizer.fit(groups)
@@ -134,7 +138,7 @@ def plot_training_history(history, output):
     acc_plot.savefig(str(output), dpi=300)
 
 
-def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath, epochs: int = 30):
+def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath, epochs: int = 30, model: str = None):
     """
     Args:
         data: Path to som dataset
@@ -230,7 +234,7 @@ def main(data: utils.URLPath, meta: utils.URLPath, output: utils.URLPath, epochs
         x, y, z = selected_tubes[tube]["dims"]
         selected_tubes[tube]["dims"] = (x + 2 * pad_width, y + 2 * pad_width, z)
 
-    binarizer, model = get_model(selected_tubes, groups=groups, global_decay=5e-5)
+    binarizer, model = get_model(selected_tubes, model=model, groups=groups, global_decay=5e-5)
 
     if cost_matrix is not None:
         loss = classification_utils.WeightedCategoricalCrossentropy(cost_matrix)
