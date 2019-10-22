@@ -4,124 +4,186 @@ Case collection tests.
 import unittest
 import json
 import pathlib
+import datetime
 
 import pandas as pd
 from pandas.testing import assert_series_equal
 
-from flowcat.dataset import case_dataset
+from flowcat import mappings
+from flowcat.utils.time_timers import str_to_date
+from flowcat.dataset import case_dataset, case, sample
 
-from . import shared
+
+def create_case(id: str, date="2011-11-11", used_material="PB", samples=None, **kwargs):
+    used_material = mappings.Material.from_str(used_material)
+    date = str_to_date(date)
+    if samples:
+        samples = [sample.Sample(**s) for s in samples]
+    else:
+        samples = []
+    return case.Case(
+        id=id,
+        date=date,
+        used_material=used_material,
+        samples=samples,
+        **kwargs
+    )
 
 
-class TestBasicCase(unittest.TestCase):
-    """Basic case collection tests."""
+def create_case_dataset(case_args):
+    cases = [create_case(**c) for c in case_args]
+    return case_dataset.CaseCollection(cases=cases)
 
-    @classmethod
-    def setUpClass(cls):
-        cls.cases = case_dataset.CaseCollection.from_path(shared.FCS_PATH)
 
-    def test_wrong_constructor(self):
-        """Exception should be thrown if we try to instantiate the CaseCollection using a string or pathlike object."""
-        self.assertRaises(ValueError, case_dataset.CaseCollection, "teststr")
-        self.assertRaises(ValueError, case_dataset.CaseCollection, pathlib.Path("teststr"))
-        self.assertRaises(ValueError, case_dataset.CaseCollection, shared.utils.URLPath("teststr"))
+class TestCaseCollection(unittest.TestCase):
+    def test_basic(self):
+        case_args = [
+            {
+                "id": "1",
+                "samples": [
+                    {"id": "a", "case_id": "1", "date": datetime.date(2011, 11, 11), "tube": "1"},
+                    {"id": "b", "case_id": "1", "date": datetime.date(2011, 11, 11), "tube": "2"}
+                ]
+            }
+        ]
+        dataset = create_case_dataset(case_args)
+        self.assertEqual(len(dataset), len(case_args))
+        self.assertEqual(dataset.tubes, ["1", "2"])
+        self.assertEqual(dataset.group_count, {None: 1})
+        self.assertEqual(dataset.groups, [None])
+        self.assertEqual(dataset.labels, ["1"])
 
-    def test_json_same(self):
-        """Assert that exported json is identical to imported information."""
+    def test_sampling(self):
+        case_args = [
+            {
+                "id": "1",
+                "group": "a",
+            },
+            {
+                "id": "2",
+                "group": "b",
+            },
+            {
+                "id": "3",
+                "group": "c",
+            },
+            {
+                "id": "4",
+                "group": "c",
+            },
+        ]
+        dataset = create_case_dataset(case_args)
+        self.assertEqual(dataset.group_count, {"a": 1, "b": 1, "c": 2})
+        cases = [
+            ((1, ["b", "c"]), {"b": 1, "c": 1}),
+            ((10000, ["b", "c"]), {"b": 1, "c": 2}),
+            ((2, ["a"]), {"a": 1}),
+            ((2, ["a", "b"]), {"a": 1, "b": 1}),
+            ((2, ["a", "b", "c"]), {"a": 1, "b": 1, "c": 2}),
+        ]
+        for args, expected in cases:
+            sampled = dataset.sample(*args)
+            self.assertDictEqual(sampled.group_count, expected)
 
-        with open(str(case_dataset.get_meta(shared.FCS_PATH, "case_info.json")), "r") as f:
-            case_jsons = json.load(f)
+    def test_balancing(self):
+        case_args = [
+            {
+                "id": "1",
+                "group": "a",
+            },
+            {
+                "id": "2",
+                "group": "b",
+            },
+            {
+                "id": "3",
+                "group": "c",
+            },
+        ]
+        dataset = create_case_dataset(case_args)
+        self.assertEqual(dataset.group_count, {"a": 1, "b": 1, "c": 1})
+        cases = [
+            ((2,), {"a": 2, "b": 2, "c": 2}),
+            ((100,), {"a": 100, "b": 100, "c": 100}),
+        ]
+        for args, expected in cases:
+            sampled = dataset.balance(*args)
+            self.assertEqual(sampled.group_count, expected)
 
-        for cjson, case in zip(case_jsons, self.cases.data):
-            with self.subTest(label=cjson["id"]):
-                self.assertDictEqual(case.json, cjson)
+        cases = [
+            ({"a": 100, "b": 1, "c": 1}, {"a": 100, "b": 1, "c": 1}),
+            ({"a": 100, "b": 1, "c": 0}, {"a": 100, "b": 1}),
+        ]
+        for arg, expected in cases:
+            sampled = dataset.balance_per_group(arg)
+            self.assertEqual(sampled.group_count, expected)
 
-    def test_group_num(self):
-        """Test that the count function is working correctly."""
-        self.assertDictEqual(self.cases.group_count, {"normal": 6, "CLL": 2, "LPL": 1, "PL": 1})
-
-    def test_tubes(self):
-        """Infer tubes from availability in input data."""
-        self.assertListEqual(self.cases.tubes, [1, 2, 3])
-
-    def test_markers(self):
-        """Check that the returned markers match the given ones."""
-        reference = pd.Series({
-            "FS INT LIN": 1.0,
-            "SS INT LIN": 1.0,
-            "FMC7-FITC": 1.0,
-            "CD10-PE": 1.0,
-            "IgM-ECD": 1.0,
-            "CD79b-PC5.5": 1.0,
-            "CD20-PC7": 1.0,
-            "CD23-APC": 1.0,
-            "nix-APCA700": 1.0,
-            "CD19-APCA750": 1.0,
-            "CD5-PacBlue": 1.0,
-            "CD45-KrOr": 1.0,
-        })
-
-        assert_series_equal(self.cases.get_markers(1), reference)
+    def test_split(self):
+        cases = [
+            ([
+                {"id": "1", "group": "a"},
+                {"id": "2", "group": "a"},
+                {"id": "a1", "group": "b"},
+                {"id": "a2", "group": "b"},
+            ], [
+                ((0.5, True), ({"a": 1, "b": 1}, {"a": 1, "b": 1})),
+                ((0.8, True), ({"a": 2, "b": 2}, {})),
+                ((0.2, True), ({}, {"a": 2, "b": 2})),
+            ]),
+            ([
+                {"id": "1", "group": "a"},
+                {"id": "2", "group": "a"},
+                {"id": "c1", "group": "a"},
+                {"id": "c2", "group": "a"},
+                {"id": "a1", "group": "b"},
+                {"id": "a2", "group": "b"},
+                {"id": "b1", "group": "b"},
+                {"id": "b2", "group": "b"},
+            ], [
+                ((0.5, True), ({"a": 2, "b": 2}, {"a": 2, "b": 2})),
+                ((0.75, True), ({"a": 3, "b": 3}, {"a": 1, "b": 1})),
+            ]),
+            ([
+                {"id": "1", "group": "a"},
+                {"id": "2", "group": "a"},
+                {"id": "c1", "group": "a"},
+                {"id": "c2", "group": "a"},
+                {"id": "a1", "group": "b"},
+                {"id": "a2", "group": "b"},
+                {"id": "b1", "group": "b"},
+                {"id": "b2", "group": "b"},
+                {"id": "d2", "group": "c"},
+                {"id": "d4", "group": "c"},
+            ], [
+                ((0.5, True), ({"a": 2, "b": 2, "c": 1}, {"a": 2, "b": 2, "c": 1})),
+                ((0.75, True), ({"a": 3, "b": 3, "c": 2}, {"a": 1, "b": 1})),
+            ]),
+        ]
+        for case_args, splits in cases:
+            dataset = create_case_dataset(case_args)
+            for args, (expected_a, expected_b) in splits:
+                part_a, part_b = dataset.create_split(*args)
+                ids_a = set(c.id for c in part_a)
+                ids_b = set(c.id for c in part_b)
+                self.assertEqual(part_a.group_count, expected_a)
+                self.assertEqual(part_b.group_count, expected_b)
+                self.assertEqual(ids_a & ids_b, set())
 
     def test_filter(self):
-        """Check that filtering case cohorts works."""
-        with self.subTest(i="tube filtering"):
-            tubes_only = self.cases.filter(tubes=[1, 2])
-            # didnt filter out any cases
-            self.assertEqual(len(tubes_only), len(self.cases))
-            self.assertListEqual(tubes_only.selected_tubes, [1, 2])
-            self.assertDictEqual(tubes_only.selected_markers, {
-                1: [
-                    'FS INT LIN',
-                    'SS INT LIN',
-                    'FMC7-FITC',
-                    'CD10-PE',
-                    'IgM-ECD',
-                    'CD79b-PC5.5',
-                    'CD20-PC7',
-                    'CD23-APC',
-                    'CD19-APCA750',
-                    'CD5-PacBlue',
-                    'CD45-KrOr'],
-                2: [
-                    'FS INT LIN',
-                    'SS INT LIN',
-                    'Kappa-FITC',
-                    'Lambda-PE',
-                    'CD38-ECD',
-                    'CD25-PC5.5',
-                    'CD11c-PC7',
-                    'CD103-APC',
-                    'CD19-APCA750',
-                    'CD22-PacBlue',
-                    'CD45-KrOr']})
-
-        with self.subTest(i="group filtering"):
-            single_group = self.cases.filter(groups=["normal"])
-            self.assertEqual(len(single_group), sum(g == "normal" for g in self.cases.groups))
-
-        with self.subTest(i="num filtering"):
-            one_each = self.cases.filter(num=1)
-            self.assertEqual(len(one_each), len(set(self.cases.groups)))
-
-        with self.subTest(i="infiltration filtering"):
-            high_infil = self.cases.filter(infiltration=57)
-            for case in high_infil:
-                with self.subTest(i=case.id, group=case.group):
-                    if case.group != "normal":
-                        self.assertGreaterEqual(case.infiltration, 57)
-
-        with self.subTest(i="count filtering"):
-            high_count = self.cases.filter(counts=50000)
-            for case in high_count:
-                for tubesample in case.filepaths:
-                    with self.subTest(i=case.id, p=tubesample.path):
-                        self.assertGreaterEqual(tubesample.count, 50000)
-
-    def test_view(self):
-        sample_view = self.cases.filter(num=1)
-        sample_tubeview = sample_view.get_tube(1)
-        # all samples should be from the first tube
-        for sample in sample_tubeview:
-            with self.subTest(i=sample.parent.id):
-                self.assertEqual(sample.tube, 1)
+        cases = [
+            ([
+                {"id": "1", "group": "a", "date": "2011-10-11"},
+                {"id": "2", "group": "a", "date": "2011-12-11"},
+                {"id": "a1", "group": "b"},
+                {"id": "a2", "group": "b"},
+            ], [
+                ({"groups": ["a"]}, ["1", "2"]),
+                ({"date": ("2011-11-11", None)}, ["2", "a1", "a2"]),
+                ({"date": (None, "2011-11-11")}, ["1", "a1", "a2"])  # both ranges are inclusive
+            ]),
+        ]
+        for case_args, filters in cases:
+            dataset = create_case_dataset(case_args)
+            for args, expected in filters:
+                filtered = dataset.filter(**args)
+                self.assertEqual(filtered.labels, expected)

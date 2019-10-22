@@ -1,69 +1,41 @@
+# pylint: skip-file
+# flake8: noqa
 import unittest
 import pickle
 
-from .shared import *
+from flowcat import utils
 
 
-class TestURLPathBase(unittest.TestCase):
+class TestURLPath(unittest.TestCase):
+    def test_concatenation(self):
+        cases = [
+            ("a", "b", "a/b"),
+            ("/c", "d", "/c/d"),
+            ("file:///a", "telnet", "file:///a/telnet")
+        ]
+        for part_a, part_b, expected in cases:
+            url_a = utils.URLPath(part_a)
+            url_b = utils.URLPath(part_b)
+            result = url_a / url_b
+            self.assertEqual(str(result), expected)
 
-    name = "testpath"
-    netloc = ""
-    scheme = ""
-    path = "testpath"
-    local = "testpath"
-    remote = False
-    exists = False
+    def test_urls(self):
+        cases = [
+            ("a", "", ""),
+            ("https://a", "https", "a"),
+            ("https://dest.de/a", "https", "dest.de"),
+        ]
+        for url, scheme, netloc in cases:
+            result = utils.URLPath(url)
+            self.assertEqual(result._scheme, scheme)
+            self.assertEqual(result._netloc, netloc)
 
-    def setUp(self):
-        self.url = utils.URLPath(self.name)
-
-    def test_creation(self):
-        self.assertEqual(self.url.netloc, self.netloc)
-        self.assertEqual(self.url.scheme, self.scheme)
-        self.assertEqual(self.url.path, self.path)
-        self.assertEqual(str(self.url.local), self.local)
-        self.assertEqual(self.url.exists(), self.exists)
-        self.assertEqual(self.url.remote, self.remote)
-
-    def test_repr(self):
-        self.assertEqual(repr(self.url), self.name)
-
-
-class TestLocalPath(TestURLPathBase):
-    name = str(DATAPATH)
-    netloc = ""
-    scheme = ""
-    path = str(DATAPATH)
-    local = str(DATAPATH)
-    remote = False
-    exists = True
-
-    def test_ls(self):
-        self.assertListEqual(
-            [str(l) for l in self.url.ls()],
-            [str(l) for l in DATAPATH.glob("*")],
-        )
-
-
-class TestLocalPathNonExist(TestURLPathBase):
-    name = "/tmp/flowcat_nothing"
-    netloc = ""
-    scheme = ""
-    path = "/tmp/flowcat_nothing"
-    local = "/tmp/flowcat_nothing"
-    remote = False
-    exists = False
-
-
-class TestPathSerialization(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        cls.path = utils.URLPath("s3://serialize.me/now")
-
-    def test_pickling(self):
-        """Test that pickling works correctly."""
-        pickled = pickle.dumps(self.path)
-        unpickled = pickle.loads(pickled)
-        with self.subTest("Same string result"):
-            self.assertEqual(str(self.path), str(unpickled))
+    def test_addition(self):
+        cases = [
+            ("testfile", "as", "testfileas"),
+            ("/a/", "test", "/atest"),  # trailing slashes will get removed on creation
+            ("/file", ".lmd", "/file.lmd"),
+        ]
+        for part_a, part_b, expected in cases:
+            result = utils.URLPath(part_a) + part_b
+            self.assertEqual(str(result), expected)

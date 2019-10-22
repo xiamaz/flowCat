@@ -181,6 +181,10 @@ class SOMDataset:
         return self.data[value]
 
 
+def default_getter(sample, tube):
+    return sample.get_tube(tube)
+
+
 class SOMSequence(keras.utils.Sequence):
 
     def __init__(
@@ -188,7 +192,7 @@ class SOMSequence(keras.utils.Sequence):
             dataset: SOMDataset,
             binarizer,
             tube: List[str],
-            get_array_fun,
+            get_array_fun=default_getter,
             batch_size: int = 32,
             pad_width: int = 0):
         self.dataset = dataset

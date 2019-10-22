@@ -49,16 +49,16 @@ class SOMDatasetTestCase(shared.FlowcatTestCase):
         )
 
         with self.subTest("groups_counts"):
-            self.assertEqual(dataset.group_counts, {"a": 4, "b": 4})
+            self.assertEqual(dataset.group_count, {"a": 4, "b": 4})
 
         with self.subTest("splitting"):
-            ds_a, ds_b = dataset.split(0.75, stratified=True)
-            self.assertEqual(ds_a.group_counts, {"a": 3, "b": 3})
-            self.assertEqual(ds_b.group_counts, {"a": 1, "b": 1})
+            ds_a, ds_b = dataset.create_split(0.75, stratify=True)
+            self.assertEqual(ds_a.group_count, {"a": 3, "b": 3})
+            self.assertEqual(ds_b.group_count, {"a": 1, "b": 1})
 
         with self.subTest("balance"):
             ds_bal = dataset.balance(10)
-            self.assertEqual(ds_bal.group_counts, {"a": 10, "b": 10})
+            self.assertEqual(ds_bal.group_count, {"a": 10, "b": 10})
 
     def test_simple_sequence(self):
         dataset = create_som_dataset(
