@@ -27,7 +27,39 @@ def scale_weights_to_colors(weights):
     return scaled
 
 
-def plot_som_grid(somdata, destpath, channels=None):
+def plot_color_grid(griddata, scale=True):
+    """Plot array with 3 color channels as RGB values."""
+    if scale:
+        griddata = scale_weights_to_colors(griddata)
+
+    fig = Figure()
+    axes = fig.add_subplot(111)
+    axes.imshow(griddata, interpolation="nearest")
+    axes.set_axis_off()
+
+    # Saving the figure
+    FigureCanvas(fig)
+    fig.tight_layout()
+    return fig
+
+
+def plot_color_grid(griddata, scale=True):
+    """Plot array with 3 color channels as RGB values."""
+    if scale:
+        griddata = scale_weights_to_colors(griddata)
+
+    fig = Figure()
+    axes = fig.add_subplot(111)
+    axes.imshow(griddata, interpolation="nearest")
+    axes.set_axis_off()
+
+    # Saving the figure
+    FigureCanvas(fig)
+    fig.tight_layout()
+    return fig
+
+
+def plot_som_grid(somdata, channels=None):
     """Plot a single som object with same visuals as tf.summary.image.
     """
     imgdata = somdata.data
@@ -38,17 +70,4 @@ def plot_som_grid(somdata, destpath, channels=None):
         imgdata[c].values if c is not None else np.zeros(imgdata.shape[0])
         for c in channels
     ], axis=1)
-    scaled = scale_weights_to_colors(arr)
-
-    scaled = np.reshape(scaled, (32, 32, 3))
-
-    fig = Figure()
-    axes = fig.add_subplot(111)
-    axes.imshow(scaled, interpolation="nearest")
-    axes.set_axis_off()
-    axes.set_title("/".join(map(str, channels)))
-
-    # Saving the figure
-    FigureCanvas(fig)
-    fig.tight_layout()
-    fig.savefig(str(destpath))
+    return plot_color_grid(arr, scale=True)

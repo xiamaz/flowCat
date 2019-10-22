@@ -1,13 +1,30 @@
 """Example for the generation of saliency plots"""
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
 import tensorflow as tf
 import keras
 import vis.utils as vu
-import tensorflow.keras.utils as ku
 from vis.visualization import visualize_saliency
 
+import matplotlib as mpl
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+
 from flowcat import utils, io_functions, som_dataset
+from flowcat import mappings
+from flowcat.plots import som as plt_som
+
+
+def calculate_bmu_indexes():
+    mapdata = tf.placeholder(tf.float32, shape=(None, None), name="som")
+    fcsdata = tf.placeholder(tf.float32, shape=(None, None), name="fcs")
+    squared_diffs = tf.pow(tf.subtract(
+        tf.expand_dims(mapdata, axis=0),
+        tf.expand_dims(fcsdata, axis=1)), 2)
+    diffs = tf.reduce_sum(squared_diffs, 2)
+    bmu = tf.argmin(diffs, axis=1)
+    return bmu
 
 
 class SaliencySOMClassifier:
@@ -81,41 +98,99 @@ class SaliencySOMClassifier:
         xdata, _ = som_sequence.get_batch_by_label(case.id)
         input_indices = [*range(len(xdata))]
         gradients = visualize_saliency(
-                self.model,
-                self.layer_idx,
-                self.config["groups"].index(group),
-                seed_input=xdata,
-                input_indices=input_indices,
-                maximization=maximization
+            self.model,
+            self.layer_idx,
+            self.config["groups"].index(group),
+            seed_input=xdata,
+            input_indices=input_indices,
+            maximization=maximization
         )
         return gradients
 
 
-def add_correct_magnitude(data):
-    newdata = data.copy()
-    valcols = [c for c in data.columns if c != "correct"]
-    selval = np.vectorize(lambda i: valcols[i])
-    newdata["largest"] = data[valcols].max(axis=1)
-    newdata["pred"] = selval(data[valcols].values.argmax(axis=1))
-    return newdata
-
-def add_infiltration(data, cases):
-    labels = list(data.index)
-    found = []
-    for case in cases:
-        if case.id in labels:
-            found.append(case)
-    found.sort(key=lambda c: labels.index(c.id))
-    infiltrations = [c.infiltration for c in found]
-    data["infiltration"] = infiltrations
-    return data
+def get_channel_data(model, array, tube, channel=None) -> "array":
+    channel_info = model.config["tubes"]
+    tube_index = list(channel_info.keys()).index(tube)
+    if channel:
+        channel_index = channel_info[tube]["channels"].index(channel)
+        return array[tube_index][..., channel_index]
+    return array[tube_index]
 
 
-def modify_groups(data, mapping):
-    """Change the cohort composition according to the given
-    cohort composition."""
-    data["group"] = data["group"].apply(lambda g: mapping.get(g, g))
-    return data
+def plot_saliency_som_map(model, somdata, gradient, tube, channels):
+    """Plot saliency and color channels as plots."""
+    rgb = np.stack([
+        get_channel_data(model, somdata, tube, channel)
+        for channel in channels
+    ], axis=-1)
+    grad_max = np.max(get_channel_data(model, gradient, tube), axis=-1)
+
+    fig = Figure()
+    grid = fig.add_gridspec(3, 3, height_ratios=[1, 1, 0.1])
+    ax_main = fig.add_subplot(grid[:2, :2])
+    ax_main.imshow(plt_som.scale_weights_to_colors(rgb), interpolation="nearest")
+    ax_main.set_axis_off()
+    ax_main.imshow(grad_max, interpolation="nearest", alpha=0.60, cmap="gray")
+    ax_main.set_title("Combined")
+    patches = [
+        mpl.patches.Patch(color=color, label=channel)
+        for channel, color in zip(channels, ("red", "green", "blue"))
+    ]
+    ax_rgb = fig.add_subplot(grid[0, 2])
+    ax_rgb.imshow(plt_som.scale_weights_to_colors(rgb), interpolation="nearest")
+    ax_rgb.set_axis_off()
+    ax_rgb.set_title("Channels")
+    ax_mask = fig.add_subplot(grid[1, 2])
+    ax_mask.imshow(grad_max, interpolation="nearest", cmap="gray")
+    ax_mask.set_axis_off()
+    ax_mask.set_title("Saliency")
+    ax_legend = fig.add_subplot(grid[2, :])
+    ax_legend.legend(handles=patches, framealpha=0.0, ncol=3, loc="center")
+    ax_legend.set_axis_off()
+    FigureCanvas(fig)
+    fig.tight_layout()
+    return fig
+
+
+def annotate_fcs_data(model, bmu_calc, session, case, tube, somdata, gradient):
+    channels = model.config["tubes"][tube]["channels"]
+    fcssample = case.get_tube(tube, kind="fcs")
+    fcsdata = fcssample.get_data().align(channels)
+    fcsdata = MinMaxScaler().fit_transform(fcsdata.data)
+    tube_index = list(model.config["tubes"].keys()).index(tube)
+    somdata = somdata[tube_index].reshape((-1, len(channels)))
+    mapping = session.run(bmu_calc, feed_dict={"fcs:0": fcsdata, "som:0": somdata})
+    gradient_values = gradient[tube_index].reshape((-1, len(channels)))
+    fcs_gradient = gradient_values[mapping, :]
+    return channels, fcsdata, fcs_gradient
+
+
+def plot_saliency_scatterplot(model, bmu_calc, session, case, tube, xdata, gradients, norm=None, all_maximum=True):
+    channels, fcs, grads = annotate_fcs_data(model, bmu_calc, session, case, tube, xdata, gradients)
+
+    t1_view = mappings.PLOT_2D_VIEWS[tube]
+    view_num = len(t1_view)
+    cols = 4
+    rows = int(np.ceil(view_num / cols))
+    width = 4
+    height = 4
+
+    fig = Figure(figsize=(width * cols, height * rows))
+    axes = fig.subplots(nrows=rows, ncols=cols)
+    for ax, (chx, chy) in zip(axes.flatten(), t1_view):
+        chx_index = channels.index(chx)
+        chy_index = channels.index(chy)
+        # ch_grads = np.max(grads[:, [chx_index, chy_index]], axis=-1)
+        ch_grads = np.max(grads, axis=-1)
+        ax.scatter(fcs[:, chx_index], fcs[:, chy_index], marker=".", c=ch_grads, s=1, cmap="Greys", norm=norm)
+        ax.set_xlabel(chx)
+        ax.set_ylabel(chy)
+
+    for ax in axes.flatten()[view_num:]:
+        ax.set_axis_off()
+    FigureCanvas(fig)
+    fig.tight_layout()
+    return fig
 
 
 def main(data: utils.URLPath, meta: utils.URLPath, reference: utils.URLPath, model: utils.URLPath):
@@ -125,11 +200,72 @@ def main(data: utils.URLPath, meta: utils.URLPath, reference: utils.URLPath, mod
         "output/som-fix-test/soms-test/som_r4_1",
         "output/0-final/classifier-minmax-new",
     ])
+    sommodel = utils.URLPath("output/som-fix-test/unjoined-ref")
+    sommodel = io_functions.load_casesom(sommodel)
+
+    output = utils.URLPath("output/0-final/model-analysis/saliency")
+    output.mkdir()
     dataset = io_functions.load_case_collection(data, meta)
     soms = som_dataset.SOMDataset.from_path(soms)
     model = SaliencySOMClassifier.load(model)
     val_dataset = model.get_validation_data(dataset)
     val_seq = model.create_sequence(soms)
+
+    selected_labels = [
+        "c3a6098bd5216c7d1f958396dd31bd6ef1646c18",
+        "df726c162ed728c2886107e665ad931e5bf0baae",
+        "3eb03bea6651c302ac013f187b288ee990889b29",
+        "e539b3ec66b1c9d7a0aae1fbd37c19c7ac86a18c",
+        "762a2a19d1913383f41ead7b5ef74a8133d67847",
+        "bbfafb3d9053e212279aaada5faf23eddf4a5926",
+        "9503bfad60524615a06613cfbffa3861fb66ede3",
+    ]
+    sel_dataset = dataset.filter(labels=selected_labels)
+
+    # annotate each fcs point with saliency info
+    session = tf.Session()
+    bmu_calc = calculate_bmu_indexes()
+
+    normalize = mpl.colors.Normalize(vmin=0, vmax=1)
+
+    case = sel_dataset[0]
+    for case in sel_dataset:
+        case_output = output / f"{case.id}_g{case.group}"
+        case_output.mkdir()
+        print("Plotting", case)
+
+        # plot som and saliency activations
+        result = model.calculate_saliency(val_seq, case, case.group, maximization=False)
+
+        xdata, _ = val_seq.get_batch_by_label([case.id])
+        xdata = [x[0, ...] for x in xdata]
+
+        for tube in ("1", "2", "3"):
+            fig = plot_saliency_som_map(model, xdata, result, tube, ("CD45-KrOr", "SS INT LIN", "CD19-APCA750"))
+            fig.savefig(str(case_output / f"t{tube}_overlay.png"))
+
+            fig = plot_saliency_scatterplot(model, bmu_calc, session, case, tube, xdata, result, norm=normalize)
+            fig.savefig(str(case_output / f"t{tube}_scatter_saliency.png"))
+
+    for case in sel_dataset:
+        case_output = output / f"maxall_{case.id}_g{case.group}"
+        case_output.mkdir()
+        print("Plotting", case)
+
+        # plot som and saliency activations
+        result = model.calculate_saliency(val_seq, case, case.group, maximization=False)
+        for r in result:
+            print("Max", np.max(r))
+
+        xdata, _ = val_seq.get_batch_by_label([case.id])
+        xdata = [x[0, ...] for x in xdata]
+
+        for tube in ("1", "2", "3"):
+            fig = plot_saliency_som_map(model, xdata, result, tube, ("CD45-KrOr", "SS INT LIN", "CD19-APCA750"))
+            fig.savefig(str(case_output / f"t{tube}_overlay.png"))
+
+            fig = plot_saliency_scatterplot(model, bmu_calc, session, case, tube, xdata, result, norm=normalize)
+            fig.savefig(str(case_output / f"t{tube}_scatter_saliency.png"))
 
     # case_som = soms.get_labels([case.id]).iloc[0]
     hcls = val_dataset.filter(groups=["HCL"])
@@ -153,86 +289,6 @@ def main(data: utils.URLPath, meta: utils.URLPath, reference: utils.URLPath, mod
             print("Max", tube, marker, np.mean(max_vals[tube][marker]))
             print("Mean", tube, marker, np.mean(mean_vals[tube][marker]))
             max_markers[tube].append((marker, np.mean(max_vals[tube][marker])))
-
-    for tube in model.config["tubes"]:
-        print("Tube", tube)
-        print("\n".join(": ".join((t[0], str(t[1]))) for t in sorted(max_markers[tube], key=lambda t: t[1], reverse=True)))
-
-
-    c_model = MLLDATA / "mll-sommaps/models/relunet_samplescaled_sommap_6class/model_0.h5"
-    c_labels = MLLDATA / "mll-sommaps/output/relunet_samplescaled_sommap_6class/test_labels.json"
-    c_preds = MLLDATA / "mll-sommaps/models/relunet_samplescaled_sommap_6class/predictions_0.csv"
-    c_config = MLLDATA / "mll-sommaps/output/relunet_samplescaled_sommap_6class/config.json"
-    c_cases = MLLDATA / "mll-flowdata/CLL-9F"
-    c_sommaps = MLLDATA / "mll-sommaps/sample_maps/selected1_toroid_s32"
-    c_misclass = MLLDATA / "mll-sommaps/misclassifications/"
-    c_tube = [1, 2]
-
-    # load datasets
-    somdataset = sd.SOMDataset.from_path(c_sommaps)
-    cases = cc.CaseCollection.from_path(c_cases, how="case_info.json")
-
-    # filter datasets
-    test_labels = flowutils.load_json(c_labels)
-
-    filtered_cases = cases.filter(labels=test_labels)
-    somdataset.data[1] = somdataset.data[1].loc[test_labels, :]
-
-    # get mapping
-    config = flowutils.load_json(c_config)
-    groupinfo = mappings.GROUP_MAPS[config["c_groupmap"]]
-
-    dataset = cd.CombinedDataset(
-        filtered_cases, {dd.Dataset.from_str('SOM'): somdataset, dd.Dataset.from_str('FCS'): filtered_cases}, group_names = groupinfo['groups'])
-
-    # modify mapping
-    dataset.set_mapping(groupinfo)
-
-    xoutputs = [loaders.loader_builder(
-        loaders.Map2DLoader.create_inferred, tube=1,
-        sel_count="counts",
-        pad_width=1,
-    ),
-        loaders.loader_builder(
-        loaders.Map2DLoader.create_inferred, tube=2,
-        sel_count="counts",
-        pad_width=1,
-    )]
-
-    dataset = loaders.DatasetSequence.from_data(
-        dataset, xoutputs, batch_size=1, draw_method="sequential")
-
-    predictions = pd.read_csv(c_preds, index_col=0)
-
-    predictions = add_correct_magnitude(predictions)
-    predictions = add_infiltration(predictions, cases)
-
-    misclass_labels = ['507777582649cbed8dfb3fe552a6f34f8b6c28e3']
-
-    for label in misclass_labels:
-        label_path = pathlib.Path(f"{c_misclass}/{label}")
-        if not label_path.exists():
-            label_path.mkdir()
-
-        case = cases.get_label(label)
-
-        #get the actual and the predicited class
-        corr_group = predictions.loc[case.id, "correct"]
-        pred_group = predictions.loc[case.id, "pred"]
-        classes = [corr_group,pred_group]
-
-        gradients = plotting.calc_saliency(
-            dataset, case, c_model, classes = classes)
-
-        for tube in c_tube:
-
-            heatmaps = plotting.draw_saliency_heatmap(case, gradients, classes, tube)
-            for idx,heatmap in enumerate(heatmaps):
-                plotting.save_figure(heatmap,f"{c_misclass}/{label}/{classes[idx]}_tube_{tube}_saliency_heatmap.png")
-
-            scatterplots = plotting.plot_tube(case, tube, gradients[tube - 1], classes=classes, sommappath=c_sommaps)
-            for idx,scatterplot in enumerate(scatterplots):
-                plotting.save_figure(scatterplot,f"{c_misclass}/{label}/{classes[idx]}_tube_{tube}_scatterplots.png")
 
 
 if __name__ == "__main__":
