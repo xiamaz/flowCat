@@ -18,7 +18,7 @@ class FCSSomTestCase(unittest.TestCase):
 
     def test_basic_train(self):
         model = fcssom.FCSSom(
-            (3, 3, 2),
+            (2, 2, 2),
             seed=SEED,
             markers=MARKERS,
         )
@@ -33,15 +33,8 @@ class FCSSomTestCase(unittest.TestCase):
         )
 
         expected = np.array([
-            [[0.8140727, 0.23507498],
-             [0.55659986, 0.20142278],
-             [0.2574054, 0.1715866 ]],
-            [[0.7871901, 0.53189766],
-             [0.4951395, 0.48251832],
-             [0.19067009, 0.4425945 ]],
-            [[0.7575845, 0.8054883 ],
-             [0.45718592, 0.7829037 ],
-             [0.19094288, 0.75963354]],
+            [[0.29068232, 0.3177734], [0.6773688, 0.29500887]],
+            [[0.3204862, 0.7031209], [0.69967717, 0.672693]],
         ])
         model.train([traindata])
         result = model.transform(testdata)
