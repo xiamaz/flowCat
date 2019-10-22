@@ -34,7 +34,7 @@ class WeightedCategoricalCrossentropy:
         assert(cost_mat.shape[0] == cost_mat.shape[1])
         self.cost_mat = K.cast_to_floatx(cost_mat)
 
-    def __call__(self, y_true, y_pred, sample_weight):
+    def __call__(self, y_true, y_pred, sample_weight=None):
         cost_weight = get_sample_weights(y_true, y_pred, self.cost_mat)
         # cost_weight = K.print_tensor(cost_weight)
         return categorical_crossentropy(

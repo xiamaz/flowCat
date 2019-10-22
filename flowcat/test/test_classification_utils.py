@@ -49,14 +49,13 @@ class ClassificationTestCase(shared.FlowcatTestCase):
             [1, 1, 1],
         ])
         wcc = classification_utils.WeightedCategoricalCrossentropy(cost_mat)
-        cc = classification_utils.CategoricalCrossentropy()
         y_true_mat = np.array([[1, 0, 0]])
         y_pred_mat = np.array([[0, 1, 0]])
         with tf.Session() as sess:
             y_true = tf.constant(y_true_mat, dtype=tf.float32)
             y_pred = tf.constant(y_pred_mat, dtype=tf.float32)
             res = wcc(y_true, y_pred)
-            exp = cc(y_true, y_pred)
+            exp = classification_utils.categorical_crossentropy(y_true, y_pred)
             res_val, exp_val = sess.run([res, exp])
             self.assertEqual(res_val, exp_val * 2)
 
