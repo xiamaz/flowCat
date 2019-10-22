@@ -28,7 +28,7 @@ class TFSomTestCase(unittest.TestCase):
         model.train(data, mask)
 
         expected = np.array([
-            51, 93, 90, 70, 63, 38, 62, 60, 26, 32
+            69, 49, 21, 28, 59, 35, 46, 84, 40, 13
         ])
 
         newdata = np.random.rand(10, 4)

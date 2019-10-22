@@ -7,24 +7,6 @@ from numpy.testing import assert_array_equal
 from flowcat.dataset import fcs
 
 
-def create_fcs(data, columns, meta=None) -> fcs.FCSData:
-    """Create fcs data from literal information."""
-    if meta:
-        meta = create_fcs_meta(meta)
-    return fcs.FCSData(data, columns=columns, meta=meta)
-
-
-def create_fcs_meta(meta_dict: dict) -> dict:
-    """Create dict of namedtuples."""
-    return {
-        name: fcs.ChannelMeta(
-            pd.Interval(*interval),
-            exists
-        )
-        for name, (interval, exists) in meta_dict.items()
-    }
-
-
 class TestFCS(unittest.TestCase):
 
     def test_simple(self):
