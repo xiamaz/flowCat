@@ -21,10 +21,12 @@ setuptools.setup(
     ],
     install_requires=[
         "keras==2.2.5",
-        "argmagic==0.0.8",
+        "argmagic==0.0.9",
         "tensorflow==1.12",
         "dataslots",
         "scikit-learn",
+        "pydot",
+        "seaborn",
         "scipy",
         "matplotlib==3.1.0",
         "numpy==1.16.5",

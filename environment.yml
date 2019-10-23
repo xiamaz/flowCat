@@ -16,15 +16,7 @@ dependencies:
   - scikit-learn
   - scipy
   - seaborn
-  - umap-learn=0.3.10
   - tensorflow=1.12
   - tensorflow-gpu=1.12
-  - pip:
-    - git+https://github.com/xiamaz/fcsparser.git
-    - git+https://github.com/jakob-he/keras-vis.git@multiinput
-    - keras==2.2.5
-    - neovim
-    - argmagic==0.0.8
-    - dataslots
 prefix: /usr/local/miniconda3/envs/flowcat
 
