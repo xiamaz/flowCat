@@ -12,6 +12,9 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     packages=["flowcat"],
+    entry_points={
+        'console_scripts': ['flowcat=flowcat.cmdline:main'],
+    },
     python_requires=">=3.6",
     classifiers=[
         "Programming Language :: Python :: 3",

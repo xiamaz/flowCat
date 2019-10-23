@@ -248,5 +248,7 @@ def save_case_collection_with_data(cases, destination: URLPath):
 
 def load_case_collection(data_path: URLPath, meta_path: URLPath):
     cases = load_json(meta_path)
+    if not isinstance(cases, case_dataset.CaseCollection):
+        raise TypeError("Loaded json does not contain valid case collection.")
     cases.set_data_path(data_path)
     return cases
