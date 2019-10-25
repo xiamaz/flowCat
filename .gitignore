@@ -18,3 +18,6 @@ tags*
 /tensorboard
 /plots_figures/*.json
 /plots_figures/*.png
+
+.eggs
+*.egg-info
