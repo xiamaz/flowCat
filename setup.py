@@ -24,7 +24,7 @@ setuptools.setup(
     ],
     install_requires=[
         "keras==2.2.5",
-        "argmagic==0.0.9",
+        "argmagic>=0.0.10",
         "tensorflow==1.12",
         "dataslots",
         "scikit-learn",
