@@ -21,6 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # =================================================================================
+import json
 import logging
 
 import numpy as np
@@ -293,8 +294,21 @@ class TFSom:
 
         if self.tensorboard:
             # save model configuration
+            config = {
+                "dims": dims,
+                "max_epochs": max_epochs,
+                "batch_size": batch_size,
+                "buffer_size": buffer_size,
+                "initial_radius": initial_radius,
+                "end_radius": end_radius,
+                "radius_cooling": radius_cooling,
+                "node_distance": node_distance,
+                "map_type": map_type,
+                "std_coeff": std_coeff,
+                "seed": seed
+            }
             with (self._tensorboard_dir / "config.json").open("w") as f:
-                f.writelines(str(config))
+                json.dump(config, f)
 
         self._summary_list = []
         self._epoch_start_init_vars = []

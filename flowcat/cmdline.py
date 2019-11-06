@@ -1,9 +1,22 @@
 import json
+import logging
 from collections import defaultdict
 
 from flowcat import utils, io_functions, sommodels
 from flowcat.dataset import case_dataset
 from argmagic import argmagic
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+def setup_logging():
+    handlers = [
+        utils.create_handler(logging.StreamHandler(), level=logging.INFO)
+    ]
+
+    utils.add_logger("flowcat", handlers, level=logging.DEBUG)
+    utils.add_logger(LOGGER, handlers, level=logging.DEBUG)
 
 
 def filter(
@@ -42,6 +55,8 @@ def reference(
         trainargs: json.loads = None,
         selected_markers: json.loads = None):
     """Train new reference SOM from random using data filtered by labels."""
+    setup_logging()
+
     dataset = io_functions.load_case_collection(data, meta)
     labels = io_functions.load_json(labels)
     dataset = dataset.filter(labels=labels)
