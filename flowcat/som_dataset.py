@@ -53,6 +53,12 @@ def load_som_cases(row, path, tubes):
     return SOMCase(soms=soms, group=row["group"], label=row["label"])
 
 
+def from_case_dataset(path):
+    dataset = io_functions.load_case_collection(path, path + ".json.gz")
+    metadata = pd.DataFrame([{"label": c.id, "group": c.group} for c in dataset])
+    return metadata
+
+
 @with_slots
 @dataclass
 class SOMDataset:
@@ -64,7 +70,10 @@ class SOMDataset:
     @classmethod
     def from_path(cls, path):
         config = io_functions.load_json(path + "_config.json")
-        metadata = io_functions.load_csv(path + ".csv")
+        try:
+            metadata = io_functions.load_csv(path + ".csv")
+        except FileNotFoundError:
+            metadata = from_case_dataset(path)
         tubes = list(config.keys())
         som_cases = metadata.apply(load_som_cases, axis=1, args=(path, tubes))
         return cls(data=som_cases, config=config)
@@ -84,8 +93,12 @@ class SOMDataset:
         newgroup = self.data[self.data.apply(lambda c: c.group in groups)]
         return self.__class__(newgroup, config=self.config)
 
-    def filter(self, groups=None) -> "SOMDataset":
-        return self.filter_groups(groups=groups)
+    def filter(self, groups=None, labels=None) -> "SOMDataset":
+        def search_lambda(c):
+            return (not groups or (c.group in groups)) and (not labels or (c.label in labels))
+
+        newdata = self.data[self.data.apply(search_lambda)]
+        return self.__class__(newdata, config=self.config)
 
     def get_labels(self, labels: List[str]) -> List["SOMCase"]:
         return self.data[self.data.apply(lambda c: c.label in labels)]
