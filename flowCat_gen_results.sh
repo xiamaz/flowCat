@@ -6,6 +6,9 @@ META=/data/flowcat-data/mll-flowdata/decCLL-9F.2019-10-29.meta/train.json.gz
 META_TEST="/data/flowcat-data/mll-flowdata/decCLL-9F.2019-10-29.meta/test.json.gz"
 LABELS=/data/flowcat-data/mll-flowdata/decCLL-9F.2019-10-29.meta/references.json
 
+DATA_UNUSED=/data/flowcat-data/paper-cytometry/unused-data/data
+META_UNUSED=/data/flowcat-data/paper-cytometry/unused-data/meta.json.gz
+
 OUTPUT=/data/flowcat-data/paper-cytometry
 # I. Create reference SOM
 REF_OUTPUT="$OUTPUT/reference"
@@ -36,7 +39,14 @@ SOM_OUTPUT_TEST="$OUTPUT/som/test"
 if [ ! -d $SOM_OUTPUT_TEST ]; then
     flowcat transform --data "$DATA" --meta "$META_TEST" --reference "$REF_OUTPUT" --output $SOM_OUTPUT_TEST
 else
-    echo "Transformed SOM found in $SOM_OUTPUT_TEST. Skipping..."
+    echo "Transformed test SOM found in $SOM_OUTPUT_TEST. Skipping..."
+fi
+
+SOM_OUTPUT_UNUSED="$OUTPUT/som/unused"
+if [ ! -d $SOM_OUTPUT_UNUSED ]; then
+    flowcat transform --data "$DATA_UNUSED" --meta "$META_UNUSED" --reference "$REF_OUTPUT" --output $SOM_OUTPUT_UNUSED
+else
+    echo "Transformed untrained SOM found in $SOM_OUTPUT_UNUSED. Skipping..."
 fi
 
 # III. Train a model on the training data with additional validation
