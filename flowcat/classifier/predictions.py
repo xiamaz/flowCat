@@ -27,8 +27,8 @@ def generate_metrics(true_labels, pred_labels, groups, output):
     """Generate numeric metrics."""
     metrics_results = {
         "balanced": metrics.balanced_accuracy_score(true_labels, pred_labels),
-        "f1_micro": metrics.f1_score(true_labels, pred_labels, average="micro"),
-        "f1_macro": metrics.f1_score(true_labels, pred_labels, average="macro"),
+        "f1_weighted": metrics.f1_score(true_labels, pred_labels, average="weighted"),
+        "f1_avg": metrics.f1_score(true_labels, pred_labels, average="macro"),
         "mcc": metrics.matthews_corrcoef(true_labels, pred_labels),
     }
     print(metrics_results)
