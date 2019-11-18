@@ -5,7 +5,8 @@ from .predict import predict
 from .filter import filter
 from .reference import reference
 from .transform import transform
+from .dataset import dataset
 
 
 def main():
-    argmagic([predict, train, filter, reference, transform])
+    argmagic([predict, train, filter, reference, transform, dataset])
