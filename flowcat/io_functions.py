@@ -232,14 +232,26 @@ def save_case_collection(cases, destination: URLPath):
     save_json(cases, destination)
 
 
+def loading_bar(iterable, label="Transforming"):
+    total = len(iterable)
+    total_width = len(str(total))
+    fmtstr = f"{label}: [{{: >{total_width}}}/{total}]\r"
+    for i, item in enumerate(iterable):
+        print(fmtstr.format(i + 1), end="", flush=True)
+        yield item
+    print("")
+
+
 def save_case_collection_with_data(cases, destination: URLPath):
     sample_destination = destination / "data"
     cases = cases.copy()
-    for case_obj in cases:
+    for case_obj in loading_bar(cases):
         for case_sample in case_obj.samples:
             sdest = sample_destination / case_sample.path
             sdest.parent.mkdir()
-            shutil.copy(str(case_sample.complete_path), sdest)
+            sorig = str(case_sample.complete_path)
+            if str(sorig) != str(sdest):
+                shutil.copy(sorig, sdest)
             case_sample.dataset_path = sample_destination
 
     save_case_collection(cases, destination=destination / "meta.json.gz")
