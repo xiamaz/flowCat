@@ -97,7 +97,7 @@ class SOMClassifier:
             "validation": io_functions.load_json(path / "ids_validate.json"),
             "train": io_functions.load_json(path / "ids_train.json"),
         }
-        return cls(binarizer, model, config, data_ids=data_ids, modeldir=path)
+        return cls(config, binarizer=binarizer, model=model, data_ids=data_ids, modeldir=path)
 
     def create_model(self, fun, kwargs=None, compile=True):
         """Create a model using the given model function."""
@@ -163,6 +163,10 @@ class SOMClassifier:
         self.training_history.append(
             ({"epochs": epochs, "class_weight": class_weight}, history)
         )
+        self.data_ids = {
+            "train": train.dataset.labels,
+            "validation": validation.dataset.labels if validation else [],
+        }
         return history
 
     def predict(self, data):
