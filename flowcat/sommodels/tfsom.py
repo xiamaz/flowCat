@@ -398,29 +398,16 @@ class TFSom:
         else:
             self._summary_list.append(summary)
 
-    def _create_input(self):
-        """Create placeholder inputs for a dataset using an reinitializable iterator."""
-        data_placeholder = tf.placeholder(tf.float32)
-        mask_placeholder = tf.placeholder(tf.float32)
-
-        dataset = tf.data.Dataset.from_tensor_slices((data_placeholder, mask_placeholder))
-        dataset = dataset.batch(self._batch_size)
-        dataset = dataset.shuffle(self._buffer_size, seed=None, reshuffle_each_iteration=True)
-
-        iterator = dataset.make_initializable_iterator()
-
-        return data_placeholder, mask_placeholder, iterator
-
     def _initialize_tf_graph(self):
         """Initialize the SOM on the TensorFlow graph"""
-        data, mask, iterator = self._create_input()
-        self._epoch_start_init_vars.append(iterator)
+        data = tf.placeholder(tf.float32)
+        mask = tf.placeholder(tf.float32)
 
         with tf.variable_scope(tf.get_variable_scope()):
             (
                 numerators, denominators,
                 self._epoch, self._weights, _, summaries
-            ) = self._tower_som(iterator, self._initialization)
+            ) = self._tower_som(data, mask, self._initialization)
 
             sum_numerator = tf.get_variable(
                 "numerator",
@@ -465,7 +452,7 @@ class TFSom:
 
         return data, mask
 
-    def _tower_som(self, iterator, initialization):
+    def _tower_som(self, input_tensor, mask_tensor, initialization):
         """Build a single SOM tower on the TensorFlow graph
         Args:
             input_tensor: Input event data to be mapped to the SOM should have len(channel) width
@@ -484,9 +471,6 @@ class TFSom:
                 shape=shape,
                 initializer=initializer
             )
-
-        with tf.name_scope('Input'):
-            input_tensor, mask_tensor = iterator.get_next()
 
         # Feed epoch via feed dict, makes everything much simpler
         with tf.name_scope('Epoch'):
@@ -606,14 +590,16 @@ class TFSom:
         self._sess.run(
             self._epoch_start_init,
             feed_dict={
-                self._data_placeholder: data,
-                self._mask_placeholder: mask,
                 self._epoch: epoch
             }
         )
         result = self._sess.run(
             tensors,
-            feed_dict={self._epoch: epoch}
+            feed_dict={
+                self._epoch: epoch,
+                self._data_placeholder: data,
+                self._mask_placeholder: mask,
+            }
         )
         return result
 
@@ -634,7 +620,10 @@ class TFSom:
             data: Numpy array.
             set_weights: Whether trained weights will be kept after training completes.
         """
-        assert data.shape[0] <= self._buffer_size, (
+        data = data.copy()
+        mask = mask.copy()
+        data_length = data.shape[0]
+        assert data_length <= self._buffer_size, (
             f"Data size {data.shape[0]} > Buffer size {self._buffer_size}. "
             "Samples will be lost on reshuffling. "
             "Increase buffer size to number of samples.")
@@ -649,6 +638,8 @@ class TFSom:
         # reset weights to given values after running
         self._sess.run(self._reset_weights_op)
 
+        indexes = np.arange(0, data_length)
+
         global_step = 0
         for epoch in range(self._max_epochs):
             LOGGER.info("Epoch: %d/%d", epoch + 1, self._max_epochs)
@@ -661,31 +652,37 @@ class TFSom:
             self._sess.run(
                 self._epoch_start_init,
                 feed_dict={
-                    self._data_placeholder: data,
-                    self._mask_placeholder: mask,
                     self._epoch: epoch
                 }
             )
-            while True:
-                try:
-                    if self.tensorboard:
-                        summary, _, = self._sess.run(
-                            [merged_summaries, self._batch_op],
-                            options=run_options, run_metadata=run_metadata,
-                            feed_dict={self._epoch: epoch}
-                        )
-                        self._writer.add_run_metadata(run_metadata, f"step_{global_step}")
-                        self._writer.add_summary(summary, global_step)
-                    else:
-                        self._sess.run(
-                            self._batch_op,
-                            feed_dict={self._epoch: epoch}
-                        )
-                    LOGGER.info("Global step: %d", global_step)
-                    global_step += 1
-
-                except tf.errors.OutOfRangeError:
-                    break
+            np.random.shuffle(indexes)
+            data = data[indexes]
+            mask = mask[indexes]
+            for start in range(0, data_length, self._batch_size):
+                stop = start + self._batch_size
+                if self.tensorboard:
+                    summary, _, = self._sess.run(
+                        [merged_summaries, self._batch_op],
+                        options=run_options, run_metadata=run_metadata,
+                        feed_dict={
+                            self._epoch: epoch,
+                            self._data_placeholder: data,
+                            self._mask_placeholder: mask,
+                        }
+                    )
+                    self._writer.add_run_metadata(run_metadata, f"step_{global_step}")
+                    self._writer.add_summary(summary, global_step)
+                else:
+                    self._sess.run(
+                        self._batch_op,
+                        feed_dict={
+                            self._epoch: epoch,
+                            self._data_placeholder: data[start:stop],
+                            self._mask_placeholder: mask[start:stop],
+                        }
+                    )
+                LOGGER.info("Global step: %d", global_step)
+                global_step += 1
 
             # Calculate final weights after all batches have been processed
             self._sess.run(
