@@ -69,7 +69,7 @@ def train(data: utils.URLPath, output: utils.URLPath):
     model = classifier.SOMClassifier(config)
     model.create_model(classifier.create_model_multi_input)
     train, validate = model.create_sequence(train, 32), model.create_sequence(validate, 128)
-    model.train(train, validate, epochs=20, class_weight=None)
+    model.train_generator(train, validate, epochs=20, class_weight=None)
 
     model.save(output)
     model.save_information(output)

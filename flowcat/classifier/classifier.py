@@ -155,7 +155,23 @@ class SOMClassifier:
         )
         return seq
 
-    def train(self, train, validation=None, epochs=20, class_weight=None):
+    def array_from_cases(self, cases):
+        """Transform som data in a single into a format usable for prediction."""
+        xdata = np.array([
+            np.array([
+                som_dataset.pad_array(
+                    case.get_tube(tube, kind="som").get_data().data,
+                    self.config.pad_width)
+                for case in cases
+            ])
+            for tube in self.config.tubes
+        ])
+        xdata = np.expand_dims(xdata, axis=1)
+
+        ydata = self.binarizer.transform([case.group for case in cases])
+        return xdata, ydata
+
+    def train_generator(self, train, validation=None, epochs=20, class_weight=None):
         """Train the current model using the given data."""
         history = self.model.fit_generator(
             generator=train, validation_data=validation,
@@ -170,6 +186,13 @@ class SOMClassifier:
         return history
 
     def predict(self, data):
+        """Predict on a list of cases or som samples."""
+        xdata, _ = self.array_from_cases(data)
+        preds = self.model.predict(xdata)
+        label_preds = [dict(zip(self.config.groups, pred)) for pred in preds]
+        return label_preds
+
+    def predict_generator(self, data: som_dataset.SOMSequence):
         """Predict the given SOM dataset."""
         preds = []
         for pred in self.model.predict_generator(data):

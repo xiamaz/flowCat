@@ -20,6 +20,20 @@ class SOMSaliency(SOMClassifier):
     def get_validation_data(self, dataset: som_dataset.SOMDataset) -> som_dataset.SOMDataset:
         return dataset.filter(labels=self.data_ids["validation"])
 
+    def transform(self, case, group, maximization=False):
+        """Get saliency gradients for the given group for the selected case."""
+        xdata, _ = self.array_from_cases([case])
+        input_indices = [*range(len(xdata))]
+        gradients = visualize_saliency(
+            self.model,
+            self.layer_idx,
+            self.config.groups.index(group),
+            seed_input=xdata,
+            input_indices=input_indices,
+            maximization=maximization
+        )
+        return gradients
+
     def calculate_saliency(self, som_sequence, case, group, maximization=False):
         """Calculates the saliency values / gradients for the case, model and
         each of the classes.

@@ -19,7 +19,7 @@ def predict(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath, la
     model = classifier.SOMClassifier.load(model)
     data_sequence = model.create_sequence(dataset, 128)
 
-    _, labels = model.predict(data_sequence)
+    _, labels = model.predict_generator(data_sequence)
 
     true_labels = data_sequence.true_labels
     for map_name, mapping in [("unmapped", {"groups": model.config.groups, "map": {}}), *mappings.GROUP_MAPS.items()]:

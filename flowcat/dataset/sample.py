@@ -143,8 +143,8 @@ class Sample:
     """Single sample from a certain tube."""
     id: str
     case_id: str
-    date: "date"
     tube: str
+    date: "date" = None
     data: Any = None
     path: utils.URLPath = None
     dataset_path: utils.URLPath = None

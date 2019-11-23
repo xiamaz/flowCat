@@ -37,7 +37,7 @@ def filter_case(
         date: Tuple[Union[str], Union[str]] = None,
         counts: int = None,
         materials: List[str] = None,
-        custom_callback = None,
+        custom_callback=None,
         selected_markers: Dict[int, List[str]] = None,
 ) -> Tuple[bool, str]:
     """
