@@ -1,9 +1,11 @@
 from typing import Iterable, List, Dict, Tuple
 import datetime
 
+import numpy as np
+
 from flowcat import utils
 from flowcat.mappings import Material
-from flowcat.dataset import case, sample
+from flowcat.dataset import case as fc_case, sample as fc_sample
 from flowcat.dataset.som import SOM
 
 from .fcssom import FCSSom
@@ -53,24 +55,25 @@ class CaseSingleSom:
     def weights(self):
         return self.model.weights
 
-    def train(self, data: Iterable[case.Case], *args, **kwargs) -> "CaseSingleSom":
-        tsamples = [c.get_tube(self.tube).get_data() for c in data]
+    def train(self, data: Iterable[fc_sample.FCSSample], *args, **kwargs) -> "CaseSingleSom":
+        tsamples = [c.get_data() for c in data]
         self.model.train(tsamples)
         self.train_labels = [c.id for c in data]
         return self
 
-    def transform(self, data: case.Case, *args, **kwargs) -> sample.SOMSample:
-        fcs_sample = data.get_tube(self.tube)
+    def calculate_nearest_nodes(self, data: fc_sample.FCSSample) -> np.array:
+        return self.model.calculate_nearest_nodes(data.get_data())
 
-        if fcs_sample is None:
+    def transform(self, data: fc_sample.FCSSample, *args, **kwargs) -> fc_sample.SOMSample:
+        if data is None:
             raise CaseSomSampleException(data.id, self.tube, self.materials)
 
-        somdata = self.model.transform(fcs_sample.get_data(), label=data.id, *args, **kwargs)
-        som_id = f"{data.id}_t{self.tube}_{self.run_identifier}"
-        somsample = sample.SOMSample(
+        somdata = self.model.transform(data.get_data(), label=data.id, *args, **kwargs)
+        som_id = f"{data.original_id}_t{self.tube}_{self.run_identifier}"
+        somsample = fc_sample.SOMSample(
             id=som_id,
-            case_id=data.id,
-            original_id=fcs_sample.id,
+            case_id=data.case_id,
+            original_id=data.id,
             date=self.model_time,
             tube=self.tube,
             dims=somdata.dims,
@@ -80,11 +83,11 @@ class CaseSingleSom:
 
     def transform_generator(
             self,
-            data: Iterable[case.Case],
+            data: Iterable[fc_sample.FCSSample],
             *args, **kwargs
-    ) -> Iterable[Tuple[case.Case, sample.SOMSample]]:
+    ) -> Iterable[fc_sample.SOMSample]:
         for casedata in data:
-            yield casedata, self.transform(casedata, *args, **kwargs)
+            yield self.transform(casedata, *args, **kwargs)
 
 
 class CaseSom:
@@ -123,23 +126,29 @@ class CaseSom:
     def tubes(self):
         return list(self.models.keys())
 
-    def train(self, data: Iterable[case.Case], *args, **kwargs) -> "CaseSom":
+    def calculate_nearest_nodes(self, data: fc_case.Case) -> dict:
+        return {
+            tube: model.calculate_nearest_nodes(data.get_data(tube, kind="fcs"))
+            for tube, model in self.models.items()
+        }
+
+    def train(self, data: Iterable[fc_case.Case], *args, **kwargs) -> "CaseSom":
         for tube, model in self.models.items():
             print(f"Training tube {tube}")
-            model.train(data, *args, **kwargs)
+            model.train([d.get_tube(tube) for d in data], *args, **kwargs)
         return self
 
-    def transform(self, data: case.Case, *args, **kwargs) -> case.Case:
+    def transform(self, data: fc_case.Case, *args, **kwargs) -> fc_case.Case:
         samples = []
         for tube, model in self.models.items():
             print(f"Transforming tube {tube}")
-            somsample = model.transform(data, *args, **kwargs)
+            somsample = model.transform(data.get_tube(tube, kind="fcs"), *args, **kwargs)
             samples.append(somsample)
 
         newcase = data.copy(samples=samples)
         return newcase
 
-    def transform_generator(self, data: Iterable[case.Case], **kwargs) -> Iterable[Tuple[case.Case, sample.SOMSample]]:
+    def transform_generator(self, data: Iterable[fc_case.Case], **kwargs) -> Iterable[Tuple[fc_case.Case, fc_sample.SOMSample]]:
         for tube, model in self.models.items():
             for single in data:
-                yield single, model.transform(single, **kwargs)
+                yield single, model.transform(single.get_tube(tube), **kwargs)

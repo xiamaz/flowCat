@@ -5,10 +5,16 @@ and SOM data.
 import numpy as np
 from dataclasses import dataclass
 
+import tensorflow as tf
+
 from flowcat import utils, io_functions
 from flowcat.classifier import SOMClassifier, SOMSaliency
+from flowcat.classifier.saliency import bmu_calculator
 from flowcat.sommodels.casesom import CaseSom
 from flowcat.dataset import case as fc_case, sample as fc_sample
+
+
+BMU_CALC = cmu_calculator(tf.Session())
 
 
 def case_from_dict(case_dict) -> fc_case.Case:
@@ -32,6 +38,13 @@ class FlowCatPrediction:
     case: fc_case.Case
     som: fc_case.Case
     predictions: dict
+
+
+@dataclass
+class SaliencyMapping:
+    som: np.array
+    fcs: np.array
+    tube: str
 
 
 class FlowCat:
@@ -78,5 +91,13 @@ class FlowCat:
         gradients = self.saliency.transform(prediction.som, group=target_group, maximization=True)
 
         # map gradients to fcs by using run till tensor
+        som_dict = []
+        for gradient, (tube, model) in zip(gradients, self.reference.models.items()):
+            somdata = prediction.som.get_tube(tube, kind="som").get_data()
+            fcsdata, _ = prediction.case.get_tube(tube, kind="fcs").get_data()
+            data, mask = model.model.prepare_data(fcsdata)
+            mapped = BMU_CALC(somdata.data, fcsdata.data)
+            fcsmapped = gradient[mapped]
+            som_dict.append(SaliencyMapping(gradient, fcsmapped, tube))
 
-        # return som_annotation and fcs annotation
+        return som_dict

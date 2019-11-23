@@ -603,6 +603,11 @@ class TFSom:
         )
         return result
 
+    def calculate_nearest_nodes(self, data: np.array, mask: np.array):
+        """Calculate the nearest nodes."""
+        mapped, = self.run_till_op("BMU_Indices/map_to_node_index", data, mask, 0)
+        return mapped
+
     def run_till_op(self, op_name: str, data: np.array, mask: np.array, epoch: int):
         operation = self._graph.get_operation_by_name(op_name)
         return self.run_till_tensor(operation.outputs, data, mask, epoch)

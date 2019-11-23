@@ -1,9 +1,29 @@
+import tensorflow as tf
 import keras
 import vis.utils as vu
 from vis.visualization.saliency import visualize_saliency
 
 from flowcat import utils, io_functions, som_dataset
 from .classifier import SOMClassifier
+
+
+def _calculate_bmu_indexes():
+    mapdata = tf.placeholder(tf.float32, shape=(None, None), name="som")
+    fcsdata = tf.placeholder(tf.float32, shape=(None, None), name="fcs")
+    squared_diffs = tf.pow(tf.subtract(
+        tf.expand_dims(mapdata, axis=0),
+        tf.expand_dims(fcsdata, axis=1)), 2)
+    diffs = tf.reduce_sum(squared_diffs, 2)
+    bmu = tf.argmin(diffs, axis=1)
+    return bmu, (mapdata, fcsdata)
+
+
+def bmu_calculator(session):
+    calc, args = _calculate_bmu_indexes()
+
+    def model(mapdata, fcsdata):
+        return session.run(calc, feed_dict={args[0]: mapdata, args[1]: fcsdata})
+    return model
 
 
 class SOMSaliency(SOMClassifier):

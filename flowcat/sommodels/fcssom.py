@@ -198,6 +198,30 @@ class FCSSom:
     def _create_som(self, weights: np.array):
         return SOM(np.reshape(weights, self.dims), markers=self.markers)
 
+    def prepare_data(self, data: FCSData, sample: int = 0, scaler=None):
+        data = data.align(self.markers, name_only=self.marker_name_only, inplace=True)
+        scaler = scaler or self.scaler
+
+        if getattr(scaler, "fcsdata_scaler", False):
+            data = scaler.transform(data)
+            res = data.data
+        else:
+            res = data.data
+            res = scaler.transform(res)
+        mask = data.mask
+
+        if sample > 0:
+            selection = np.random.choice(res.shape[0], sample, replace=False)
+            res = res[selection, :]
+            mask = mask[selection, :]
+
+        return res, mask
+
+    def calculate_nearest_nodes(self, data: FCSData):
+        """Calculate nearest nodes for the given fcsdata."""
+        res, mask = self.prepare_data(data)
+        return self.model.calculate_nearest_nodes(res, mask)
+
     def train(self, data: Iterable[FCSData], sample: int = -1):
         """Input an iterable with FCSData
         Params:
@@ -208,19 +232,7 @@ class FCSSom:
             data = [d.marker_to_name_only() for d in data]
 
         joined = join_fcs_data(data, self.markers)
-
-        if getattr(self.scaler, "fcsdata_scaler", False):
-            joined = self.scaler.fit_transform(joined)
-            arr = joined.data
-        else:
-            arr = joined.data
-            arr = self.scaler.fit_transform(arr)
-
-        mask = joined.mask
-        if sample > 0:
-            selection = np.random.choice(arr.shape[0], sample, replace=False)
-            arr = arr[selection, :]
-            mask = mask[selection, :]
+        arr, mask = self.prepare_data(joined, sample=sample)
 
         self.model.train(arr, mask)
         self.trained = True
@@ -228,22 +240,7 @@ class FCSSom:
 
     def transform(self, data: FCSData, sample: int = -1, label: str = "", scaler=None) -> SOM:
         """Transform input fcs into retrained SOM node weights."""
-        data = data.align(self.markers, name_only=self.marker_name_only, inplace=True)
-
-        scaler = scaler or self.scaler
-
-        if getattr(scaler, "fcsdata_scaler", False):
-            data = scaler.transform(data)
-            res = data.data
-        else:
-            res = data.data
-            res = scaler.transform(res)
-
-        mask = data.mask
-        if sample > 0:
-            selection = np.random.choice(res.shape[0], sample, replace=False)
-            res = res[selection, :]
-            mask = mask[selection, :]
+        res, mask = self.prepare_data(data, sample=sample, scaler=scaler)
 
         weights = self.model.transform(res, mask, label=label)
         somweights = self._create_som(weights)
