@@ -69,7 +69,7 @@ class CaseSingleSom:
             raise CaseSomSampleException(data.id, self.tube, self.materials)
 
         somdata = self.model.transform(data.get_data(), label=data.id, *args, **kwargs)
-        som_id = f"{data.original_id}_t{self.tube}_{self.run_identifier}"
+        som_id = f"{data.case_id}_t{self.tube}_{self.run_identifier}"
         somsample = fc_sample.SOMSample(
             id=som_id,
             case_id=data.case_id,

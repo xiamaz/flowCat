@@ -157,7 +157,7 @@ class SOMClassifier:
 
     def array_from_cases(self, cases):
         """Transform som data in a single into a format usable for prediction."""
-        xdata = np.array([
+        xdata = [
             np.array([
                 som_dataset.pad_array(
                     case.get_tube(tube, kind="som").get_data().data,
@@ -165,8 +165,7 @@ class SOMClassifier:
                 for case in cases
             ])
             for tube in self.config.tubes
-        ])
-        xdata = np.expand_dims(xdata, axis=1)
+        ]
 
         ydata = self.binarizer.transform([case.group for case in cases])
         return xdata, ydata
