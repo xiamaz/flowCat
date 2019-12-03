@@ -63,7 +63,14 @@ fi
 # IV. Test data predictions
 TEST_OUTPUT="$OUTPUT/testset"
 if [ ! -d $TEST_OUTPUT ]; then
-    flowcat predict --data "$SOM_OUTPUT_TEST" --model "$MODEL_OUTPUT" --output "$TEST_OUTPUT"
+    flowcat predict --data "$SOM_OUTPUT_TEST" --model "$MODEL_OUTPUT" --output "$TEST_OUTPUT" --metrics 1
 else
     echo "Testset predictions already found at $TEST_OUTPUT. Skipping..."
+fi
+
+TSNE_OUTPUT="$OUTPUT/tsne"
+if [ ! -d $TSNE_OUTPUT ]; then
+    flowcat predict --data "$SOM_OUTPUT_UNUSED" --model "$MODEL_OUTPUT" --output "$TSNE_OUTPUT" --metrics 0
+else
+    echo "TSNE predictions already found at $TSNE_OUTPUT. Skipping..."
 fi

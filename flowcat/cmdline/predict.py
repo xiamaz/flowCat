@@ -2,7 +2,13 @@ from flowcat import utils, som_dataset, classifier, mappings, io_functions
 from flowcat.classifier import predictions as fc_predictions
 
 
-def predict(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath, labels: utils.URLPath = None):
+def predict(
+        data: utils.URLPath,
+        model: utils.URLPath,
+        output: utils.URLPath,
+        labels: utils.URLPath = None,
+        metrics: bool = True,
+):
     """Generate predictions and plots for a single case.
 
     Args:
@@ -11,6 +17,7 @@ def predict(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath, la
         output: Destination for plotting.
         labels: List of case ids to be filtered for generating predictions.
     """
+    print(f"Loaded cases from {data}")
     dataset = som_dataset.SOMDataset.from_path(data)
     if labels:
         labels = io_functions.load_json(labels)
@@ -19,11 +26,19 @@ def predict(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath, la
     model = classifier.SOMClassifier.load(model)
     data_sequence = model.create_sequence(dataset, 128)
 
-    _, labels = model.predict_generator(data_sequence)
+    values, pred_labels = model.predict_generator(data_sequence)
 
-    true_labels = data_sequence.true_labels
-    for map_name, mapping in [("unmapped", {"groups": model.config.groups, "map": {}}), *mappings.GROUP_MAPS.items()]:
-        print(f"--- MAPPING: {map_name} ---")
-        if len(mapping["groups"]) > len(model.config.groups):
-            continue
-        fc_predictions.generate_all_metrics(true_labels, labels, mapping, output / map_name)
+    pred_json = {
+        id: dict(zip(model.config.groups, value.tolist())) for id, value in zip(dataset.labels, values)
+    }
+
+    io_functions.save_json(pred_json, output / "prediction.json")
+
+    if metrics:
+        true_labels = data_sequence.true_labels
+        map_config = [("unmapped", {"groups": model.config.groups, "map": {}}), *mappings.GROUP_MAPS.items()]
+        for map_name, mapping in map_config:
+            print(f"--- MAPPING: {map_name} ---")
+            if len(mapping["groups"]) > len(model.config.groups):
+                continue
+            fc_predictions.generate_all_metrics(true_labels, pred_labels, mapping, output / map_name)
