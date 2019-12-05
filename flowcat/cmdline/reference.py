@@ -17,9 +17,9 @@ def setup_logging():
 
 def reference(
         data: utils.URLPath,
-        meta: utils.URLPath,
         output: utils.URLPath,
         labels: utils.URLPath,
+        meta: utils.URLPath = None,
         tensorboard: bool = False,
         trainargs: json.loads = None,
         selected_markers: json.loads = None):
