@@ -18,7 +18,7 @@ def setup_logging():
 def reference(
         data: utils.URLPath,
         output: utils.URLPath,
-        labels: utils.URLPath,
+        labels: utils.URLPath = None,
         meta: utils.URLPath = None,
         tensorboard: bool = False,
         trainargs: json.loads = None,
@@ -27,8 +27,12 @@ def reference(
     setup_logging()
 
     dataset = io_functions.load_case_collection(data, meta)
-    labels = io_functions.load_json(labels)
-    dataset = dataset.filter(labels=labels)
+    if labels:
+        labels = io_functions.load_json(labels)
+        print(f"Filtering dataset using {len(labels)} labels")
+        dataset = dataset.filter(labels=labels)
+        if len(dataset) != len(labels):
+            raise RuntimeError("Filtered number of samples does not match number of labels.")
 
     if trainargs is None:
         trainargs = {

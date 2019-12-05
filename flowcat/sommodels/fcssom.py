@@ -198,15 +198,20 @@ class FCSSom:
     def _create_som(self, weights: np.array):
         return SOM(np.reshape(weights, self.dims), markers=self.markers)
 
-    def prepare_data(self, data: FCSData, sample: int = 0, scaler=None):
+    def prepare_data(self, data: FCSData, sample: int = 0, scaler=None, fit_scaler=False):
+        """Prepare FCS data by aligning on markers and transforming using scalers."""
         data = data.align(self.markers, name_only=self.marker_name_only, inplace=True)
         scaler = scaler or self.scaler
 
         if getattr(scaler, "fcsdata_scaler", False):
+            if fit_scaler:
+                scaler = scaler.fit(data)
             data = scaler.transform(data)
             res = data.data
         else:
             res = data.data
+            if fit_scaler:
+                scaler = scaler.fit(res)
             res = scaler.transform(res)
         mask = data.mask
 
@@ -232,7 +237,7 @@ class FCSSom:
             data = [d.marker_to_name_only() for d in data]
 
         joined = join_fcs_data(data, self.markers)
-        arr, mask = self.prepare_data(joined, sample=sample)
+        arr, mask = self.prepare_data(joined, sample=sample, fit_scaler=True)
 
         self.model.train(arr, mask)
         self.trained = True
@@ -240,7 +245,7 @@ class FCSSom:
 
     def transform(self, data: FCSData, sample: int = -1, label: str = "", scaler=None) -> SOM:
         """Transform input fcs into retrained SOM node weights."""
-        res, mask = self.prepare_data(data, sample=sample, scaler=scaler)
+        res, mask = self.prepare_data(data, sample=sample, scaler=scaler, fit_scaler=False)
 
         weights = self.model.transform(res, mask, label=label)
         somweights = self._create_som(weights)
