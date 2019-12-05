@@ -4,9 +4,9 @@ from flowcat import utils, io_functions
 
 def filter(
         data: utils.URLPath,
-        meta: utils.URLPath,
-        output: utils.URLPath,
         filters: json.loads,
+        output: utils.URLPath = None,
+        meta: utils.URLPath = None,
         sample: int = 0,
         move_samples: bool = False,
 ):
@@ -26,11 +26,17 @@ def filter(
         dataset = io_functions.load_case_collection(data, meta)
     except TypeError:
         dataset = io_functions.load_case_collection_from_caseinfo(data, meta)
+
     dataset = dataset.filter(**filters)
     if sample:
         dataset = dataset.sample(sample)
-    print("Saving", dataset, f"to {output}")
-    if move_samples:
-        io_functions.save_case_collection_with_data(dataset, output)
-    else:
-        io_functions.save_case_collection(dataset, output)
+
+    print(f"Filtering down to {dataset}")
+    print(dataset.group_count)
+
+    if output:
+        print("Saving", dataset, f"to {output}")
+        if move_samples:
+            io_functions.save_case_collection_with_data(dataset, output)
+        else:
+            io_functions.save_case_collection(dataset, output)
