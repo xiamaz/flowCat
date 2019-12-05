@@ -258,7 +258,32 @@ def save_case_collection_with_data(cases, destination: URLPath):
     return cases
 
 
-def load_case_collection(data_path: URLPath, meta_path: URLPath):
+def load_case_collection(data_path: URLPath, meta_path: URLPath = None):
+    """Load dataset from the given path.
+
+    If data and meta path both are given, the data path will be directly used
+    to search for sample data and the meta directly loaded from meta_path.
+
+    If only data is given, data will be searched in '{data_path}/data' and meta
+    in '{data_path}/meta.json.gz'
+
+    The data path will not be checked upon loading if the data actually exists.
+    Missing file errors, might still occur later.
+
+    Args:
+        data_path: Path to dataset or sample data.
+        meta_path: Path to dataset metadata.
+
+    Returns:
+        CaseCollection dataset.
+
+    Raises:
+        TypeError if the given metadata is not of the proper format.
+    """
+    if meta_path is None:
+        meta_path = data_path / "meta.json.gz"
+        data_path = data_path / "data"
+
     cases = load_json(meta_path)
     if not isinstance(cases, case_dataset.CaseCollection):
         raise TypeError("Loaded json does not contain valid case collection.")

@@ -34,12 +34,10 @@ def case_from_dict(case_dict) -> fc_case.Case:
 
 
 def load_case_collection(data: str, meta: str = None):
-    if meta is None:
-        meta = utils.URLPath(data) / "meta.json.gz"
-        data = utils.URLPath(data) / "data"
-    else:
-        data = utils.URLPath(data)
+    data = utils.URLPath(data)
+    if meta is not None:
         meta = utils.URLPath(meta)
+
     return io_functions.load_case_collection(data, meta)
 
 
