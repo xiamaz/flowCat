@@ -5,6 +5,7 @@ import keras
 from sklearn.preprocessing import LabelBinarizer
 
 from flowcat import io_functions, utils, som_dataset, classification_utils
+from flowcat.dataset import case_dataset
 from flowcat.plots import history as plot_history
 
 
@@ -143,8 +144,15 @@ class SOMClassifier:
             self,
             dataset: som_dataset.SOMDataset,
             batch_size: int = 128,
-            getter: "Callback" = getter_som,
+            getter: "Callback" = None,
     ) -> som_dataset.SOMSequence:
+        if getter is None:
+            if isinstance(dataset, som_dataset.SOMDataset):
+                getter = getter_som
+            elif isinstance(dataset, case_dataset.CaseCollection):
+                getter = getter_case
+            else:
+                raise ValueError(f"Unknown dataset type {type(dataset)} with no given getter.")
 
         seq = som_dataset.SOMSequence(
             dataset, self.binarizer,
