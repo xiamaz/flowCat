@@ -99,11 +99,6 @@ def plot_embedded(transformed, true_labels, groups, colors, title=""):
 
 
 def main(data: utils.URLPath, model: utils.URLPath, output: utils.URLPath):
-    # data, model, output = map(utils.URLPath, (
-    #     "output/som-fix-test/soms-test/som_r4_1",
-    #     "output/0-final/classifier-minmax-new",
-    #     "output/0-final/model-analysis"
-    # ))
     dataset = io_functions.load_case_collection(data, data + ".json")
     dataset.set_data_path(utils.URLPath(""))
 
