@@ -59,8 +59,29 @@ def som_tsne(dataset, model, output):
     """SOM data tsne output."""
     # concatenate SOM dataset into a single numpy array
     embeddings, _ = model.array_from_cases(dataset)
+    for tube in range(3):
+        t_embeddings = embeddings[tube]
+        n, _, _, y = t_embeddings.shape
+        t_embeddings = t_embeddings.reshape((n, -1))
+
+        tsne_embeddings = manifold.TSNE(perplexity=50).fit_transform(t_embeddings)
+
+        labels = dataset.groups
+        fig, ax = plt.subplots(figsize=(6, 6))
+        fc_embeddings.plot_embedding(ax, tsne_embeddings, labels, mappings.ALL_GROUP_COLORS)
+        print(embeddings)
+
+        fig.tight_layout()
+        fig.savefig(
+            str(output / f"som_tsne_{tube}.png"),
+            dpi=300,
+        )
+
+    raise RuntimeError
+
     embeddings = np.concatenate(embeddings, axis=-1)
     n, _, _, y = embeddings.shape
+
     embeddings = embeddings.reshape((n, -1))
 
     tsne_embeddings = manifold.TSNE(perplexity=50).fit_transform(embeddings)
@@ -84,14 +105,15 @@ def main(
 ):
     data = utils.URLPath("/data/flowcat-data/paper-cytometry/som/unused")
     dataset = io_functions.load_case_collection(data, data + ".json.gz")
-    output = utils.URLPath("/data/flowcat-data/paper-cytometry/tsne")
+    # output = utils.URLPath("/data/flowcat-data/paper-cytometry/tsne")
+    output = utils.URLPath("teststuff_unused_style")
     output.mkdir()
 
     # predictions = io_functions.load_json(utils.URLPath("/data/flowcat-data/paper-cytometry/tsne/prediction.json"))
     model = SOMClassifier.load(utils.URLPath("/data/flowcat-data/paper-cytometry/classifier"))
 
     som_tsne(dataset, model, output)
-    intermediate_tsne(dataset, model, output)
+    # intermediate_tsne(dataset, model, output)
 
 
 argmagic(main)
