@@ -58,6 +58,20 @@ class CaseCollection:
     selected_tubes: List[str] = None
     filterconfig: list = field(default_factory=list)
 
+    def __add__(self, other: "CaseCollection"):
+        """Creates a new collection with cases from both datasets added.
+
+        CAVE: Any other attribute in CaseCollection will not be added to the new class.
+
+        Raises:
+            ValueError If any id exists in both datasets.
+        """
+        other_labels = [c.id for c in other]
+        if any(c.id in other_labels for c in self):
+            raise ValueError("Duplicate ids of both datasets exist.")
+
+        return CaseCollection(self.cases + other.cases)
+
     @property
     def tubes(self):
         """Get list of unique tubes in dataset.
