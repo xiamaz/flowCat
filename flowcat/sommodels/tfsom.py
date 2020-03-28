@@ -28,6 +28,7 @@ import numpy as np
 import pandas as pd
 
 import tensorflow as tf
+from flowcat import seed as fc_seed
 from flowcat.utils import create_stamp, URLPath
 
 """
@@ -286,6 +287,11 @@ class TFSom:
 
         self._initialized = False
 
+        self._seed = seed
+        if self._seed is None:
+            self._seed = fc_seed.SEED
+            LOGGER.info("Setting seed to global %s", self._seed)
+
         # tensorboard visualizations
         if tensorboard_dir:
             self._tensorboard_dir = tensorboard_dir / self.config_name
@@ -295,17 +301,19 @@ class TFSom:
         if self.tensorboard:
             # save model configuration
             config = {
-                "dims": dims,
-                "max_epochs": max_epochs,
-                "batch_size": batch_size,
-                "buffer_size": buffer_size,
-                "initial_radius": initial_radius,
-                "end_radius": end_radius,
-                "radius_cooling": radius_cooling,
-                "node_distance": node_distance,
-                "map_type": map_type,
-                "std_coeff": std_coeff,
-                "seed": seed
+                "m": self._m,
+                "n": self._n,
+                "dim": self._dim,
+                "max_epochs": self._max_epochs,
+                "batch_size": self._batch_size,
+                "buffer_size": self._buffer_size,
+                "initial_radius": self._initial_radius,
+                "end_radius": self._end_radius,
+                "radius_cooling": self._radius_cooling,
+                "node_distance": self._node_distance,
+                "map_type": self._map_type,
+                "std_coeff": self._std_coeff,
+                "seed": self._seed
             }
             with (self._tensorboard_dir / "config.json").open("w") as f:
                 json.dump(config, f)
@@ -324,7 +332,6 @@ class TFSom:
             self._graph = graph
             self._initialization = initialization
 
-        self._seed = seed
         if self._seed is not None:
             LOGGER.info("Setting seed to %d", self._seed)
             with self._graph.as_default():

@@ -205,3 +205,24 @@ class SOMSample(Sample):
 
         data = som.SOM(self.complete_path, self.markers)
         return data
+
+
+def sample_type_to_string(sample):
+    if isinstance(sample, FCSSample):
+        return "fcs"
+    elif isinstance(sample, SOMSample):
+        return "som"
+    elif isinstance(sample, Sample):
+        return "generic"
+    else:
+        raise ValueError(f"Given data {sample} is not instance of Sample.")
+
+def string_to_sample_type(sampleString):
+    if sampleString == "fcs":
+        return FCSSample
+    elif sampleString == "som":
+        return SOMSample
+    elif sampleString == "generic":
+        return Sample
+    else:
+        raise ValueError(f"Identifier {sampleString} is not an instance of sample.")

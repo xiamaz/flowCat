@@ -170,6 +170,10 @@ class Case:
     group: str = None
     samples: List[sample.Sample] = field(default_factory=list)
 
+    @property
+    def sample_kinds(self):
+        return {sample.sample_type_to_string(s) for s in self.samples}
+
     def set_fcs_info(self):
         """Load fcs information for all available samples from fcs files."""
         for case_sample in self.samples:
@@ -186,12 +190,9 @@ class Case:
         return tube.markers
 
     def get_tube_samples(self, tube: str, kind: str) -> List[sample.Sample]:
-        if kind == "fcs":
-            samples = [s for s in self.samples if isinstance(s, sample.FCSSample) and s.tube == tube]
-        elif kind == "som":
-            samples = [s for s in self.samples if isinstance(s, sample.SOMSample) and s.tube == tube]
-        else:
-            raise ValueError(f"{kind} is not known. Valid options are: fcs, som")
+        samples = [
+            s for s in self.samples if sample.sample_type_to_string(s) == kind and s.tube == tube
+        ]
         return samples
 
     def get_tube(self, tube: str, kind: str = "fcs") -> sample.Sample:

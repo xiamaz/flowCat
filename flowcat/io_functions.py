@@ -193,13 +193,27 @@ def save_casesinglesom(model, path: URLPath):
 def load_fcssom(path: URLPath, **kwargs):
     scaler = load_joblib(path / "scaler.joblib")
     config = load_json(path / "config.json")
+
+    merged_config = {k: v for k, v in config.items() if k not in ("modelargs", "scaler", "trained")}
+    for k, v in config["modelargs"]["kwargs"].items():
+        merged_config[k] = v
+
+    for k, v in kwargs.items():
+        if k in ("scaler"):
+            LOGGER.warning("Scaler argument %s ignored since using saved version.", v)
+        elif k not in merged_config:
+            merged_config[k] = v
+        elif k in ("dims", "markers", "marker_name_only"):
+            if v != merged_config[k]:
+                raise ValueError(f"Mismatch in {k}: new val {v} old val {merged_config[k]}")
+        else:
+            merged_config[k] = v
+
+    print(merged_config)
+
     model = fcssom.FCSSom(
-        dims=config["dims"],
         scaler=scaler,
-        name=config["name"],
-        markers=config["markers"],
-        marker_name_only=config["marker_name_only"],
-        **{**config["modelargs"]["kwargs"], **kwargs},
+        **merged_config
     )
     model.model.load(path / "model.ckpt")
     model.trained = True
@@ -258,7 +272,7 @@ def save_case_collection_with_data(cases, destination: URLPath):
     return cases
 
 
-def load_case_collection(data_path: URLPath, meta_path: URLPath = None):
+def load_case_collection(data_path: URLPath, meta_path: URLPath = None) -> "CaseCollection":
     """Load dataset from the given path.
 
     If data and meta path both are given, the data path will be directly used

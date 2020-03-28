@@ -6,6 +6,7 @@ import numpy as np
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+from matplotlib.patches import Patch
 
 LOGGER = logging.getLogger(__name__)
 
@@ -27,31 +28,25 @@ def scale_weights_to_colors(weights):
     return scaled
 
 
-def plot_color_grid(griddata, scale=True):
+def plot_color_grid(griddata, channels, scale=True):
     """Plot array with 3 color channels as RGB values."""
     if scale:
         griddata = scale_weights_to_colors(griddata)
 
     fig = Figure()
-    axes = fig.add_subplot(111)
+    grid = fig.add_gridspec(2, 1, height_ratios=[1, 0.1])
+    axes = fig.add_subplot(grid[0, 0])
     axes.imshow(griddata, interpolation="nearest")
     axes.set_axis_off()
 
-    # Saving the figure
-    FigureCanvas(fig)
-    fig.tight_layout()
-    return fig
+    patches = [
+        Patch(color=color, label=channel)
+        for channel, color in zip(channels, ("red", "green", "blue"))
+    ]
 
-
-def plot_color_grid(griddata, scale=True):
-    """Plot array with 3 color channels as RGB values."""
-    if scale:
-        griddata = scale_weights_to_colors(griddata)
-
-    fig = Figure()
-    axes = fig.add_subplot(111)
-    axes.imshow(griddata, interpolation="nearest")
-    axes.set_axis_off()
+    ax_legend = fig.add_subplot(grid[1, 0])
+    ax_legend.legend(handles=patches, framealpha=0.0, ncol=3, loc="center")
+    ax_legend.set_axis_off()
 
     # Saving the figure
     FigureCanvas(fig)
@@ -64,10 +59,12 @@ def plot_som_grid(somdata, channels=None):
     """
     imgdata = somdata.data
     if channels is None:
-        channels = channels.columns[:3]
+        channels = somdata.markers[:3]
+
+    indexes = [somdata.markers.index(c) if c is not None else None for c in channels]
 
     arr = np.stack([
-        imgdata[c].values if c is not None else np.zeros(imgdata.shape[0])
-        for c in channels
-    ], axis=1)
-    return plot_color_grid(arr, scale=True)
+        imgdata[:, :, i] if i is not None else np.zeros(imgdata.shape[:2])
+        for i in indexes
+    ], axis=-1)
+    return plot_color_grid(arr, channels, scale=True)

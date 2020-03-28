@@ -126,6 +126,15 @@ class CaseSom:
     def tubes(self):
         return list(self.models.keys())
 
+    @property
+    def som_config(self):
+        return {
+            tube: {
+                "dims": m.model.dims,
+                "channels": m.model.markers,
+            } for tube, m in self.models.items()
+        }
+
     def calculate_nearest_nodes(self, data: fc_case.Case) -> dict:
         return {
             tube: model.calculate_nearest_nodes(data.get_data(tube, kind="fcs"))

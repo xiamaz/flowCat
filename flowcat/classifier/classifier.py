@@ -1,4 +1,5 @@
-from dataclasses import dataclass, asdict
+from copy import deepcopy
+from dataclasses import dataclass, asdict, replace
 
 import numpy as np
 import keras
@@ -29,9 +30,17 @@ class SOMClassifierConfig:
     pad_width: int = 2
     mapping: dict = None
     cost_matrix: str = None
+    train_epochs: int = 20
+    train_batch_size: int = 32
+    valid_batch_size: int = 128
 
     def to_json(self):
         return asdict(self)
+
+    def copy(self):
+        new_tubes = deepcopy(self.tubes)
+        new_mapping = deepcopy(self.mapping)
+        return replace(self, tubes=new_tubes, mapping=new_mapping)
 
     @property
     def output(self):
@@ -82,6 +91,7 @@ class SOMClassifier:
             self.binarizer = LabelBinarizer().fit(self.config.groups)
         else:
             self.binarizer = binarizer
+
         self.data_ids = data_ids
         self.modeldir = modeldir
 
@@ -196,7 +206,7 @@ class SOMClassifier:
         """Predict on a list of cases or som samples."""
         xdata, _ = self.array_from_cases(data)
         preds = self.model.predict(xdata)
-        label_preds = [dict(zip(self.config.groups, pred)) for pred in preds]
+        label_preds = [dict(zip(self.binarizer.classes_, pred)) for pred in preds]
         return label_preds
 
     def predict_generator(self, data: som_dataset.SOMSequence):

@@ -1,6 +1,7 @@
 import json
 import logging
 from flowcat import utils, sommodels, io_functions
+from flowcat.constants import DEFAULT_REFERENCE_SOM_ARGS
 
 
 LOGGER = logging.getLogger(__name__)
@@ -35,18 +36,7 @@ def reference(
             raise RuntimeError("Filtered number of samples does not match number of labels.")
 
     if trainargs is None:
-        trainargs = {
-            "marker_name_only": False,
-            "max_epochs": 10,
-            "batch_size": 50000,
-            "initial_radius": 16,
-            "end_radius": 2,
-            "radius_cooling": "linear",
-            # "marker_images": sommodels.fcssom.MARKER_IMAGES_NAME_ONLY,
-            "map_type": "toroid",
-            "dims": (32, 32, -1),
-            "scaler": "MinMaxScaler",
-        }
+        trainargs = DEFAULT_REFERENCE_SOM_ARGS
 
     if selected_markers is None:
         selected_markers = dataset.selected_markers

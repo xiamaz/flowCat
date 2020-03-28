@@ -54,7 +54,7 @@ def load_som_cases(row, path, tubes):
 
 
 def from_case_dataset(path):
-    dataset = io_functions.load_case_collection(path, path + ".json.gz")
+    dataset = io_functions.load_case_collection(path)
     metadata = pd.DataFrame([{"label": c.id, "group": c.group} for c in dataset])
     return metadata
 
@@ -69,7 +69,7 @@ class SOMDataset:
 
     @classmethod
     def from_path(cls, path):
-        config = io_functions.load_json(path + "_config.json")
+        config = io_functions.load_json(path / "config.json")
         try:
             metadata = io_functions.load_csv(path + ".csv")
         except FileNotFoundError:
