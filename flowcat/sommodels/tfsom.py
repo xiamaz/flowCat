@@ -678,8 +678,8 @@ class TFSom:
                         options=run_options, run_metadata=run_metadata,
                         feed_dict={
                             self._epoch: epoch,
-                            self._data_placeholder: data,
-                            self._mask_placeholder: mask,
+                            self._data_placeholder: data[start:stop],
+                            self._mask_placeholder: mask[start:stop],
                         }
                     )
                     self._writer.add_run_metadata(run_metadata, f"step_{global_step}")
