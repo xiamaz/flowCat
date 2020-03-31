@@ -81,6 +81,12 @@ A main convenience library in `flowcat.flowcat` is available, containing a
 simplified interface to the major functions required for classification and SOM
 generation.
 
+### flowCat paper results
+
+The main results from the paper can be generated using the
+`./flowCat_gen_results.sh` script. If you have issues running the scripts please
+contact the authors.
+
 ## Contributions
 
 tensorflow SOM code adapted from cgorman.
