@@ -105,7 +105,7 @@ def transform_dataset_to_som(som_reference: CaseSom, dataset: "CaseCollection", 
     som_dataset = case_dataset.CaseCollection([
         case.copy(samples=casesamples[case.id])
         for case in dataset
-    ])
+    ], data_path=data_output)
     som_dataset.selected_markers = {
         m.tube: m.model.markers for m in som_reference.models.values()
     }
