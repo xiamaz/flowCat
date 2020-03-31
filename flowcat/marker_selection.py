@@ -1,5 +1,8 @@
 """
 Approaches for selecting valid marker sets from datasets.
+
+This is currently only used in some external scripts, but kept here for future
+integration.
 """
 from typing import List, Dict
 import logging

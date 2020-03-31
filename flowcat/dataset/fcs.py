@@ -12,7 +12,7 @@ from fcsparser.api import FCSParser
 import fcsparser
 
 from flowcat.utils import URLPath
-from flowcat.mappings import MARKER_NAME_MAP
+from flowcat.constants import MARKER_NAME_MAP
 
 
 LOGGER = logging.getLogger(__name__)

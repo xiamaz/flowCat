@@ -3,7 +3,8 @@ import keras
 import vis.utils as vu
 from vis.visualization.saliency import visualize_saliency
 
-from flowcat import utils, io_functions, som_dataset
+from flowcat import utils, io_functions
+from . import som_dataset
 from .classifier import SOMClassifier
 
 

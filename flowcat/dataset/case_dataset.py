@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 from sklearn import model_selection
 
-from flowcat import mappings, utils
+from flowcat import utils
 
 from . import case as fc_case
 from . import sample as fc_sample

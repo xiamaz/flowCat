@@ -2,7 +2,7 @@ import json
 
 from flowcat import utils, io_functions
 from flowcat.constants import DEFAULT_TRANSFORM_SOM_ARGS
-from flowcat.flowcat import transform_dataset_to_som
+from flowcat.flowcat_api import transform_dataset_to_som
 
 
 def transform(

@@ -6,16 +6,13 @@ import json
 import pathlib
 import datetime
 
-import pandas as pd
-from pandas.testing import assert_series_equal
-
-from flowcat import mappings
+from flowcat.types.material import Material
 from flowcat.utils.time_timers import str_to_date
 from flowcat.dataset import case_dataset, case, sample
 
 
 def create_case(id: str, date="2011-11-11", used_material="PB", samples=None, **kwargs):
-    used_material = mappings.Material.from_str(used_material)
+    used_material = Material.from_str(used_material)
     date = str_to_date(date)
     if samples:
         samples = [sample.Sample(**s) for s in samples]

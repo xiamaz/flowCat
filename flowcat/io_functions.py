@@ -11,7 +11,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from flowcat import mappings
+from flowcat.constants import PUBLIC_ENUMS
 from flowcat.utils.time_timers import str_to_date
 from flowcat.utils.urlpath import URLPath
 from flowcat.sommodels import fcssom
@@ -25,7 +25,7 @@ LOGGER = logging.getLogger(__name__)
 
 class FCEncoder(json.JSONEncoder):
     def default(self, obj):  # pylint: disable=E0202
-        if type(obj) in mappings.PUBLIC_ENUMS.values():
+        if type(obj) in PUBLIC_ENUMS.values():
             return {"__enum__": str(obj)}
         elif isinstance(obj, URLPath):
             return {"__urlpath__": str(obj)}
@@ -55,7 +55,7 @@ class FCEncoder(json.JSONEncoder):
 def as_fc(d):
     if "__enum__" in d:
         name, member = d["__enum__"].split(".")
-        return getattr(mappings.PUBLIC_ENUMS[name], member)
+        return getattr(PUBLIC_ENUMS[name], member)
     elif "__urlpath__" in d:
         return URLPath(d["__urlpath__"])
     elif "__casecollection__" in d:

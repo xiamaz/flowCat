@@ -4,7 +4,7 @@ import numpy as np
 from numpy.testing import assert_array_equal
 import pandas as pd
 from sklearn.preprocessing import LabelBinarizer
-from flowcat.som_dataset import SOMDataset, SOMCase, SOMSequence
+from flowcat.classifier.som_dataset import SOMDataset, SOMCase, SOMSequence
 
 from . import shared
 

@@ -1,13 +1,13 @@
-from copy import deepcopy
-from dataclasses import dataclass, asdict, replace
-
 import numpy as np
 import keras
 from sklearn.preprocessing import LabelBinarizer
 
-from flowcat import io_functions, utils, som_dataset, classification_utils
+from flowcat import io_functions, utils
 from flowcat.dataset import case_dataset
 from flowcat.plots import history as plot_history
+from flowcat.types.classifier_config import SOMClassifierConfig, save_somclassifier_config, load_somclassifier_config
+
+from . import som_dataset
 
 
 def plot_training_history(history, output):
@@ -20,53 +20,6 @@ def plot_training_history(history, output):
     acc_plot = plot_history.plot_history(history_data, title="Training accuracy")
     acc_plot.tight_layout()
     acc_plot.savefig(str(output), dpi=300)
-
-
-@dataclass
-class SOMClassifierConfig:
-    """Configuration information usable by SOM classifier."""
-    tubes: dict
-    groups: list
-    pad_width: int = 2
-    mapping: dict = None
-    cost_matrix: str = None
-    train_epochs: int = 20
-    train_batch_size: int = 32
-    valid_batch_size: int = 128
-
-    def to_json(self):
-        return asdict(self)
-
-    def copy(self):
-        new_tubes = deepcopy(self.tubes)
-        new_mapping = deepcopy(self.mapping)
-        return replace(self, tubes=new_tubes, mapping=new_mapping)
-
-    @property
-    def output(self):
-        return len(self.groups)
-
-    @property
-    def inputs(self):
-        inputs = tuple(
-            [*[dd + 2 * self.pad_width for dd in d["dims"][:-1]], len(d["channels"])] for d in self.tubes.values())
-        return inputs
-
-    def get_loss(self, modeldir=None):
-        if self.cost_matrix is None:
-            return "categorical_crossentropy"
-        cost_matrix = np.load(modeldir / self.cost_matrix)
-        return classification_utils.WeightedCategoricalCrossentropy(cost_matrix)
-
-
-def load_somclassifier_config(path: utils.URLPath) -> SOMClassifierConfig:
-    """Load somclassifier config from the given path."""
-    return SOMClassifierConfig(**io_functions.load_json(path))
-
-
-def save_somclassifier_config(config: SOMClassifierConfig, path: utils.URLPath):
-    """Save configuration to the given path."""
-    io_functions.save_json(config.to_json(), path)
 
 
 def getter_case(data, tube):

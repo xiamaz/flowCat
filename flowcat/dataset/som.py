@@ -9,7 +9,7 @@ from dataslots import with_slots
 import numpy as np
 import pandas as pd
 
-from flowcat import utils, mappings
+from flowcat import utils
 
 
 LOGGER = logging.getLogger(__name__)

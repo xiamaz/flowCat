@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.testing import assert_array_equal
 import tensorflow as tf
-from flowcat import classification_utils
+from flowcat.utils import classification_utils
 from . import shared
 
 

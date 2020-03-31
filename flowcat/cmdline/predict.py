@@ -1,5 +1,6 @@
-from flowcat import utils, som_dataset, classifier, mappings, io_functions
-from flowcat.classifier import predictions as fc_predictions
+from flowcat import utils, classifier, io_functions
+from flowcat.constants import GROUP_MAPS
+from flowcat.classifier import predictions as fc_predictions, som_dataset
 
 
 def predict(
@@ -36,7 +37,7 @@ def predict(
 
     if metrics:
         true_labels = data_sequence.true_labels
-        map_config = [("unmapped", {"groups": model.config.groups, "map": {}}), *mappings.GROUP_MAPS.items()]
+        map_config = [("unmapped", {"groups": model.config.groups, "map": {}}), *GROUP_MAPS.items()]
         for map_name, mapping in map_config:
             print(f"--- MAPPING: {map_name} ---")
             if len(mapping["groups"]) > len(model.config.groups):

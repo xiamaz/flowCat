@@ -4,7 +4,7 @@ import datetime
 import numpy as np
 
 from flowcat import utils
-from flowcat.mappings import Material
+from flowcat.types.material import Material
 from flowcat.dataset import case as fc_case, sample as fc_sample
 from flowcat.dataset.som import SOM
 

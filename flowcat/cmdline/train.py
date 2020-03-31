@@ -1,10 +1,12 @@
-from flowcat import utils, classifier, som_dataset, mappings, io_functions
-from flowcat.flowcat import train_som_classifier, prepare_classifier_train_dataset
+from flowcat import utils, classifier, io_functions
+from flowcat.constants import GROUPS
+from flowcat.classifier import som_dataset
+from flowcat.flowcat_api import train_som_classifier, prepare_classifier_train_dataset
 
 
 def train(data: utils.URLPath, output: utils.URLPath):
     """Train a new classifier using SOM data."""
-    groups = mappings.GROUPS
+    groups = GROUPS
     tubes = ("1", "2", "3")
     balance = {
         "CLL": 4000,

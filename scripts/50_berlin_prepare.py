@@ -8,6 +8,8 @@ thereafter directly load using casecollection load.
 import json
 from datetime import datetime
 
+from flowcat.types.material import Material
+from flowcat.constants import GROUPS
 from flowcat.dataset import case as fc_case, sample as fc_sample
 from flowcat.dataset.case_dataset import CaseCollection
 from flowcat.io_functions import save_case_collection, load_case_collection, save_json
@@ -31,7 +33,7 @@ def meta_to_filepath(metadata: dict, data_url: "URLPath", tube: str, case_id: st
         "date": date,
         "tube": tube,
         "panel": "B-NHL",
-        "material": flowcat.Material.PERIPHERAL_BLOOD,
+        "material": Material.PERIPHERAL_BLOOD,
     }
 
     sample = fc_sample.FCSSample(**filepath)
@@ -75,7 +77,7 @@ outpath = URLPath("output/5-berlin-data-test/dataset")
 save_case_collection(dataset, dataset_path / "casecollection.json")
 
 # only use groups we already have for now
-group_dataset, reasons = dataset.filter_reasons(groups=flowcat.mappings.GROUPS)
+group_dataset, reasons = dataset.filter_reasons(groups=GROUPS)
 save_case_collection(group_dataset, dataset_path / "valid_groups.json")
 
 invalid_labels = [l for l, _ in reasons]

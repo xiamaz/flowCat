@@ -13,7 +13,9 @@ from typing import List, Dict, Union, Tuple
 from dataslots import with_slots
 import pandas as pd
 
-from flowcat import mappings, utils
+from flowcat import utils
+from flowcat.types.material import Material
+from flowcat.constants import ALLOWED_MATERIALS
 from . import sample
 
 
@@ -148,7 +150,7 @@ def case_to_json(case: "Case") -> dict:
 
 def json_to_case(jscase: dict) -> "Case":
     if jscase["used_material"]:
-        material = mappings.Material[jscase["used_material"]]
+        material = Material[jscase["used_material"]]
     else:
         material = None
     jscase["used_material"] = material
@@ -162,7 +164,7 @@ def json_to_case(jscase: dict) -> "Case":
 class Case:
     """Basic case object containing all metadata for a case."""
     id: str
-    used_material: mappings.Material = None
+    used_material: Material = None
     date: datetime.date = None
     infiltration: float = None
     diagnosis: str = None
@@ -249,7 +251,7 @@ class Case:
 
     def set_allowed_material(self, tubes):
         """Set used material to one of the allowed materials."""
-        self.used_material = self.get_possible_material(tubes, mappings.ALLOWED_MATERIALS)
+        self.used_material = self.get_possible_material(tubes, ALLOWED_MATERIALS)
 
     def has_same_material(self, tubes, allowed_materials=None):
         if allowed_materials is None:

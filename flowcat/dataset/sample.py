@@ -12,7 +12,8 @@ import pandas as pd
 
 from dataslots import with_slots
 
-from flowcat import mappings, utils
+from flowcat import utils
+from flowcat.types.material import Material
 from . import fcs, som
 
 
@@ -56,7 +57,7 @@ def sampleinfo_to_sample(sample_info: dict, case_id: str, dataset_path: utils.UR
     date = utils.str_to_date(sample_info["date"])
 
     tube = str(sample_info.get("tube", "0"))
-    material = mappings.Material.from_str(sample_info.get("material", ""))
+    material = Material.from_str(sample_info.get("material", ""))
     panel = sample_info.get("panel", "")
 
     markers = sample_info["fcs"].get("markers", None)
@@ -124,7 +125,7 @@ def json_to_fcssample(samplejson: dict) -> "FCSSample":
     samplejson["date"] = utils.str_to_date(samplejson["date"])
     samplejson["path"] = utils.URLPath(samplejson["path"])
     if samplejson["material"]:
-        samplejson["material"] = mappings.Material[samplejson["material"]]
+        samplejson["material"] = Material[samplejson["material"]]
     else:
         samplejson["material"] = None
     return FCSSample(**samplejson)
@@ -170,7 +171,7 @@ class Sample:
 class FCSSample(Sample):
     panel: str = None
     count: int = None
-    material: mappings.Material = None
+    material: Material = None
 
     def get_data(self) -> fcs.FCSData:
         """
