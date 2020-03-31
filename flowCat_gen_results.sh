@@ -1,6 +1,17 @@
 #!/bin/sh
 set -e
 set -u
+# FlowCat results generation: Usage
+#
+# Necessary data: Main dataset including training and test data
+# Additional unused data (AML, MM, HCLv data): used for generation of tSNE plots
+#
+# Change following paths as needed for your system. All generated data and plots
+# will be saved in the given OUTPUT directory.
+
+#################
+# Configuration #
+#################
 DATA=/data/flowcat-data/mll-flowdata/decCLL-9F
 META=/data/flowcat-data/mll-flowdata/decCLL-9F.2019-10-29.meta/train.json.gz
 META_TEST="/data/flowcat-data/mll-flowdata/decCLL-9F.2019-10-29.meta/test.json.gz"
@@ -10,6 +21,8 @@ DATA_UNUSED=/data/flowcat-data/paper-cytometry/unused-data/data
 META_UNUSED=/data/flowcat-data/paper-cytometry/unused-data/meta.json.gz
 
 OUTPUT=/data/flowcat-data/paper-cytometry
+#################
+
 # I. Create reference SOM
 REF_OUTPUT="$OUTPUT/reference"
 CONFIG="{
