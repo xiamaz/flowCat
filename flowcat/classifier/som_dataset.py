@@ -46,6 +46,7 @@ class SOMCase:
 
 
 def load_som_cases(row, path, tubes):
+    """Create SomCase (with path to SOM npy file) for a given combination of row info and path."""
     sompath = path / str(row["label"])
     soms = {
         tube: sompath + f"_t{tube}.npy" for tube in tubes
@@ -69,13 +70,24 @@ class SOMDataset:
 
     @classmethod
     def from_path(cls, path):
+        """
+        Loads a SOM dataset with the following organization:
+        dataset/
+            config.json  # contains info on used markers
+            meta.json.gz*
+            data/  # contains .npy SOMs
+        dataset.csv*
+
+        * either csv file with metadata (old format) or a meta.json.gz (casecollection variant, new data)
+        """
         config = io_functions.load_json(path / "config.json")
         try:
             metadata = io_functions.load_csv(path + ".csv")
         except FileNotFoundError:
             metadata = from_case_dataset(path)
         tubes = list(config.keys())
-        som_cases = metadata.apply(load_som_cases, axis=1, args=(path, tubes))
+        data_path = path / "data"
+        som_cases = metadata.apply(load_som_cases, axis=1, args=(data_path, tubes))
         return cls(data=som_cases, config=config)
 
     @property

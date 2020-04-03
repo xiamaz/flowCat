@@ -27,10 +27,8 @@ def train(data: utils.URLPath, output: utils.URLPath):
         mapping=mapping,
         balance=balance)
 
-    som_config = io_functions.load_json(data + "_config.json")
-
     config = classifier.SOMClassifierConfig(**{
-        "tubes": {tube: som_config[tube] for tube in tubes},
+        "tubes": {tube: dataset.config[tube] for tube in tubes},
         "groups": groups,
         "pad_width": 2,
         "mapping": mapping,
