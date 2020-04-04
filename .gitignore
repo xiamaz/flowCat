@@ -21,3 +21,7 @@ tags*
 
 .eggs
 *.egg-info
+
+# python setup.py build dirs
+/build
+/dist
