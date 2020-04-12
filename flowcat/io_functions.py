@@ -5,6 +5,7 @@ import gzip
 import logging
 import pickle
 import shutil
+from collections import Counter
 from datetime import date
 
 import joblib
@@ -246,8 +247,10 @@ def save_case_collection(cases, destination: URLPath):
     save_json(cases, destination)
 
 
-def loading_bar(iterable, label="Transforming"):
-    total = len(iterable)
+def loading_bar(iterable, label="Transforming", total=None):
+    if total is None:
+        total = len(iterable)
+
     total_width = len(str(total))
     fmtstr = f"{label}: [{{: >{total_width}}}/{total}]\r"
     for i, item in enumerate(iterable):
@@ -256,9 +259,11 @@ def loading_bar(iterable, label="Transforming"):
     print("")
 
 
-def save_case_collection_with_data(cases, destination: URLPath):
+def save_case_collection_with_data(cases: "CaseCollection", destination: URLPath) -> "CaseCollection":
+    """Saves samples to a new dataset location and returns the resaved case collection."""
     sample_destination = destination / "data"
-    cases = cases.copy()
+    cases = cases.copy()  # this deep copies cases, so following ops are safe
+
     for case_obj in loading_bar(cases):
         for case_sample in case_obj.samples:
             sdest = sample_destination / case_sample.path
@@ -270,6 +275,19 @@ def save_case_collection_with_data(cases, destination: URLPath):
 
     save_case_collection(cases, destination=destination / "meta.json.gz")
     return cases
+
+
+def save_merged_case_collection(datasets: "List[CaseCollection]", dest: URLPath) -> "CaseCollection":
+    """Save the FCS data from the given collections to the given destination directory as a single dataset."""
+    labels = Counter([c.id for d in datasets for c in d])
+    duplicates = {k: v for k, v in labels.items() if v > 1}
+
+    if len(duplicates) > 0:
+        raise RuntimeError(f"Duplicate keys encountered: {duplicates}")
+
+    result_datasets = [save_case_collection_with_data(d, dest) for d in datasets]
+    merged_dataset = case_dataset.CaseCollection([c for d in result_datasets for c in d], data_path=dest)
+    return merged_dataset
 
 
 def load_case_collection(data_path: URLPath, meta_path: URLPath = None) -> "CaseCollection":

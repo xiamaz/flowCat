@@ -46,11 +46,19 @@ def create_meta_from_data(data: np.array, channels: list) -> dict:
 
 def create_meta_from_fcs(meta: dict, channels: list) -> dict:
     """Get ranges from pnr in metadata."""
+    def get_gain(i):
+        try:
+            gain = float(meta[f"$P{i + 1}G"])
+        except KeyError:
+            LOGGER.debug("No Gain value found for channel %d", i + 1)
+            gain = 1.0
+        return gain
+
     channel_metas = {
         c: ChannelMeta(
             0, int(meta[f"$P{i + 1}R"]),
             tuple(map(float, meta[f"$P{i + 1}E"].split(","))),
-            float(meta[f"$P{i + 1}G"]),
+            get_gain(i)
         )
         for i, c in enumerate(channels)
     }
