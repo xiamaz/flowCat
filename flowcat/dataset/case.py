@@ -22,7 +22,7 @@ from . import sample
 LOGGER = logging.getLogger(__name__)
 
 
-CASE_REQUIRED_FIELDS = "date", "id", "filepaths"
+CASE_REQUIRED_FIELDS = ("date", "id", "filepaths")
 
 
 def assert_in_dict(fields, data):
