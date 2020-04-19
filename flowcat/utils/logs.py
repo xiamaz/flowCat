@@ -40,15 +40,19 @@ def print_stream() -> StreamHandler:
 def create_logging_handlers(logging_path: str) -> [logging.Handler]:
     """Create logging to both file and stderr."""
     loggers = [
-        create_handler(logging.FileHandler(logging_path)),
         create_handler(print_stream()),
     ]
+    if logging_path is not None:
+        loggers.append(
+            create_handler(logging.FileHandler(logging_path)),
+        )
     return loggers
 
 
 def setup_logging(logging_path: "URLPath", name: str, fc_level=logging.INFO) -> logging.Logger:
     """Create a single logger object. To be used in main scripts."""
-    logging_path.parent.mkdir()
+    if logging_path is not None:
+        logging_path.parent.mkdir()
 
     logger = logging.getLogger(name)
 
