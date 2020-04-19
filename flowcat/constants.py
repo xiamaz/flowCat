@@ -30,6 +30,8 @@ NAME_MAP = {
 MARKER_NAME_MAP = {
     "Kappa": "kappa",
     "Lambda": "lambda",
+    "FSC": "FS",
+    "SSC": "SS",
 }
 
 # name of main groups in defined order for plotting

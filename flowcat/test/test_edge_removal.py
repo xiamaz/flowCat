@@ -4,14 +4,17 @@ import numpy as np
 from flowcat.utils import URLPath
 from flowcat.dataset import fcs
 from flowcat.preprocessing import edge_removal
+from flowcat.types.marker import Marker
 
 from .shared import FlowcatTestCase
 
 
-def create_fcs(data, columns, meta):
+def create_fcs(data, meta):
     array = np.array(data)
     mask = np.ones(shape=array.shape)
-    return fcs.FCSData((array, mask), channels=columns, meta=meta)
+    return fcs.FCSData(
+        (array, mask),
+        channels=[Marker.name_to_marker(n, m) for n, m in meta.items()])
 
 
 class EdgeRemovalTestCase(FlowcatTestCase):
@@ -25,7 +28,6 @@ class EdgeRemovalTestCase(FlowcatTestCase):
                 [5, 6, 12, 10],
                 [4, 2, 1, 9],
             ],
-            columns=("a", "b", "c", "d"),
             meta={
                 "a": fcs.ChannelMeta(0, 10, (0, 0), 0),
                 "b": fcs.ChannelMeta(0, 10, (0, 0), 0),
@@ -41,7 +43,6 @@ class EdgeRemovalTestCase(FlowcatTestCase):
                 [5, 6, 12, 10],
                 [4, 2, 1, 9],
             ],
-            columns=("a", "b", "c", "d"),
             meta={
                 "a": fcs.ChannelMeta(0, 10, (0, 0), 0),
                 "b": fcs.ChannelMeta(0, 10, (0, 0), 0),
@@ -55,8 +56,7 @@ class EdgeRemovalTestCase(FlowcatTestCase):
                 [0],
                 [10],
             ],
-            columns=("a"),
-            meta=None,
+            meta={"a": None},
         )
         model = edge_removal.EdgeEventFilter(["a"])
         model.fit(edge_data)
@@ -75,7 +75,6 @@ class EdgeRemovalTestCase(FlowcatTestCase):
                 [4, 2, 1, 9],
                 [2, 10, 0, 10],
             ],
-            columns=("a", "b", "c", "d"),
             meta={
                 "a": fcs.ChannelMeta(0, 10, (0, 0), 0),
                 "b": fcs.ChannelMeta(0, 10, (0, 0), 0),
@@ -91,7 +90,6 @@ class EdgeRemovalTestCase(FlowcatTestCase):
                 [5, 6, 12, 10],
                 [4, 2, 1, 9],
             ],
-            columns=("a", "b", "c", "d"),
             meta={
                 "a": fcs.ChannelMeta(0, 10, (0, 0), 0),
                 "b": fcs.ChannelMeta(0, 10, (0, 0), 0),

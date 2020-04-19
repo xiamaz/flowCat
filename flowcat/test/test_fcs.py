@@ -24,8 +24,6 @@ class TestFCS(unittest.TestCase):
         )
         testdata.rename({"a": "z"})
         self.assertEqual(testdata.channels, ["z", "b", "c", "d"])
-        self.assertIn("z", testdata.meta)
-        self.assertNotIn("a", testdata.meta)
 
     def test_marker_to_name_only(self):
         testdata = fcs.FCSData(
@@ -98,7 +96,6 @@ class TestFCS(unittest.TestCase):
         )
         testdata.drop_channels(["A"])
         self.assertEqual(testdata.channels, ["B", "C"])
-        self.assertNotIn("A", testdata.meta)
         assert_array_equal(testdata.data, np.array([
             [1, 2],
             [1, 2],

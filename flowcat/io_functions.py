@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from flowcat.constants import PUBLIC_ENUMS
+from flowcat.types.marker import Marker
 from flowcat.utils.time_timers import str_to_date
 from flowcat.utils.urlpath import URLPath
 from flowcat.sommodels import fcssom
@@ -50,6 +51,10 @@ class FCEncoder(json.JSONEncoder):
             return {
                 "__date__": obj.isoformat()
             }
+        elif isinstance(obj, Marker):
+            return {
+                "__marker__": str(obj)
+            }
         return json.JSONEncoder.default(self, obj)
 
 
@@ -69,6 +74,8 @@ def as_fc(d):
         return sample.json_to_somsample(d["__somsample__"])
     elif "__date__" in d:
         return str_to_date(d["__date__"])
+    elif "__marker__" in d:
+        return Marker.name_to_marker(d["__marker__"])
     else:
         return d
 
