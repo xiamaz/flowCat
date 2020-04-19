@@ -84,7 +84,6 @@ def join_fcs_data(fcs_data: List["FCSData"], channels=None) -> "FCSData":
     data = np.concatenate([a.data for a in aligned])
     mask = np.concatenate([a.mask for a in aligned])
     new_data = FCSData((data, mask), channels=channels)
-    print(new_data)
     return new_data
 
 

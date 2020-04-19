@@ -65,6 +65,9 @@ class Marker:
         antibody, color = self._split_name(name)
         return self._set_attr(antibody=antibody, color=color)
 
+    def set_strict(self, strict: bool) -> "Marker":
+        return self._set_attr(strict=strict)
+
     def __eq__(self, other):
         """Compare markers loosely."""
         if isinstance(other, str):

@@ -17,7 +17,7 @@ from flowcat.types.marker import Marker
 from flowcat.utils.time_timers import str_to_date
 from flowcat.utils.urlpath import URLPath
 from flowcat.sommodels import fcssom
-from flowcat.sommodels.casesom import CaseSingleSom, CaseSom
+from flowcat.sommodels.casesom import CaseSingleSom, CaseSom, CaseMergeSom
 from flowcat.dataset import case, case_dataset, sample
 from flowcat.dataset.som import SOM
 
@@ -195,7 +195,17 @@ def load_casesinglesom(path: URLPath, **kwargs):
 def save_casesinglesom(model, path: URLPath):
     save_fcssom(model.model, path)
     save_json(model.config, path / "casesinglesom_config.json")
-    save_som(model.weights, path / f"weights", save_config=True)
+
+
+def load_casemergesom(path: URLPath, **kwargs):
+    channels = load_json(path / "merge_channels.json")
+    model = load_fcssom(path, **kwargs)
+    return CaseMergeSom.create(channels=channels, model=model)
+
+
+def save_casemergesom(model, path: URLPath):
+    save_fcssom(model._model, path)
+    save_json(model._merger._channels, path / "merge_channels.json")
 
 
 def load_fcssom(path: URLPath, **kwargs):
@@ -236,6 +246,7 @@ def save_fcssom(model, path: URLPath):
     model.model.save(path / "model.ckpt")
     save_joblib(model.scaler, path / "scaler.joblib")
     save_json(model.config, path / "config.json")
+    save_som(model.weights, path / f"weights", save_config=True)
 
 
 def load_case_collection_from_caseinfo(data_path: URLPath, meta_path: URLPath):

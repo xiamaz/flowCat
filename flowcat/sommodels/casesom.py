@@ -7,6 +7,7 @@ from flowcat import utils
 from flowcat.types.material import Material
 from flowcat.dataset import case as fc_case, sample as fc_sample
 from flowcat.dataset.som import SOM
+from flowcat.preprocessing.case_sample_merge import CaseSampleMergeTransformer
 
 from .fcssom import FCSSom
 
@@ -18,6 +19,56 @@ class CaseSomSampleException(Exception):
 
     def __str__(self):
         return f"Unable to obtain sample from case {self.case_id} with params: {self.args}"
+
+
+class CaseMergeSom:
+    """Transform case into a single merged SOM."""
+
+    def __init__(self, merger: "CaseSampleMergeTransformer", model: "FCSSom", run_identifier: str):
+        self._merger = merger
+        self._model = model
+        self.model_time = utils.create_stamp()
+        self.run_identifier = f"{run_identifier}_{self.model_time}"
+
+    @property
+    def markers(self):
+        return self._merger._channels
+
+    @classmethod
+    def create(cls, channels: "List[Marker]", run_identifier: str, model: "FCSSom" = None, **kwargs):
+        merger = CaseSampleMergeTransformer(channels)
+        if model is None:
+            kwargs["markers"] = channels
+            model = FCSSom(**kwargs)
+        return cls(merger=merger, model=model, run_identifier=run_identifier)
+
+    def train(self, data: "Iterable[Case]"):
+        fcsdatas = [self._merger.transform(c) for c in data]
+        self._model.train(fcsdatas)
+        return self
+
+    def transform(self, data: "Case"):
+        fcsdata = self._merger.transform(data)
+        somdata = self._model.transform(fcsdata)
+        som_id = f"{data.case_id}_{self.run_identifier}"
+        somsample = fc_sample.SOMSample(
+            id=som_id,
+            case_id=data.case_id,
+            original_id=data.id,
+            date=self.model_time,
+            tube="",
+            dims=somdata.dims,
+            markers=self.model.markers,
+            data=somdata)
+        return somsample
+
+    def transform_generator(
+            self,
+            data: Iterable[fc_case.Case],
+            *args, **kwargs
+    ) -> Iterable[fc_sample.SOMSample]:
+        for casedata in data:
+            yield self.transform(casedata, *args, **kwargs)
 
 
 class CaseSingleSom:
