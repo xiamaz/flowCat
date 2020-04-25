@@ -79,7 +79,7 @@ class CaseMergeSom:
             id=som_id,
             case_id=data.id,
             original_id=data.id,
-            date=self.model_time,
+            date=self.model_time.date(),
             tube="",
             dims=somdata.dims,
             markers=self._model.markers,
