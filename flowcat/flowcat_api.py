@@ -172,10 +172,11 @@ def train_som_classifier(
     train_dataset: "CaseCollection",
     validate_dataset: "CaseCollection",
     config: SOMClassifierConfig = None,
+    model_fun: "Callable" = create_model_multi_input,
 ) -> "SOMClassifier":
     """Configure the dataset based on config and train a given model."""
     model = SOMClassifier(config)
-    model.create_model(create_model_multi_input)
+    model.create_model(model_fun)
 
     train = model.create_sequence(train_dataset, config.train_batch_size)
 

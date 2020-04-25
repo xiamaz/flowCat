@@ -20,8 +20,9 @@ def save_somclassifier_config(config: "SOMClassifierConfig", path: utils.URLPath
 @dataclass
 class SOMClassifierConfig:
     """Configuration information usable by SOM classifier."""
-    tubes: dict
-    groups: list
+
+    tubes: dict  # Dict[TubeLabel, Dict[channels->List[Markers]|dims->Tuple of ints]]
+    groups: list  # List of groups to be classified
     pad_width: int = 2
     mapping: dict = None
     cost_matrix: str = None

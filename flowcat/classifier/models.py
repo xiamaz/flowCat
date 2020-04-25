@@ -30,7 +30,10 @@ def create_model_multi_input(input_shapes, yshape, global_decay=5e-6) -> models.
         x = layers.GlobalMaxPooling2D()(x)
         segments.append(x)
 
-    x = layers.concatenate(segments)
+    if len(segments) > 1:
+        x = layers.concatenate(segments)
+    else:
+        x = segments[0]
 
     x = layers.Dense(
         units=64, activation="relu",
