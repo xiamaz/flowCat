@@ -43,10 +43,12 @@ class InvalidScaler(Exception):
 
 
 def create_edge_removal(channels):
-    return Pipeline([
-        ("minmax", scalers.MinMaxScaler()),
+    scaler = Pipeline([
+        ("minmax", scalers.FCSMinMaxScaler(fit_to_range=True)),
         ("edge", edge_removal.EdgeEventFilter(channels)),
     ])
+    scaler.fcsdata_scaler = True
+    return scaler
 
 
 PRESET_SCALERS = {

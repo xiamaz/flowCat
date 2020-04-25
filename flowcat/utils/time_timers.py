@@ -15,6 +15,15 @@ def str_to_date(strdate: str) -> datetime.date:
     return datetime.datetime.strptime(strdate, "%Y-%m-%d").date()
 
 
+def str_to_datetime(strdate: str) -> datetime.datetime:
+    if len(strdate) == 10:
+        return datetime.datetime.strptime(strdate, "%Y-%m-%d")
+    if len(strdate) == 19:
+        return datetime.datetime.strptime(strdate, "%Y-%m-%dT%H:%M:%S")
+
+    return datetime.datetime.strptime(strdate, "%Y-%m-%dT%H:%M:%S.%f")
+
+
 def create_stamp(stamp: "datetime" = None) -> str:
     """Create timestamp usable for filepaths"""
     if stamp is None:

@@ -24,23 +24,47 @@ class CaseSomSampleException(Exception):
 class CaseMergeSom:
     """Transform case into a single merged SOM."""
 
-    def __init__(self, merger: "CaseSampleMergeTransformer", model: "FCSSom", run_identifier: str):
+    def __init__(self, merger: "CaseSampleMergeTransformer", model: "FCSSom", run_identifier: str, model_time: "datetime" = None):
         self._merger = merger
         self._model = model
-        self.model_time = utils.create_stamp()
-        self.run_identifier = f"{run_identifier}_{self.model_time}"
+        if model_time is None:
+            self.model_time = datetime.datetime.now()
+        else:
+            self.model_time = model_time
+        self.run_identifier = run_identifier
+
+    @property
+    def config(self):
+        return {
+            "channels": self.markers,
+            "run_identifier": self.run_identifier,
+            "model_time": self.model_time,
+        }
 
     @property
     def markers(self):
         return self._merger._channels
 
     @classmethod
+    def load_from_config(cls, config: dict, model: "FCSSom"):
+        merger = CaseSampleMergeTransformer(config["channels"])
+        return cls(
+            merger=merger,
+            model=model,
+            run_identifier=config["run_identifier"],
+            model_time=config["model_time"])
+
+    @classmethod
     def create(cls, channels: "List[Marker]", run_identifier: str, model: "FCSSom" = None, **kwargs):
-        merger = CaseSampleMergeTransformer(channels)
         if model is None:
             kwargs["markers"] = channels
             model = FCSSom(**kwargs)
-        return cls(merger=merger, model=model, run_identifier=run_identifier)
+        return cls.load_from_config(
+            {"channels": channels, "run_identifier": run_identifier, "model_time": None},
+            model=model)
+
+    def get_som_id(self, case: "Case") -> str:
+        return f"{case.id}_{self.run_identifier}"
 
     def train(self, data: "Iterable[Case]"):
         fcsdatas = [self._merger.transform(c) for c in data]
@@ -50,17 +74,19 @@ class CaseMergeSom:
     def transform(self, data: "Case"):
         fcsdata = self._merger.transform(data)
         somdata = self._model.transform(fcsdata)
-        som_id = f"{data.case_id}_{self.run_identifier}"
+        som_id = self.get_som_id(data)
         somsample = fc_sample.SOMSample(
             id=som_id,
-            case_id=data.case_id,
+            case_id=data.id,
             original_id=data.id,
             date=self.model_time,
             tube="",
             dims=somdata.dims,
-            markers=self.model.markers,
+            markers=self._model.markers,
             data=somdata)
-        return somsample
+        somcase = data.copy()
+        somcase.samples = [somsample]
+        return somcase
 
     def transform_generator(
             self,

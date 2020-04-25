@@ -6,7 +6,7 @@ import logging
 import pickle
 import shutil
 from collections import Counter
-from datetime import date
+from datetime import date, datetime
 
 import joblib
 import numpy as np
@@ -14,7 +14,7 @@ import pandas as pd
 
 from flowcat.constants import PUBLIC_ENUMS
 from flowcat.types.marker import Marker
-from flowcat.utils.time_timers import str_to_date
+from flowcat.utils.time_timers import str_to_date, str_to_datetime
 from flowcat.utils.urlpath import URLPath
 from flowcat.sommodels import fcssom
 from flowcat.sommodels.casesom import CaseSingleSom, CaseSom, CaseMergeSom
@@ -47,9 +47,13 @@ class FCEncoder(json.JSONEncoder):
             return {
                 "__somsample__": sample.json_to_somsample(obj)
             }
-        elif isinstance(obj, date):
+        elif type(obj) is date:
             return {
                 "__date__": obj.isoformat()
+            }
+        elif type(obj) is datetime:
+            return {
+                "__datetime__": obj.isoformat()
             }
         elif isinstance(obj, Marker):
             return {
@@ -74,6 +78,8 @@ def as_fc(d):
         return sample.json_to_somsample(d["__somsample__"])
     elif "__date__" in d:
         return str_to_date(d["__date__"])
+    elif "__datetime__" in d:
+        return str_to_datetime(d["__datetime__"])
     elif "__marker__" in d:
         return Marker.name_to_marker(d["__marker__"])
     else:
@@ -198,14 +204,14 @@ def save_casesinglesom(model, path: URLPath):
 
 
 def load_casemergesom(path: URLPath, **kwargs):
-    channels = load_json(path / "merge_channels.json")
+    config = load_json(path / "merge_config.json")
     model = load_fcssom(path, **kwargs)
-    return CaseMergeSom.create(channels=channels, model=model)
+    return CaseMergeSom.load_from_config(config, model)
 
 
 def save_casemergesom(model, path: URLPath):
     save_fcssom(model._model, path)
-    save_json(model._merger._channels, path / "merge_channels.json")
+    save_json(model.config, path / "merge_config.json")
 
 
 def load_fcssom(path: URLPath, **kwargs):

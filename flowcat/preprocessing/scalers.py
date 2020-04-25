@@ -27,6 +27,7 @@ class FCSMinMaxScaler(FCSDataMixin, TransformerMixin, BaseEstimator):
 
     def transform(self, X, *_):
         """Transform data to be 0 min and 1 max using the fitted values."""
+        X = X.copy()
         X.data = self._model.transform(X.data)
         X.update_range(self._model.transform(X.ranges_array))
         return X
@@ -45,6 +46,7 @@ class FCSStandardScaler(FCSDataMixin, TransformerMixin, BaseEstimator):
 
     def transform(self, X, *_):
         """Transform data to be zero mean and unit standard deviation"""
+        X = X.copy()
         X.data = self._model.transform(X.data)
         X.update_range(self._model.transform(X.ranges_array))
         return X
