@@ -94,4 +94,6 @@ class Marker:
         """Automatically create marker if data is str."""
         if isinstance(data, str):
             data = Marker.name_to_marker(data)
+        elif isinstance(data, dict):
+            data = Marker(**data)
         return data
