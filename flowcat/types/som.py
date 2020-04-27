@@ -3,9 +3,10 @@
 from typing import List, Union
 import re
 import logging
-from dataclasses import dataclass, field
 
+from dataclasses import dataclass, field
 from dataslots import with_slots
+
 import numpy as np
 import pandas as pd
 
@@ -27,14 +28,19 @@ class SOM:
             self.data = np.load(str(self.data))
 
     @property
-    def dims(self):
+    def dims(self) -> tuple:
         return self.data.shape
 
-    def get_dataframe(self):
+    @property
+    def shape(self) -> tuple:
+        """Synonym added for compatibility with FCS data type."""
+        return self.dims
+
+    def get_dataframe(self) -> pd.DataFrame:
         """Return as new pandas dataframe."""
         return pd.DataFrame(self.data.reshape((-1, len(self.markers))), columns=self.markers)
 
-    def get_padded(self, pad_width):
+    def get_padded(self, pad_width) -> np.array:
         """Return as new numpy array. Optionally with padding by adding zeros
         to the borders of the SOM.
 
@@ -50,5 +56,16 @@ class SOM:
         ], mode="wrap")
         return data
 
-    def __repr__(self):
+    def __getitem__(self, idx) -> "SOM":
+        if isinstance(idx, tuple):
+            ridx, cidx, midx = idx
+        else:
+            ridx, cidx, midx = slice(None), slice(None), idx
+
+        midx = [self.markers.index(i) for i in midx]
+        sel_data = self.data[ridx, cidx, midx]
+        sel_markers = [self.markers[i] for i in midx]
+        return SOM(sel_data, sel_markers)
+
+    def __repr__(self) -> str:
         return f"<SOM {'x'.join(map(str, self.dims))}>"

@@ -43,14 +43,14 @@ class TestFCS(unittest.TestCase):
             (data, np.ones(data.shape)),
             channels=["A", "B", "C"]
         )
-        testdata.reorder_channels(["B", "A", "C"])
+        testdata = testdata.reorder_channels(["B", "A", "C"])
         self.assertEqual(testdata.channels, ["B", "A", "C"])
         assert_array_equal(testdata.data, np.array([
             [1, 0, 2],
             [1, 0, 2],
             [8, 7, 9],
         ]))
-        testdata.reorder_channels(["C", "B", "A"])
+        testdata = testdata.reorder_channels(["C", "B", "A"])
         self.assertEqual(testdata.channels, ["C", "B", "A"])
         assert_array_equal(testdata.data, np.array([
             [2, 1, 0],
@@ -94,12 +94,41 @@ class TestFCS(unittest.TestCase):
             (data, np.ones(data.shape)),
             channels=["A", "B", "C"]
         )
-        testdata.drop_channels(["A"])
+        testdata = testdata.drop_channels(["A"])
         self.assertEqual(testdata.channels, ["B", "C"])
         assert_array_equal(testdata.data, np.array([
             [1, 2],
             [1, 2],
             [8, 9],
+        ]))
+
+    def test_indexing(self):
+        data = np.array([
+            [0, 1, 2],
+            [0, 1, 2],
+            [7, 8, 9],
+        ])
+        testdata = fcs.FCSData(
+            (data, np.ones(data.shape)),
+            channels=["A", "B", "C"]
+        )
+        res = testdata[["A", "B"]]
+        assert_array_equal(res.data, np.array([
+            [0, 1],
+            [0, 1],
+            [7, 8],
+        ]))
+        res = testdata[:, ["A", "B"]]
+        assert_array_equal(res.data, np.array([
+            [0, 1],
+            [0, 1],
+            [7, 8],
+        ]))
+        res = testdata[:, ["B", "A"]]
+        assert_array_equal(res.data, np.array([
+            [1, 0],
+            [1, 0],
+            [8, 7],
         ]))
 
     def test_align(self):

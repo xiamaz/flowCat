@@ -89,6 +89,10 @@ def join_fcs_data(fcs_data: List["FCSData"], channels=None) -> "FCSData":
 ChannelMeta = namedtuple("ChannelMeta", field_names=["min", "max", "pne", "png"])
 
 
+DEFAULT_ENCODING = "latin-1"
+DEFAULT_DATASET = 0
+
+
 class FCSData:
     """Wrap FCS data with additional metadata"""
 
@@ -97,9 +101,6 @@ class FCSData:
         "mask",  # np array mask for data
         "channels",  # channel names of type List[Marker]
     )
-
-    default_encoding = "latin-1"
-    default_dataset = 0
 
     def __init__(
             self,
@@ -114,14 +115,12 @@ class FCSData:
             FCSData object.
         """
         if isinstance(initdata, self.__class__):
-
             self.data = initdata.data.copy()
             self.mask = initdata.mask.copy()
             self.channels = initdata.channels.copy()
 
         elif isinstance(initdata, (URLPath, str)):
-
-            parser = FCSParser(str(initdata), data_set=self.default_dataset, encoding=self.default_encoding)
+            parser = FCSParser(str(initdata), data_set=DEFAULT_DATASET, encoding=DEFAULT_ENCODING)
 
             self.data = parser.data
             self.mask = np.ones(self.data.shape)
@@ -140,6 +139,11 @@ class FCSData:
                 "Invalid data for FCS. Either Path, similar object or tuple of data and metadata needed.")
 
         self.data = self.data.astype("float32", copy=False)
+
+    @property
+    def markers(self):
+        """Synonym added for compatibility with SOM data type."""
+        return self.channels
 
     @property
     def shape(self):
@@ -186,10 +190,7 @@ class FCSData:
         """Reorder columns based on list of channels given."""
         if any(map(lambda c: c not in self.channels, channels)):
             raise ValueError("Some given channels not contained in data.")
-        index = np.array([self.channels.index(c) for c in channels])
-        self.data = self.data[:, index]
-        self.mask = self.mask[:, index]
-        self.channels = [self.channels[i] for i in index]
+        return self[channels]
 
     def add_missing_channels(self, channels: List[str]) -> "FCSData":
         """Add missing columns in the given channel list to the dataframe and
@@ -233,17 +234,17 @@ class FCSData:
             copy = self.copy()
 
         if name_only:
-            copy.marker_to_name_only()
+            copy = copy.marker_to_name_only()
 
         dropped_channels = [c for c in copy.channels if c not in channels]
         if dropped_channels:
-            copy.drop_channels(dropped_channels)
+            copy = copy.drop_channels(dropped_channels)
 
         missing_channels = [c for c in channels if c not in copy.channels]
         if missing_channels:
-            copy.add_missing_channels(missing_channels)
+            copy = copy.add_missing_channels(missing_channels)
 
-        copy.reorder_channels(channels)
+        copy = copy.reorder_channels(channels)
         return copy
 
     def copy(self) -> "FCSData":
@@ -253,22 +254,29 @@ class FCSData:
         """Drop all channels containing nix in the channel name.
         """
         nix_cols = [c for c in self.channels if c.antibody == "nix"]
-        self.drop_channels(nix_cols)
-        return self
+        return self.drop_channels(nix_cols)
 
     def drop_channels(self, channels) -> "FCSData":
         """Drop the given columns from the data.
         Args:
             channels: List of channels or channel name to drop. Will not throw an error if the name is not found.
         Returns:
-            self. This operation is done in place, so the original object will be modified!
+            FCSData object with channels removed.
         """
         remaining = [c for c in self.channels if c not in channels]
-        remaining_indices = np.array([self.channels.index(c) for c in remaining])
-        self.data = self.data[:, remaining_indices]
-        self.mask = self.mask[:, remaining_indices]
-        self.channels = remaining
-        return self
+        return self[remaining]
+
+    def __getitem__(self, idx):
+        if isinstance(idx, tuple):
+            ridx, cidx = idx
+        else:
+            ridx, cidx = slice(None), idx
+        cidx = [self.markers.index(i) for i in cidx]
+        sel_data = self.data[ridx, cidx]
+        sel_mask = self.mask[ridx, cidx]
+        sel_channels = [self.channels[i] for i in cidx]
+
+        return FCSData((sel_data, sel_mask), sel_channels)
 
     def __repr__(self):
         """Print string representation of the input file."""
