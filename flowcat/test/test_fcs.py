@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 from numpy.testing import assert_array_equal
 
-from flowcat.dataset import fcs
+from flowcat.types import fcsdata as fcs
 
 
 class TestFCS(unittest.TestCase):

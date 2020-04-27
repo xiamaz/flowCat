@@ -5,7 +5,7 @@ from logging import getLogger
 from sklearn.base import BaseEstimator, TransformerMixin
 
 from flowcat.types.marker import Marker
-from flowcat.dataset.fcs import join_fcs_data
+from flowcat.types.fcsdata import join_fcs_data
 
 
 LOGGER = getLogger(__name__)

@@ -6,7 +6,7 @@ import unittest
 from numpy.testing import assert_array_equal
 import pandas as pd
 
-from flowcat.dataset import fcs
+from flowcat.types import fcsdata as fcs
 
 
 class FlowcatTestCase(unittest.TestCase):

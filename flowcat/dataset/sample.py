@@ -14,7 +14,7 @@ from dataslots import with_slots
 
 from flowcat import utils
 from flowcat.types.material import Material
-from . import fcs, som
+from flowcat.types import som, fcsdata as fcs
 
 
 def _all_in(smaller, larger):

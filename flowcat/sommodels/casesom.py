@@ -5,8 +5,8 @@ import numpy as np
 
 from flowcat import utils
 from flowcat.types.material import Material
+from flowcat.types.som import SOM
 from flowcat.dataset import case as fc_case, sample as fc_sample
-from flowcat.dataset.som import SOM
 from flowcat.preprocessing.case_sample_merge import CaseSampleMergeTransformer
 
 from .fcssom import FCSSom

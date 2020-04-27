@@ -6,7 +6,7 @@ import logging
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 
-from flowcat.dataset import fcs
+from flowcat.types import fcsdata as fcs
 from flowcat.types.marker import Marker
 
 from . import FCSDataMixin

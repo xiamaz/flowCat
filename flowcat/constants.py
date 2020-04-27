@@ -34,6 +34,8 @@ MARKER_NAME_MAP = {
     "SSC": "SS",
 }
 
+EMPTY_MARKER_NAMES = ("nix",)
+
 # name of main groups in defined order for plotting
 ALL_GROUPS = [
     "CLL", "MBL", "MCL", "PL", "LPL", "MZL", "FL", "HCL", "HCLv", "normal"

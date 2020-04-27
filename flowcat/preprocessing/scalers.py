@@ -4,7 +4,7 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.base import TransformerMixin, BaseEstimator
 
 
-from flowcat.dataset import fcs
+from flowcat.types import fcsdata as fcs
 from . import FCSDataMixin
 
 

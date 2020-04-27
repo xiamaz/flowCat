@@ -14,12 +14,12 @@ import pandas as pd
 
 from flowcat.constants import PUBLIC_ENUMS
 from flowcat.types.marker import Marker
+from flowcat.types.som import SOM
 from flowcat.utils.time_timers import str_to_date, str_to_datetime
 from flowcat.utils.urlpath import URLPath
 from flowcat.sommodels import fcssom
 from flowcat.sommodels.casesom import CaseSingleSom, CaseSom, CaseMergeSom
 from flowcat.dataset import case, case_dataset, sample
-from flowcat.dataset.som import SOM
 
 
 LOGGER = logging.getLogger(__name__)

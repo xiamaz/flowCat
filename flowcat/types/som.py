@@ -9,7 +9,7 @@ from dataslots import with_slots
 import numpy as np
 import pandas as pd
 
-from flowcat import utils
+from flowcat.utils import URLPath
 
 
 LOGGER = logging.getLogger(__name__)
@@ -19,11 +19,11 @@ LOGGER = logging.getLogger(__name__)
 @dataclass
 class SOM:
     """Holds self organizing map data with associated metadata."""
-    data: Union[np.array, utils.URLPath, str]
+    data: Union[np.array, URLPath, str]
     markers: List[str]
 
     def __post_init__(self):
-        if isinstance(self.data, (utils.URLPath, str)):
+        if isinstance(self.data, (URLPath, str)):
             self.data = np.load(str(self.data))
 
     @property

@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 from flowcat.utils import URLPath
-from flowcat.dataset import fcs
+from flowcat.types import fcsdata as fcs
 from flowcat.preprocessing import edge_removal
 from flowcat.types.marker import Marker
 

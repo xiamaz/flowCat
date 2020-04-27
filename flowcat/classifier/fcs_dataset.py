@@ -3,7 +3,8 @@ from typing import List, Tuple
 import numpy as np
 
 from tensorflow import keras
-from flowcat.dataset import fcs, case_dataset
+from flowcat.dataset import case_dataset
+from flowcat.types import fcsdata as fcs
 
 
 class FCSSequence(keras.utils.Sequence):

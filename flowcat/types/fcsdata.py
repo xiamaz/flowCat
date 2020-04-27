@@ -12,7 +12,6 @@ from fcsparser.api import FCSParser
 import fcsparser
 
 from flowcat.utils import URLPath
-from flowcat.constants import MARKER_NAME_MAP
 from flowcat.types.marker import Marker
 
 
@@ -104,7 +103,7 @@ class FCSData:
 
     def __init__(
             self,
-            initdata: Union[URLPath, "FCSData", tuple],
+            initdata: Union["URLPath", "FCSData", tuple],
             channels: list = None,):
         """Create a new FCS object.
 
@@ -120,7 +119,7 @@ class FCSData:
             self.mask = initdata.mask.copy()
             self.channels = initdata.channels.copy()
 
-        elif isinstance(initdata, URLPath):
+        elif isinstance(initdata, (URLPath, str)):
 
             parser = FCSParser(str(initdata), data_set=self.default_dataset, encoding=self.default_encoding)
 

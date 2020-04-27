@@ -8,7 +8,7 @@ import pandas as pd
 from tensorflow import keras
 
 from flowcat import utils, io_functions
-from flowcat.dataset.som import SOM
+from flowcat.types.som import SOM
 
 
 def pad_array(array, pad_width):
