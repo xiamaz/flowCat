@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from flowcat.utils import URLPath
+from flowcat.types.marker import Marker
 
 
 LOGGER = logging.getLogger(__name__)
@@ -26,6 +27,8 @@ class SOM:
     def __post_init__(self):
         if isinstance(self.data, (URLPath, str)):
             self.data = np.load(str(self.data))
+
+        self.markers = [Marker.convert(m) for m in self.markers]
 
     @property
     def dims(self) -> tuple:

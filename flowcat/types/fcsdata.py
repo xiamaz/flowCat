@@ -139,6 +139,7 @@ class FCSData:
                 "Invalid data for FCS. Either Path, similar object or tuple of data and metadata needed.")
 
         self.data = self.data.astype("float32", copy=False)
+        self.channels = [Marker.convert(c) for c in self.channels]
 
     @property
     def markers(self):
