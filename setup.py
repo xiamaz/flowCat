@@ -11,7 +11,7 @@ setuptools.setup(
     description="Classifier for flow cytometry data",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    packages=["flowcat"],
+    packages=setuptools.find_packages("."),
     entry_points={
         'console_scripts': ['flowcat=flowcat.cmdline:main'],
     },
