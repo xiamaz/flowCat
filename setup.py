@@ -34,10 +34,8 @@ setuptools.setup(
         "matplotlib==3.1.0",
         "numpy==1.16.5",
         "pandas",
-    ],
-    depedency_links=[
-        "git+https://github.com/xiamaz/fcsparser.git",
-        "git+https://github.com/jakob-he/keras-vis.git@multiinput",
+        "fcsparser @ git+https://github.com/xiamaz/fcsparser.git#egg=fcsparser",
+        "keras-vis @ git+https://github.com/jakob-he/keras-vis.git@multiinput#egg=keras-vis",
     ],
     use_scm_version=True,
     setup_requires=["setuptools_scm"],
