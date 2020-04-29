@@ -53,7 +53,7 @@ def create_edge_removal(channels):
 
 PRESET_SCALERS = {
     "StandardScaler": scalers.FCSStandardScaler,
-    "MinMaxScaler": scalers.MinMaxScaler,
+    "MinMaxScaler": scalers.FCSMinMaxScaler,
     "EdgeRemovalBasic": create_edge_removal,
     "RefitStandardScaler": lambda: scalers.RefitScaler(scalers.FCSStandardScaler),
     "RefitMinMaxScaler": lambda: scalers.RefitScaler(scalers.FCSMinMaxScaler),
