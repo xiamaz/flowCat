@@ -8,8 +8,6 @@ from collections import defaultdict
 import numpy as np
 from dataclasses import dataclass
 
-import tensorflow as tf
-
 from flowcat import utils, io_functions, constants
 from flowcat.classifier import SOMClassifier, SOMSaliency, SOMClassifierConfig, create_model_multi_input
 from flowcat.classifier.predictions import generate_all_metrics
@@ -21,8 +19,6 @@ from flowcat.dataset import case as fc_case, sample as fc_sample, case_dataset
 TRAIN_BATCH_SIZE = 32
 VALID_BATCH_SIZE = 128
 
-
-BMU_CALC = bmu_calculator(tf.Session())
 
 LOGGER = logging.getLogger(__name__)
 
@@ -219,6 +215,8 @@ class SaliencyMapping:
 
 
 class FlowCat:
+    BMU_CALC = None
+
     def __init__(self, reference: CaseSom = None, classifier: SOMClassifier = None, saliency: SOMSaliency = None):
         """Initialization with optional existing models."""
         self.reference = reference
@@ -340,6 +338,9 @@ class FlowCat:
         return generate_prediction_metrics(predictions, mapping, output)
 
     def generate_saliency(self, prediction: FlowCatPrediction, target_group):
+        if self.BMU_CALC is None:
+            import tensorflow as tf
+            self.BMU_CALC = bmu_calculator(tf.Session())
         # returns eg 3x32x32 gradients
         gradients = self.saliency.transform(prediction.som, group=target_group, maximization=True)
 
@@ -349,7 +350,7 @@ class FlowCat:
             somdata = prediction.som.get_tube(tube, kind="som").get_data()
             fcsdata = prediction.case.get_tube(tube, kind="fcs").get_data()
             data, _ = model.model.prepare_data(fcsdata)
-            mapped = BMU_CALC(somdata.data.reshape((-1, data.shape[-1])), data)
+            mapped = self.BMU_CALC(somdata.data.reshape((-1, data.shape[-1])), data)
             gradient = gradient.reshape((-1,))
             fcsmapped = gradient[mapped]
             som_dict.append(SaliencyMapping(gradient, fcsmapped, tube))

@@ -12,6 +12,7 @@ from flowcat.utils import URLPath
 from flowcat.types.fcsdata import FCSData, join_fcs_data
 from flowcat.types.som import SOM
 from flowcat.preprocessing import scalers, edge_removal
+
 from .tfsom import create_initializer, TFSom
 
 
