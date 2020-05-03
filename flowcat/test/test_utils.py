@@ -4,6 +4,7 @@ import unittest
 import pickle
 
 from flowcat import utils
+from flowcat.utils.urlpath import cast_urlpath
 
 
 class TestURLPath(unittest.TestCase):
@@ -39,3 +40,29 @@ class TestURLPath(unittest.TestCase):
         for part_a, part_b, expected in cases:
             result = utils.URLPath(part_a) + part_b
             self.assertEqual(str(result), expected)
+
+
+    def test_wrapping(self):
+        @cast_urlpath
+        def testfun(a: utils.URLPath = None, b: str = None):
+            return a, b
+
+        res = testfun(utils.URLPath("a"), "b")
+        self.assertEqual(type(res[0]), utils.URLPath)
+        self.assertNotEqual(type(res[1]), utils.URLPath)
+
+        res = testfun("a", "b")
+        self.assertEqual(type(res[0]), utils.URLPath)
+        self.assertNotEqual(type(res[1]), utils.URLPath)
+
+        res = testfun("a", b="b")
+        self.assertEqual(type(res[0]), utils.URLPath)
+        self.assertNotEqual(type(res[1]), utils.URLPath)
+
+        res = testfun(a=utils.URLPath("b"), b="a")
+        self.assertEqual(type(res[0]), utils.URLPath)
+        self.assertNotEqual(type(res[1]), utils.URLPath)
+
+        res = testfun(a="b", b="a")
+        self.assertEqual(type(res[0]), utils.URLPath)
+        self.assertNotEqual(type(res[1]), utils.URLPath)

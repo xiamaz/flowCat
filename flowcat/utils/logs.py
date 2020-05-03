@@ -8,6 +8,8 @@ different levels to stream and file are for example possible.
 import logging
 from logging import FileHandler, StreamHandler
 
+from .time_timers import create_stamp
+
 LOGGING_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 
@@ -52,6 +54,9 @@ def create_logging_handlers(logging_path: str) -> [logging.Handler]:
 def setup_logging(logging_path: "URLPath", name: str, fc_level=logging.INFO) -> logging.Logger:
     """Create a single logger object. To be used in main scripts."""
     if logging_path is not None:
+        if logging_path.suffix == "":
+            logging_path = logging_path / f"{name}_{create_stamp()}.log"
+
         logging_path.parent.mkdir()
 
     logger = logging.getLogger(name)

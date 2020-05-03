@@ -16,7 +16,7 @@ from flowcat.constants import PUBLIC_ENUMS
 from flowcat.types.marker import Marker
 from flowcat.types.som import SOM
 from flowcat.utils.time_timers import str_to_date, str_to_datetime
-from flowcat.utils.urlpath import URLPath
+from flowcat.utils.urlpath import URLPath, cast_urlpath
 from flowcat.sommodels import fcssom
 from flowcat.sommodels.casesom import CaseSingleSom, CaseSom, CaseMergeSom
 from flowcat.dataset import case, case_dataset, sample
@@ -86,6 +86,7 @@ def as_fc(d):
         return d
 
 
+@cast_urlpath
 def load_json(path: URLPath):
     """Load json data from a path as a simple function."""
     if path.suffix == ".gz":
@@ -98,6 +99,7 @@ def load_json(path: URLPath):
     return data
 
 
+@cast_urlpath
 def save_json(data, path: URLPath):
     """Write json data to a file as a simple function."""
     if path.suffix == ".gz":
@@ -110,22 +112,26 @@ def save_json(data, path: URLPath):
     jsfile.close()
 
 
+@cast_urlpath
 def load_pickle(path: URLPath):
     with path.open("rb") as pfile:
         data = pickle.load(pfile)
     return data
 
 
+@cast_urlpath
 def save_pickle(data, path: URLPath):
     """Write data to the given path as a pickle."""
     with path.open("wb") as pfile:
         pickle.dump(data, pfile)
 
 
+@cast_urlpath
 def load_joblib(path: URLPath):
     return joblib.load(str(path))
 
 
+@cast_urlpath
 def save_joblib(data, path: URLPath):
     path.parent.mkdir()
     with path.open("wb") as handle:
@@ -136,11 +142,13 @@ def to_json(data):
     return json.dumps(data, indent=4)
 
 
+@cast_urlpath
 def load_csv(path, index_col=0):
     data = pd.read_csv(str(path), index_col=index_col)
     return data
 
 
+@cast_urlpath
 def save_csv(data: pd.DataFrame, path: URLPath):
     path.parent.mkdir(exist_ok=True, parents=True)
     data.to_csv(path)
@@ -157,6 +165,7 @@ def get_som_tube_path(
     return (result + ".csv", result + ".json")
 
 
+@cast_urlpath
 def save_som(som: SOM, path: URLPath, save_config: bool = True):
     npy_path = path.with_suffix(".npy")
     np.save(str(npy_path), som.data)
@@ -166,6 +175,7 @@ def save_som(som: SOM, path: URLPath, save_config: bool = True):
         save_json({"markers": som.markers}, meta_path)
 
 
+@cast_urlpath
 def load_som(path: URLPath, load_config: bool = True) -> SOM:
     if load_config:
         meta_path = path.with_suffix(".json")
@@ -177,8 +187,13 @@ def load_som(path: URLPath, load_config: bool = True) -> SOM:
     return SOM(data=npy_path, **config)
 
 
+@cast_urlpath
 def load_casesom(path: URLPath, tensorboard_dir: URLPath = None, **kwargs):
     singlepaths = {p.name.lstrip("tube"): p for p in path.iterdir() if "tube" in str(p)}
+
+    if len(singlepaths) == 0:
+        raise ValueError(f"{path} does not contain any models. Models in dir should be prefixed with tube.")
+
     models = {}
     for tube, mpath in sorted(singlepaths.items()):
         tbdir = tensorboard_dir / f"tube{tube}" if tensorboard_dir else None
@@ -186,34 +201,40 @@ def load_casesom(path: URLPath, tensorboard_dir: URLPath = None, **kwargs):
     return CaseSom(models=models)
 
 
+@cast_urlpath
 def save_casesom(model, path: URLPath):
     for tube, tmodel in model.models.items():
         output_path = path / f"tube{tube}"
         save_casesinglesom(tmodel, output_path)
 
 
+@cast_urlpath
 def load_casesinglesom(path: URLPath, **kwargs):
     config = load_json(path / "casesinglesom_config.json")
     model = load_fcssom(path, **kwargs)
     return CaseSingleSom(model=model, **config)
 
 
+@cast_urlpath
 def save_casesinglesom(model, path: URLPath):
     save_fcssom(model.model, path)
     save_json(model.config, path / "casesinglesom_config.json")
 
 
+@cast_urlpath
 def load_casemergesom(path: URLPath, **kwargs):
     config = load_json(path / "merge_config.json")
     model = load_fcssom(path, **kwargs)
     return CaseMergeSom.load_from_config(config, model)
 
 
+@cast_urlpath
 def save_casemergesom(model, path: URLPath):
     save_fcssom(model._model, path)
     save_json(model.config, path / "merge_config.json")
 
 
+@cast_urlpath
 def load_fcssom(path: URLPath, **kwargs):
     scaler = load_joblib(path / "scaler.joblib")
     config = load_json(path / "config.json")
@@ -244,6 +265,7 @@ def load_fcssom(path: URLPath, **kwargs):
     return model
 
 
+@cast_urlpath
 def save_fcssom(model, path: URLPath):
     if not model.trained:
         raise RuntimeError("Model has not been trained")
@@ -255,6 +277,7 @@ def save_fcssom(model, path: URLPath):
     save_som(model.weights, path / f"weights", save_config=True)
 
 
+@cast_urlpath
 def load_case_collection_from_caseinfo(data_path: URLPath, meta_path: URLPath):
     """Load case collection from caseinfo json, as used in the MLL dataset."""
     metadata = load_json(meta_path)
@@ -267,6 +290,7 @@ def load_case_collection_from_caseinfo(data_path: URLPath, meta_path: URLPath):
     return case_dataset.CaseCollection(data, **metaconfig)
 
 
+@cast_urlpath
 def save_case_collection(cases, destination: URLPath):
     save_json(cases, destination)
 
@@ -283,6 +307,7 @@ def loading_bar(iterable, label="Transforming", total=None):
     print("")
 
 
+@cast_urlpath
 def save_case_collection_with_data(cases: "CaseCollection", destination: URLPath) -> "CaseCollection":
     """Saves samples to a new dataset location and returns the resaved case collection."""
     sample_destination = destination / "data"
@@ -301,6 +326,7 @@ def save_case_collection_with_data(cases: "CaseCollection", destination: URLPath
     return cases
 
 
+@cast_urlpath
 def save_merged_case_collection(datasets: "List[CaseCollection]", dest: URLPath) -> "CaseCollection":
     """Save the FCS data from the given collections to the given destination directory as a single dataset."""
     labels = Counter([c.id for d in datasets for c in d])
@@ -314,6 +340,7 @@ def save_merged_case_collection(datasets: "List[CaseCollection]", dest: URLPath)
     return merged_dataset
 
 
+@cast_urlpath
 def load_case_collection(data_path: URLPath, meta_path: URLPath = None) -> "CaseCollection":
     """Load dataset from the given path.
 

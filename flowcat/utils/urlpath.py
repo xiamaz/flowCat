@@ -3,6 +3,8 @@
 import pathlib
 from urllib.parse import urlparse
 
+from argmagic import FunctionInformation
+
 
 class URLPath(pathlib.PosixPath):
     __slots__ = (
@@ -53,3 +55,42 @@ class URLPath(pathlib.PosixPath):
 
     def __radd__(self, other):
         return self.__class__(str(other) + str(self))
+
+
+def has_urlpath_in_hint(hint):
+    if hasattr(hint, "__origin__"):
+        return URLPath in hint.__args__
+    else:
+        return hint is URLPath
+
+
+def _cast(obj):
+    if isinstance(obj, URLPath):
+        return obj
+    elif isinstance(obj, str):
+        return URLPath(obj)
+    raise TypeError(f"Cannot cast {type(obj)} to URLPath")
+
+
+def cast_urlpath(fun):
+    """
+    Cast arguments marked as URLPath to URLPath.
+    """
+    info = FunctionInformation(fun)
+    positions = [
+        (i, name)
+        for i, (name, par_info) in enumerate(info.args.items())
+        if has_urlpath_in_hint(par_info.typehint)
+    ]
+
+    def wrapper(*args, **kwargs):
+        len_args = len(args)
+        for pos, name in positions:
+            if pos < len_args:
+                args = (*args[:pos], _cast(args[pos]), *args[pos+1:])
+            elif name in kwargs:
+                kwargs[name] = _cast(kwargs[name])
+
+        return fun(*args, **kwargs)
+
+    return wrapper
