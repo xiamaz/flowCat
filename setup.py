@@ -34,7 +34,7 @@ setuptools.setup(
         "matplotlib==3.1.0",
         "numpy==1.16.5",
         "pandas",
-        "fcsparser @ git+https://github.com/xiamaz/fcsparser.git#egg=fcsparser",
+        "fcsparser @ git+https://github.com/xiamaz/fcsparser.git@bitmask#egg=fcsparser",
         "keras-vis @ git+https://github.com/jakob-he/keras-vis.git@multiinput#egg=keras-vis",
     ],
     use_scm_version=True,
