@@ -124,7 +124,11 @@ class FCSData:
 
             self.data = parser.data
             self.mask = np.ones(self.data.shape)
-            self.channels = create_meta_from_fcs(parser.annotation, parser.channel_names_s)
+            if parser.channel_names_s:
+             self.channels = create_meta_from_fcs(parser.annotation, parser.channel_names_s)
+            else:
+             self.channels = create_meta_from_fcs(parser.annotation, parser.channel_names_n)
+
 
         elif isinstance(initdata, tuple):
             self.data, self.mask = initdata

@@ -15,7 +15,6 @@ from flowcat.classifier.saliency import bmu_calculator
 from flowcat.sommodels.casesom import CaseSom
 from flowcat.dataset import case as fc_case, sample as fc_sample, case_dataset
 
-
 TRAIN_BATCH_SIZE = 32
 VALID_BATCH_SIZE = 128
 
@@ -136,7 +135,6 @@ def prepare_classifier_train_dataset(
         groups=None,
         balance=None, val_dataset: "CaseCollection" = None):
     """Prepare dataset splitting and optional upsampling.
-
     Args:
         split_ratio: Ratio of training set to total dataset.
         mapping: Optionally map existing groups to new groups contained in mapping.
@@ -168,6 +166,7 @@ def train_som_classifier(
     train_dataset: "CaseCollection",
     validate_dataset: "CaseCollection",
     config: SOMClassifierConfig = None,
+    class_weights = None,
     model_fun: "Callable" = create_model_multi_input,
 ) -> "SOMClassifier":
     """Configure the dataset based on config and train a given model."""
@@ -181,7 +180,7 @@ def train_som_classifier(
     else:
         validate = None
 
-    model.train_generator(train, validate, epochs=config.train_epochs, class_weight=None)
+    model.train_generator(train, validate, epochs=config.train_epochs, class_weight=class_weights)
     return model
 
 
