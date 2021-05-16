@@ -1,4 +1,4 @@
-from argmagic import argmagic
+from argmagic import argmagic_subparsers
 
 from .train import train
 from .predict import predict
@@ -9,4 +9,11 @@ from .dataset import dataset
 
 
 def main():
-    argmagic([predict, train, filter, reference, transform, dataset])
+    argmagic_subparsers([
+        {"target": predict},
+        {"target": train},
+        {"target": filter},
+        {"target": reference},
+        {"target": transform},
+        {"target": dataset}
+    ])
